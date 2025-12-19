@@ -59,7 +59,6 @@
 Python >= 3.10
 PyQt6 >= 6.0
 pyupbit >= 0.2.30
-pandas >= 1.5.0
 ```
 
 ---
