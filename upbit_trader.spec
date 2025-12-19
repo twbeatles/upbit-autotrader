@@ -7,24 +7,19 @@ Upbit Pro Algo-Trader v2.0 PyInstaller Spec File
 """
 
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 # 히든 임포트 (PyInstaller가 자동 감지하지 못하는 모듈)
 hiddenimports = [
     'pyupbit',
     'requests',
     'websocket',
-    'pandas',
-    'numpy',
     'PyQt6',
     'PyQt6.QtCore',
     'PyQt6.QtWidgets',
     'PyQt6.QtGui',
     'PyQt6.sip',
 ]
-
-# pandas 서브모듈 수집
-hiddenimports += collect_submodules('pandas')
 
 block_cipher = None
 
@@ -44,6 +39,9 @@ a = Analysis(
         'unittest',
         'test',
         'tests',
+        'PIL',
+        'cv2',
+        'numpy.random._examples',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -105,7 +103,7 @@ coll = COLLECT(
 # 옵션 설명:
 #   - console=False: GUI 프로그램용 (콘솔 창 숨김)
 #   - upx=True: 실행 파일 압축 (크기 감소)
-#   - onedir 모드: 폴더 형태로 배포 (의존성 포함)
+#   - excludes: 불필요한 모듈 제외 (빌드 시간/크기 감소)
 #
 # 디버깅:
 #   - console=True로 변경하면 오류 메시지 확인 가능

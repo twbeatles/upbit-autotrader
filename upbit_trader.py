@@ -22,7 +22,6 @@ import logging
 import threading
 from pathlib import Path
 import winreg
-import pandas as pd
 
 try:
     import pyupbit
@@ -1909,15 +1908,18 @@ class UpbitProTrader(QMainWindow):
             low = df['low']
             close = df['close']
             
-            # True Range 계산
+            # True Range 계산 (DataFrame 내장 연산 사용)
             tr1 = high - low
-            tr2 = abs(high - close.shift())
-            tr3 = abs(low - close.shift())
+            tr2 = (high - close.shift()).abs()
+            tr3 = (low - close.shift()).abs()
             
-            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            # 각 행에서 최대값 선택
+            df['tr'] = tr1
+            df.loc[tr2 > df['tr'], 'tr'] = tr2
+            df.loc[tr3 > df['tr'], 'tr'] = tr3
             
             # ATR = True Range의 이동평균
-            atr = tr.rolling(window=period).mean().iloc[-1]
+            atr = df['tr'].rolling(window=period).mean().iloc[-1]
             return atr
         except Exception as e:
             self.logger.error(f"ATR 계산 실패 ({ticker}): {e}")
