@@ -1,18 +1,19 @@
 """
-Upbit Pro Algo-Trader v2.5
+Upbit Pro Algo-Trader v2.6
 업비트 OpenAPI 기반 자동매매 프로그램
 
 변동성 돌파 전략 + 이동평균 필터 + 트레일링 스톱
 24시간 코인 마켓 최적화
 
-v2.5 신규 기능:
+v2.6 신규 기능:
+- 일괄 매도/매수 기능 (2중 확인 다이얼로그)
+- 완료 후 자동매매 시작 옵션
+
+v2.5 기능:
 - 거래 히스토리 탭 및 거래 기록 관리
 - 스토캐스틱 RSI, DMI/ADX 지표 추가
-- 다단계 익절 시스템
 - 진입 점수 시스템 (가중치 기반 스코어링)
 - API 호출 재시도 로직
-- 메모리 관리 및 스레드 안전성 강화
-- UI/UX 개선 및 실시간 지표 표시
 """
 
 import sys
@@ -1025,7 +1026,7 @@ class UpbitProTrader(QMainWindow):
 
     def init_ui(self):
         """UI 초기화"""
-        self.setWindowTitle("Upbit Pro Algo-Trader v2.5 [24H 코인 자동매매]")
+        self.setWindowTitle("Upbit Pro Algo-Trader v2.6 [24H 코인 자동매매]")
         self.setGeometry(100, 100, 1200, 900)
         self.setMinimumSize(1000, 700)
         self.setStyleSheet(DARK_STYLESHEET)
@@ -1195,6 +1196,34 @@ class UpbitProTrader(QMainWindow):
         self.spin_loss.setToolTip(Config.TOOLTIPS['loss_cut'])
         layout.addWidget(self.spin_loss, 2, 5)
         
+        # 일괄 매도/매수 버튼 영역 (v2.6 신규)
+        batch_layout = QHBoxLayout()
+        batch_layout.setSpacing(10)
+        
+        self.btn_batch_sell = QPushButton("📤 일괄 매도")
+        self.btn_batch_sell.setMinimumSize(120, 40)
+        self.btn_batch_sell.setStyleSheet("QPushButton { background-color: #e74c3c; } QPushButton:hover { background-color: #c0392b; }")
+        self.btn_batch_sell.setToolTip("현재 보유 중인 모든 코인을 시장가로 일괄 매도합니다.")
+        self.btn_batch_sell.clicked.connect(self.execute_batch_sell)
+        self.btn_batch_sell.setEnabled(False)
+        
+        self.btn_batch_buy = QPushButton("📥 일괄 매수")
+        self.btn_batch_buy.setMinimumSize(120, 40)
+        self.btn_batch_buy.setStyleSheet("QPushButton { background-color: #27ae60; } QPushButton:hover { background-color: #1e8449; }")
+        self.btn_batch_buy.setToolTip("입력된 코인들을 현재 시장가로 균등 분배 매수합니다.")
+        self.btn_batch_buy.clicked.connect(self.execute_batch_buy)
+        self.btn_batch_buy.setEnabled(False)
+        
+        self.chk_auto_start_after_batch = QCheckBox("완료 후 자동매매 시작")
+        self.chk_auto_start_after_batch.setToolTip("일괄 매도/매수 완료 후 자동으로 알고리즘 매매를 시작합니다.")
+        
+        batch_layout.addWidget(self.btn_batch_sell)
+        batch_layout.addWidget(self.btn_batch_buy)
+        batch_layout.addWidget(self.chk_auto_start_after_batch)
+        batch_layout.addStretch(1)
+        
+        layout.addLayout(batch_layout, 3, 0, 1, 6)
+        
         # 버튼 영역
         btn_layout = QHBoxLayout()
         btn_layout.setSpacing(10)
@@ -1219,7 +1248,7 @@ class UpbitProTrader(QMainWindow):
         btn_layout.addWidget(self.btn_start)
         btn_layout.addWidget(self.btn_stop)
         
-        layout.addLayout(btn_layout, 3, 0, 1, 6)
+        layout.addLayout(btn_layout, 4, 0, 1, 6)
         return widget
 
     def create_advanced_tab(self):
@@ -1830,6 +1859,8 @@ class UpbitProTrader(QMainWindow):
                 self.lbl_connection.setText("● 연결됨")
                 self.lbl_connection.setStyleSheet("color: #00b894; font-weight: bold;")
                 self.btn_start.setEnabled(True)
+                self.btn_batch_sell.setEnabled(True)
+                self.btn_batch_buy.setEnabled(True)
                 
                 self.log(f"✅ 업비트 API 연결 성공 (잔고: {balance:,.0f}원)")
                 self.logger.info(f"API 연결 성공, 잔고: {balance:,.0f}원")
@@ -2504,8 +2535,191 @@ class UpbitProTrader(QMainWindow):
             self.logger.error(f"매도 체결 확인 실패 ({ticker}): {e}")
 
     # ------------------------------------------------------------------
-    # 유틸리티
+    # 일괄 매도/매수 기능 (v2.6 신규)
     # ------------------------------------------------------------------
+    def get_all_holdings(self):
+        """현재 보유 중인 모든 KRW 마켓 코인 조회"""
+        if not self.upbit:
+            return []
+        
+        holdings = []
+        try:
+            balances = self.upbit.get_balances()
+            for item in balances:
+                currency = item.get('currency', '')
+                balance = float(item.get('balance', 0))
+                avg_buy_price = float(item.get('avg_buy_price', 0))
+                
+                # KRW는 제외, 수량이 0보다 큰 것만
+                if currency == 'KRW' or balance <= 0:
+                    continue
+                
+                ticker = f"KRW-{currency}"
+                # 최소 주문 금액 (5000원) 이상인 것만
+                if balance * avg_buy_price >= 5000:
+                    holdings.append({
+                        'ticker': ticker,
+                        'currency': currency,
+                        'qty': balance,
+                        'buy_price': avg_buy_price,
+                        'value': balance * avg_buy_price
+                    })
+            
+            self.logger.info(f"보유 코인 조회: {len(holdings)}개")
+            return holdings
+        except Exception as e:
+            self.logger.error(f"보유 코인 조회 실패: {e}")
+            return []
+
+    def execute_batch_sell(self):
+        """모든 보유 코인 일괄 시장가 매도"""
+        if not self.upbit:
+            QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
+            return
+        
+        # 보유 코인 조회
+        holdings = self.get_all_holdings()
+        if not holdings:
+            QMessageBox.information(self, "알림", "매도할 코인이 없습니다.")
+            return
+        
+        # 보유 목록 문자열 생성
+        holdings_text = "\n".join([f"  • {h['ticker']}: {h['qty']:.8f} (약 {h['value']:,.0f}원)" for h in holdings])
+        total_value = sum(h['value'] for h in holdings)
+        
+        # 1차 확인
+        reply = QMessageBox.warning(self, "⚠️ 일괄 매도 확인", 
+            f"정말로 모든 보유 코인을 매도하시겠습니까?\n\n"
+            f"【보유 코인 목록】\n{holdings_text}\n\n"
+            f"📊 총 예상 금액: {total_value:,.0f}원\n\n"
+            f"⚠️ 이 작업은 취소할 수 없습니다!",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # 2차 확인 - 코인 개수 입력
+        from PyQt6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(self, "🔐 2차 확인", 
+            f"매도할 코인 개수 '{len(holdings)}'를 입력하세요:")
+        
+        if not ok or text.strip() != str(len(holdings)):
+            QMessageBox.information(self, "취소", "일괄 매도가 취소되었습니다.")
+            return
+        
+        # 일괄 매도 실행
+        self.log("=" * 50)
+        self.log(f"📤 일괄 매도 시작 (총 {len(holdings)}개 코인)")
+        
+        sold_count = 0
+        for holding in holdings:
+            ticker = holding['ticker']
+            qty = holding['qty']
+            try:
+                result = self.upbit.sell_market_order(ticker, qty)
+                if result and 'uuid' in result:
+                    self.log(f"  ✅ [{ticker}] 매도 주문: {qty:.8f}")
+                    self.add_trade_record(ticker, 'SELL', 0, qty, 0, "일괄매도")
+                    sold_count += 1
+                else:
+                    self.log(f"  ❌ [{ticker}] 매도 실패: {result}")
+            except Exception as e:
+                self.log(f"  ❌ [{ticker}] 매도 오류: {e}")
+        
+        self.log(f"📤 일괄 매도 완료: {sold_count}/{len(holdings)} 성공")
+        self.log("=" * 50)
+        
+        # 잔고 갱신
+        QTimer.singleShot(3000, self.get_balance)
+        
+        # 자동매매 시작 옵션 체크
+        if hasattr(self, 'chk_auto_start_after_batch') and self.chk_auto_start_after_batch.isChecked():
+            QTimer.singleShot(5000, self.start_trading)
+            self.log("🚀 5초 후 자동매매를 시작합니다...")
+
+    def execute_batch_buy(self):
+        """입력된 코인들 현재가로 일괄 매수"""
+        if not self.upbit:
+            QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
+            return
+        
+        # 코인 목록 파싱
+        coins_text = self.input_coins.text().replace(" ", "")
+        coins = [c for c in coins_text.split(',') if c and c.startswith("KRW-")]
+        
+        if not coins:
+            QMessageBox.warning(self, "경고", "매수할 코인을 입력해주세요.\n(예: KRW-BTC,KRW-ETH)")
+            return
+        
+        # 잔고 확인
+        self.get_balance()
+        if self.balance < 5000 * len(coins):
+            QMessageBox.warning(self, "경고", 
+                f"잔고가 부족합니다.\n필요 최소 금액: {5000 * len(coins):,}원\n현재 잔고: {self.balance:,.0f}원")
+            return
+        
+        # 투자금 계산 (균등 분배)
+        invest_per_coin = self.balance / len(coins)
+        
+        # 1차 확인
+        coins_text_display = "\n".join([f"  • {c}: {invest_per_coin:,.0f}원" for c in coins])
+        reply = QMessageBox.warning(self, "⚠️ 일괄 매수 확인",
+            f"정말로 아래 코인들을 매수하시겠습니까?\n\n"
+            f"【매수 계획】\n{coins_text_display}\n\n"
+            f"💰 총 투자금: {self.balance:,.0f}원\n"
+            f"📊 종목당 투자금: {invest_per_coin:,.0f}원\n\n"
+            f"⚠️ 이 작업은 취소할 수 없습니다!",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No)
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        # 2차 확인 - 코인 개수 입력
+        from PyQt6.QtWidgets import QInputDialog
+        text, ok = QInputDialog.getText(self, "🔐 2차 확인",
+            f"매수할 코인 개수 '{len(coins)}'를 입력하세요:")
+        
+        if not ok or text.strip() != str(len(coins)):
+            QMessageBox.information(self, "취소", "일괄 매수가 취소되었습니다.")
+            return
+        
+        # 일괄 매수 실행
+        self.log("=" * 50)
+        self.log(f"📥 일괄 매수 시작 (총 {len(coins)}개 코인, 종목당 {invest_per_coin:,.0f}원)")
+        
+        bought_count = 0
+        for coin in coins:
+            try:
+                # 실제 매수 금액 (수수료 고려해서 약간 줄임)
+                buy_amount = invest_per_coin * 0.9995
+                if buy_amount < 5000:
+                    self.log(f"  ⚠️ [{coin}] 최소 주문금액 미달")
+                    continue
+                
+                result = self.upbit.buy_market_order(coin, buy_amount)
+                if result and 'uuid' in result:
+                    self.log(f"  ✅ [{coin}] 매수 주문: {buy_amount:,.0f}원")
+                    bought_count += 1
+                else:
+                    self.log(f"  ❌ [{coin}] 매수 실패: {result}")
+            except Exception as e:
+                self.log(f"  ❌ [{coin}] 매수 오류: {e}")
+        
+        self.log(f"📥 일괄 매수 완료: {bought_count}/{len(coins)} 성공")
+        self.log("=" * 50)
+        
+        # 잔고 갱신
+        QTimer.singleShot(3000, self.get_balance)
+        
+        # 자동매매 시작 옵션 체크
+        if hasattr(self, 'chk_auto_start_after_batch') and self.chk_auto_start_after_batch.isChecked():
+            QTimer.singleShot(5000, self.start_trading)
+            self.log("🚀 5초 후 자동매매를 시작합니다...")
+
+    # ------------------------------------------------------------------
+    # 유틸리티
     def check_risk_limits(self):
         """리스크 한도 체크"""
         if not self.chk_use_risk.isChecked():
