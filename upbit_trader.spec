@@ -1,17 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Upbit Pro Algo-Trader v2.0 PyInstaller Spec File
-업비트 자동매매 프로그램 빌드 설정
-
+Upbit Pro Algo-Trader v2.5 PyInstaller Spec File
 빌드 명령: pyinstaller upbit_trader.spec
 """
 
-import sys
 from PyInstaller.utils.hooks import collect_submodules
 
-# 히든 임포트 (PyInstaller가 자동 감지하지 못하는 모듈)
 hiddenimports = [
     'pyupbit',
+    'pandas',
+    'pandas._libs.tslibs.timedeltas',
+    'pandas._libs.tslibs.nattype',
+    'pandas._libs.tslibs.np_datetime',
+    'numpy',
     'requests',
     'websocket',
     'PyQt6',
@@ -20,6 +21,9 @@ hiddenimports = [
     'PyQt6.QtGui',
     'PyQt6.sip',
 ]
+
+# pandas 서브모듈 수집
+hiddenimports += collect_submodules('pandas')
 
 block_cipher = None
 
@@ -33,15 +37,9 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'matplotlib',
-        'scipy',
-        'tkinter',
-        'unittest',
-        'test',
-        'tests',
-        'PIL',
-        'cv2',
-        'numpy.random._examples',
+        'matplotlib', 'scipy', 'tkinter',
+        'unittest', 'test', 'tests',
+        'PIL', 'cv2',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -49,14 +47,9 @@ a = Analysis(
     noarchive=False,
 )
 
-# 중복 바이너리 제거
 a.binaries = list(set(a.binaries))
 
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
-    cipher=block_cipher
-)
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 exe = EXE(
     pyz,
@@ -68,13 +61,13 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # GUI 프로그램이므로 콘솔 숨김
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # 아이콘 파일이 있으면 경로 지정: icon='icon.ico'
+    icon=None,
 )
 
 coll = COLLECT(
@@ -88,25 +81,5 @@ coll = COLLECT(
     name='UpbitTrader',
 )
 
-# =============================================================================
-# 빌드 정보
-# =============================================================================
-# 
-# 빌드 방법:
-#   1. PyInstaller 설치: pip install pyinstaller
-#   2. 빌드 실행: pyinstaller upbit_trader.spec
-#
-# 빌드 결과:
-#   - dist/UpbitTrader/ 폴더에 실행 파일 생성
-#   - UpbitTrader.exe 실행
-#
-# 옵션 설명:
-#   - console=False: GUI 프로그램용 (콘솔 창 숨김)
-#   - upx=True: 실행 파일 압축 (크기 감소)
-#   - excludes: 불필요한 모듈 제외 (빌드 시간/크기 감소)
-#
-# 디버깅:
-#   - console=True로 변경하면 오류 메시지 확인 가능
-#   - 빌드 오류 시 --debug=all 옵션 추가
-#
-# =============================================================================
+# 빌드: pyinstaller upbit_trader.spec
+# 결과: dist/UpbitTrader/UpbitTrader.exe

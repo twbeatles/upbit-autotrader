@@ -1,16 +1,18 @@
 """
-Upbit Pro Algo-Trader v2.0
+Upbit Pro Algo-Trader v2.5
 업비트 OpenAPI 기반 자동매매 프로그램
 
 변동성 돌파 전략 + 이동평균 필터 + 트레일링 스톱
 24시간 코인 마켓 최적화
 
-v2.0 신규 기능:
-- 사용자 정의 프리셋 관리
-- 시스템 트레이 통합
-- Windows 자동 시작
-- 인앱 도움말 및 가이드
-- 향상된 UI/UX
+v2.5 신규 기능:
+- 거래 히스토리 탭 및 거래 기록 관리
+- 스토캐스틱 RSI, DMI/ADX 지표 추가
+- 다단계 익절 시스템
+- 진입 점수 시스템 (가중치 기반 스코어링)
+- API 호출 재시도 로직
+- 메모리 관리 및 스레드 안전성 강화
+- UI/UX 개선 및 실시간 지표 표시
 """
 
 import sys
@@ -20,18 +22,20 @@ import datetime
 import time
 import logging
 import threading
+import gc
 from pathlib import Path
 import winreg
 
 try:
     import pyupbit
+    import pandas as pd
 except ImportError:
     print("pyupbit 라이브러리가 필요합니다. 'pip install pyupbit' 명령으로 설치해주세요.")
     sys.exit(1)
 
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
-from PyQt6.QtGui import QColor, QFont, QAction, QIcon
+from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QTextCursor
 
 
 # ============================================================================
@@ -98,13 +102,52 @@ class Config:
     DEFAULT_MAX_HOLDINGS = 5
     DEFAULT_USE_RISK_MGMT = True
     
+    # 다단계 익절 설정 (v2.5 신규)
+    PARTIAL_TAKE_PROFIT = [
+        {'rate': 3.0, 'sell_ratio': 30},   # 3% 수익시 30% 매도
+        {'rate': 5.0, 'sell_ratio': 30},   # 5% 수익시 30% 매도
+        {'rate': 8.0, 'sell_ratio': 20},   # 8% 수익시 20% 매도
+    ]
+    DEFAULT_USE_PARTIAL_PROFIT = False
+    
+    # 진입 점수 설정 (v2.5 신규)
+    ENTRY_SCORE_THRESHOLD = 60  # 진입 최소 점수
+    USE_ENTRY_SCORING = False
+    ENTRY_WEIGHTS = {
+        'target_break': 20,    # 목표가 돌파
+        'ma_filter': 15,       # MA5 위
+        'rsi_optimal': 20,     # RSI 최적 구간 (30-70)
+        'macd_golden': 20,     # MACD 골든크로스
+        'volume_confirm': 15,  # 거래량 확인
+        'bb_position': 10,     # 볼린저밴드 포지션
+    }
+    
+    # 스토캐스틱 RSI 설정 (v2.5 신규)
+    DEFAULT_STOCH_RSI_PERIOD = 14
+    DEFAULT_STOCH_K_PERIOD = 3
+    DEFAULT_STOCH_D_PERIOD = 3
+    DEFAULT_USE_STOCH_RSI = False
+    
+    # DMI/ADX 설정 (v2.5 신규)
+    DEFAULT_DMI_PERIOD = 14
+    DEFAULT_ADX_THRESHOLD = 25  # ADX >= 이 값이면 추세 강함
+    DEFAULT_USE_DMI = False
+    
     # 파일 경로
     SETTINGS_FILE = "upbit_settings.json"
     PRESETS_FILE = "upbit_presets.json"
+    TRADE_HISTORY_FILE = "trade_history.json"  # v2.5 신규
     LOG_DIR = "logs"
     
     # 가격 갱신 주기 (초)
     PRICE_UPDATE_INTERVAL = 1
+    
+    # API 재시도 설정 (v2.5 신규)
+    API_MAX_RETRIES = 3
+    API_RETRY_DELAY = 1  # 초
+    
+    # 메모리 관리 (v2.5 신규)
+    MAX_LOG_LINES = 500
     
     # 기본 프리셋 정의
     DEFAULT_PRESETS = {
@@ -927,6 +970,10 @@ class UpbitProTrader(QMainWindow):
             'sound_enabled': False
         }
         
+        # v2.5 신규: 거래 히스토리
+        self.trade_history = []
+        self.load_trade_history()
+        
         # 가격 갱신 스레드
         self.price_thread = PriceUpdateThread()
         self.price_thread.price_updated.connect(self.on_price_update)
@@ -978,19 +1025,48 @@ class UpbitProTrader(QMainWindow):
 
     def init_ui(self):
         """UI 초기화"""
-        self.setWindowTitle("Upbit Pro Algo-Trader v2.0 [24H 코인 자동매매]")
+        self.setWindowTitle("Upbit Pro Algo-Trader v2.5 [24H 코인 자동매매]")
         self.setGeometry(100, 100, 1200, 900)
+        self.setMinimumSize(1000, 700)
         self.setStyleSheet(DARK_STYLESHEET)
         
+        # 메인 위젯
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(15, 15, 15, 15)
         
-        main_layout.addWidget(self.create_dashboard())
-        main_layout.addWidget(self.create_tab_widget())
-        main_layout.addWidget(self.create_splitter())
+        # 전체를 스크롤 가능하게 감싸기
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        
+        # 스크롤 내용물
+        scroll_content = QWidget()
+        content_layout = QVBoxLayout(scroll_content)
+        content_layout.setSpacing(15)
+        content_layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 대시보드 (고정 높이)
+        dashboard = self.create_dashboard()
+        dashboard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        content_layout.addWidget(dashboard, 0)
+        
+        # 탭 위젯
+        tab_widget = self.create_tab_widget()
+        tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        content_layout.addWidget(tab_widget, 0)
+        
+        # 스플리터 (테이블 + 로그, 신축 가능)
+        content_layout.addWidget(self.create_splitter(), 1)
+        
+        scroll_area.setWidget(scroll_content)
+        
+        # 메인 레이아웃에 스크롤 영역 배치
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll_area)
+        
         self.create_statusbar()
 
     def create_dashboard(self):
@@ -1049,6 +1125,7 @@ class UpbitProTrader(QMainWindow):
         tab_widget.addTab(self.create_strategy_tab(), "⚙️ 전략 설정")
         tab_widget.addTab(self.create_advanced_tab(), "🔬 고급 설정")
         tab_widget.addTab(self.create_statistics_tab(), "📊 거래 통계")
+        tab_widget.addTab(self.create_history_tab(), "📝 거래 내역")
         return tab_widget
 
     def create_strategy_tab(self):
@@ -1320,9 +1397,92 @@ class UpbitProTrader(QMainWindow):
         layout.setRowStretch(2, 1)
         return widget
 
+    def create_history_tab(self):
+        """거래 내역 탭 (v2.5 신규)"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 상단 버튼 영역
+        btn_layout = QHBoxLayout()
+        
+        self.lbl_history_count = QLabel("📝 총 0건의 거래 기록")
+        btn_layout.addWidget(self.lbl_history_count)
+        
+        btn_layout.addStretch(1)
+        
+        btn_clear = QPushButton("🗑️ 오늘 기록 삭제")
+        btn_clear.clicked.connect(self.clear_today_history)
+        btn_layout.addWidget(btn_clear)
+        
+        btn_export = QPushButton("💾 내보내기")
+        btn_export.clicked.connect(self.export_history)
+        btn_layout.addWidget(btn_export)
+        
+        layout.addLayout(btn_layout)
+        
+        # 거래 내역 테이블
+        self.history_table = QTableWidget()
+        history_cols = ["시간", "코인", "구분", "가격", "금액", "손익", "사유"]
+        self.history_table.setColumnCount(len(history_cols))
+        self.history_table.setHorizontalHeaderLabels(history_cols)
+        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.history_table.setAlternatingRowColors(True)
+        self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.history_table.verticalHeader().setDefaultSectionSize(30)
+        
+        layout.addWidget(self.history_table)
+        
+        # 기존 히스토리 로드
+        self._load_history_to_table()
+        
+        return widget
+
+    def _load_history_to_table(self):
+        """기존 거래 기록을 테이블에 로드"""
+        for record in self.trade_history:
+            self._add_history_row(record)
+        self.lbl_history_count.setText(f"📝 총 {len(self.trade_history)}건의 거래 기록")
+
+    def clear_today_history(self):
+        """오늘의 거래 기록 삭제"""
+        today = datetime.datetime.now().date().isoformat()
+        reply = QMessageBox.question(self, "확인", 
+            f"오늘({today})의 거래 기록을 삭제하시겠습니까?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.trade_history = [r for r in self.trade_history 
+                                  if not r['timestamp'].startswith(today)]
+            self.save_trade_history()
+            self.history_table.setRowCount(0)
+            self._load_history_to_table()
+            self.log("🗑️ 오늘의 거래 기록이 삭제되었습니다")
+
+    def export_history(self):
+        """거래 기록 내보내기"""
+        if not self.trade_history:
+            QMessageBox.information(self, "알림", "내보낼 거래 기록이 없습니다.")
+            return
+        
+        filename = f"trade_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        try:
+            import csv
+            with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=['timestamp', 'ticker', 'type', 'price', 'quantity', 'amount', 'profit', 'reason'])
+                writer.writeheader()
+                writer.writerows(self.trade_history)
+            QMessageBox.information(self, "완료", f"거래 기록이 {filename}에 저장되었습니다.")
+            self.log(f"💾 거래 기록 내보내기: {filename}")
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"내보내기 실패: {e}")
+
     def create_splitter(self):
         """스플리터 생성"""
         splitter = QSplitter(Qt.Orientation.Vertical)
+        splitter.setChildrenCollapsible(False)
         
         # 포트폴리오 테이블
         self.table = QTableWidget()
@@ -1333,16 +1493,23 @@ class UpbitProTrader(QMainWindow):
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table.setMinimumHeight(200)
+        self.table.verticalHeader().setDefaultSectionSize(35)  # 행 높이 증가
         
         # 로그 창
         self.log_text = QTextEdit()
-        self.log_text.setMaximumHeight(180)
+        self.log_text.setMinimumHeight(150)
         self.log_text.setReadOnly(True)
         self.log_text.setPlaceholderText("로그가 여기에 표시됩니다...")
         
         splitter.addWidget(self.table)
         splitter.addWidget(self.log_text)
-        splitter.setSizes([500, 180])
+        
+        # 테이블이 더 많이 늘어나도록 설정
+        splitter.setStretchFactor(0, 3)  # 테이블 3
+        splitter.setStretchFactor(1, 1)  # 로그 1
+        splitter.setSizes([400, 200])
+        
         return splitter
 
     def create_statusbar(self):
@@ -1939,6 +2106,157 @@ class UpbitProTrader(QMainWindow):
             return current_volume, avg_volume
         except Exception as e:
             return None, None
+
+    def calculate_stoch_rsi(self, ticker, rsi_period=14, stoch_period=14, k_period=3, d_period=3):
+        """스토캐스틱 RSI 계산 (v2.5 신규)"""
+        try:
+            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
+            df = pyupbit.get_ohlcv(ticker, interval=interval, count=rsi_period + stoch_period + 10)
+            if df is None or len(df) < rsi_period + stoch_period:
+                return 50, 50  # 기본값
+            
+            # RSI 계산
+            delta = df['close'].diff()
+            gain = delta.where(delta > 0, 0)
+            loss = (-delta).where(delta < 0, 0)
+            avg_gain = gain.rolling(window=rsi_period).mean()
+            avg_loss = loss.rolling(window=rsi_period).mean()
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            
+            # 스토캐스틱 RSI 계산
+            rsi_min = rsi.rolling(window=stoch_period).min()
+            rsi_max = rsi.rolling(window=stoch_period).max()
+            stoch_rsi = (rsi - rsi_min) / (rsi_max - rsi_min) * 100
+            
+            # %K, %D
+            k = stoch_rsi.rolling(window=k_period).mean().iloc[-1]
+            d = stoch_rsi.rolling(window=d_period).mean().iloc[-1]
+            
+            return k if not pd.isna(k) else 50, d if not pd.isna(d) else 50
+        except Exception as e:
+            self.logger.error(f"스토캐스틱 RSI 계산 실패 ({ticker}): {e}")
+            return 50, 50
+
+    def calculate_dmi_adx(self, ticker, period=14):
+        """DMI와 ADX 계산 (v2.5 신규) - 추세 강도 측정"""
+        try:
+            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
+            df = pyupbit.get_ohlcv(ticker, interval=interval, count=period * 3)
+            if df is None or len(df) < period * 2:
+                return 0, 0, 0  # +DI, -DI, ADX
+            
+            high = df['high']
+            low = df['low']
+            close = df['close']
+            
+            # +DM, -DM 계산
+            plus_dm = high.diff()
+            minus_dm = -low.diff()
+            plus_dm[plus_dm < 0] = 0
+            minus_dm[minus_dm < 0] = 0
+            
+            # 조건: +DM > -DM일 때만 +DM 유효
+            plus_dm[(plus_dm < minus_dm) | (plus_dm < 0)] = 0
+            minus_dm[(minus_dm < plus_dm) | (minus_dm < 0)] = 0
+            
+            # True Range
+            tr1 = high - low
+            tr2 = (high - close.shift()).abs()
+            tr3 = (low - close.shift()).abs()
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            
+            # 평활화 (Wilder 스무딩)
+            atr = tr.rolling(window=period).mean()
+            plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+            minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+            
+            # DX와 ADX
+            dx = 100 * (abs(plus_di - minus_di) / (plus_di + minus_di))
+            adx = dx.rolling(window=period).mean()
+            
+            return plus_di.iloc[-1], minus_di.iloc[-1], adx.iloc[-1]
+        except Exception as e:
+            self.logger.error(f"DMI/ADX 계산 실패 ({ticker}): {e}")
+            return 0, 0, 0
+
+    def api_call_with_retry(self, func, *args, max_retries=None, delay=None):
+        """API 호출 재시도 래퍼 (v2.5 신규)"""
+        max_retries = max_retries or Config.API_MAX_RETRIES
+        delay = delay or Config.API_RETRY_DELAY
+        
+        for attempt in range(max_retries):
+            try:
+                result = func(*args)
+                return result
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    self.logger.warning(f"API 호출 실패 (시도 {attempt + 1}/{max_retries}): {e}")
+                    time.sleep(delay * (attempt + 1))
+                else:
+                    self.logger.error(f"API 호출 최종 실패: {e}")
+                    raise
+
+    def calculate_entry_score(self, ticker, curr_price, info):
+        """진입 점수 계산 (v2.5 신규) - 0~100점"""
+        score = 0
+        reasons = []
+        weights = Config.ENTRY_WEIGHTS
+        
+        # 1. 목표가 돌파 (필수 조건이지만 점수로도 반영)
+        if curr_price >= info['target']:
+            score += weights['target_break']
+            reasons.append(f"+{weights['target_break']} 목표가 돌파")
+        
+        # 2. MA5 필터
+        if curr_price >= info['ma5']:
+            score += weights['ma_filter']
+            reasons.append(f"+{weights['ma_filter']} MA5 위")
+        
+        # 3. RSI 최적 구간
+        if self.chk_use_rsi.isChecked():
+            rsi = self.calculate_rsi(ticker, self.spin_rsi_period.value())
+            if 30 <= rsi <= 70:
+                score += weights['rsi_optimal']
+                reasons.append(f"+{weights['rsi_optimal']} RSI {rsi:.1f} (최적)")
+            elif rsi < 30:
+                score += weights['rsi_optimal'] // 2  # 과매도는 절반 점수
+                reasons.append(f"+{weights['rsi_optimal']//2} RSI {rsi:.1f} (과매도)")
+        else:
+            score += weights['rsi_optimal']  # RSI 미사용시 만점
+        
+        # 4. MACD 골든크로스
+        if hasattr(self, 'chk_use_macd') and self.chk_use_macd.isChecked():
+            macd, signal, histogram = self.calculate_macd(ticker)
+            if macd > signal:
+                score += weights['macd_golden']
+                reasons.append(f"+{weights['macd_golden']} MACD 골든크로스")
+        else:
+            score += weights['macd_golden']  # MACD 미사용시 만점
+        
+        # 5. 거래량 확인
+        if self.chk_use_volume.isChecked():
+            curr_vol, avg_vol = self.calculate_volume_avg(ticker, Config.DEFAULT_VOLUME_PERIOD)
+            if curr_vol and avg_vol:
+                required_vol = avg_vol * self.spin_volume_mult.value()
+                if curr_vol >= required_vol:
+                    score += weights['volume_confirm']
+                    reasons.append(f"+{weights['volume_confirm']} 거래량 충분")
+        else:
+            score += weights['volume_confirm']
+        
+        # 6. 볼린저 밴드 포지션
+        upper, middle, lower = self.calculate_bollinger_bands(ticker)
+        if lower and middle:
+            if lower <= curr_price <= middle:  # 하단~중간: 최적
+                score += weights['bb_position']
+                reasons.append(f"+{weights['bb_position']} BB 최적 구간")
+            elif middle < curr_price <= upper:  # 중간~상단: 절반
+                score += weights['bb_position'] // 2
+                reasons.append(f"+{weights['bb_position']//2} BB 중상단")
+        
+        return score, reasons
+
     # ------------------------------------------------------------------
     # 가격 업데이트 및 조건 확인
     # ------------------------------------------------------------------
@@ -2109,6 +2427,10 @@ class UpbitProTrader(QMainWindow):
                     self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
                     
                     self.log(f"✅ [{ticker}] 매수 체결: {executed_volume:.8f} @ {avg_price:,.0f}원")
+                    
+                    # v2.5: 거래 기록 추가
+                    self.add_trade_record(ticker, 'BUY', avg_price, executed_volume, 0, '매수 체결')
+                    
                     self.get_balance()
             else:
                 # 아직 체결 안됨, 다시 확인
@@ -2170,6 +2492,10 @@ class UpbitProTrader(QMainWindow):
                 self.set_table_item(info['row'], 4, "✅ 청산완료", "#6c757d")
                 
                 self.log(f"✅ [{ticker}] 매도 체결 (손익: {profit:+,.0f}원)")
+                
+                # v2.5: 거래 기록 추가
+                self.add_trade_record(ticker, 'SELL', trades_price, executed_volume, profit, reason)
+                
                 self._update_statistics()
                 self.get_balance()
             else:
@@ -2241,11 +2567,89 @@ class UpbitProTrader(QMainWindow):
             self.log("🔄 통계 초기화됨")
 
     def log(self, msg):
-        """로그 출력"""
+        """로그 출력 (v2.5 메모리 제한 적용)"""
         t = datetime.datetime.now().strftime("[%H:%M:%S]")
         self.log_text.append(f"{t} {msg}")
+        
+        # 메모리 제한: 최대 로그 라인 수 보다 많으면 오래된 로그 삭제
+        if self.log_text.document().blockCount() > Config.MAX_LOG_LINES:
+            cursor = self.log_text.textCursor()
+            cursor.movePosition(QTextCursor.MoveOperation.Start)
+            cursor.movePosition(QTextCursor.MoveOperation.Down, 
+                              QTextCursor.MoveMode.KeepAnchor, 50)
+            cursor.removeSelectedText()
+        
         sb = self.log_text.verticalScrollBar()
         sb.setValue(sb.maximum())
+
+    def load_trade_history(self):
+        """거래 히스토리 불러오기 (v2.5 신규)"""
+        try:
+            if os.path.exists(Config.TRADE_HISTORY_FILE):
+                with open(Config.TRADE_HISTORY_FILE, 'r', encoding='utf-8') as f:
+                    self.trade_history = json.load(f)
+        except Exception as e:
+            self.trade_history = []
+            logging.error(f"거래 히스토리 로드 실패: {e}")
+
+    def save_trade_history(self):
+        """거래 히스토리 저장 (v2.5 신규)"""
+        try:
+            with open(Config.TRADE_HISTORY_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.trade_history, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            self.logger.error(f"거래 히스토리 저장 실패: {e}")
+
+    def add_trade_record(self, ticker, trade_type, price, quantity, profit=0, reason=""):
+        """거래 기록 추가 (v2.5 신규)"""
+        record = {
+            'timestamp': datetime.datetime.now().isoformat(),
+            'ticker': ticker,
+            'type': trade_type,  # 'BUY' or 'SELL'
+            'price': price,
+            'quantity': quantity,
+            'amount': price * quantity,
+            'profit': profit,
+            'reason': reason
+        }
+        self.trade_history.append(record)
+        
+        # 히스토리 테이블 업데이트
+        if hasattr(self, 'history_table'):
+            self._add_history_row(record)
+        
+        # 자동 저장
+        self.save_trade_history()
+
+    def _add_history_row(self, record):
+        """히스토리 테이블에 행 추가"""
+        row = self.history_table.rowCount()
+        self.history_table.insertRow(row)
+        
+        # 타임스탬프 파싱
+        ts = datetime.datetime.fromisoformat(record['timestamp'])
+        
+        self.history_table.setItem(row, 0, QTableWidgetItem(ts.strftime("%m/%d %H:%M")))
+        self.history_table.setItem(row, 1, QTableWidgetItem(record['ticker']))
+        
+        type_item = QTableWidgetItem(record['type'])
+        if record['type'] == 'BUY':
+            type_item.setForeground(QColor("#e63946"))
+        else:
+            type_item.setForeground(QColor("#4361ee"))
+        self.history_table.setItem(row, 2, type_item)
+        
+        self.history_table.setItem(row, 3, QTableWidgetItem(f"{record['price']:,.0f}"))
+        self.history_table.setItem(row, 4, QTableWidgetItem(f"{record['amount']:,.0f}"))
+        
+        profit_item = QTableWidgetItem(f"{record['profit']:+,.0f}" if record['profit'] else "-")
+        if record['profit'] > 0:
+            profit_item.setForeground(QColor("#e63946"))
+        elif record['profit'] < 0:
+            profit_item.setForeground(QColor("#4361ee"))
+        self.history_table.setItem(row, 5, profit_item)
+        
+        self.history_table.setItem(row, 6, QTableWidgetItem(record.get('reason', '')))
 
     def closeEvent(self, event):
         """종료 처리"""
