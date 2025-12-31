@@ -1,11 +1,21 @@
 """
-Upbit Pro Algo-Trader v2.6
+Upbit Pro Algo-Trader v3.0
 업비트 OpenAPI 기반 자동매매 프로그램
 
 변동성 돌파 전략 + 이동평균 필터 + 트레일링 스톱
 24시간 코인 마켓 최적화
 
-v2.6 신규 기능:
+v3.0 신규 기능:
+- 텔레그램 알림 연동
+- API 키 암호화 저장
+- 예약 매매 스케줄러
+- 수익 차트 시각화
+- 페이퍼 트레이딩 모드
+- 백테스팅 시스템
+- 다중 전략 지원
+- 고급 분석 리포트
+
+v2.6 기능:
 - 일괄 매도/매수 기능 (2중 확인 다이얼로그)
 - 완료 후 자동매매 시작 옵션
 
@@ -37,6 +47,42 @@ except ImportError:
 from PyQt6.QtWidgets import *
 from PyQt6.QtCore import *
 from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QTextCursor
+
+# v3.0 신규 모듈
+try:
+    from telegram_notifier import TelegramNotifier, get_telegram_notifier
+    TELEGRAM_MODULE_AVAILABLE = True
+except ImportError:
+    TELEGRAM_MODULE_AVAILABLE = False
+
+try:
+    from crypto_utils import SecureStorage, get_secure_storage
+    CRYPTO_MODULE_AVAILABLE = True
+except ImportError:
+    CRYPTO_MODULE_AVAILABLE = False
+
+try:
+    from backtest_engine import BacktestEngine, BacktestResult
+    BACKTEST_MODULE_AVAILABLE = True
+except ImportError:
+    BACKTEST_MODULE_AVAILABLE = False
+
+try:
+    from strategies import get_strategy, get_strategy_list, SignalType
+    STRATEGIES_MODULE_AVAILABLE = True
+except ImportError:
+    STRATEGIES_MODULE_AVAILABLE = False
+
+# matplotlib 차트 (옵션)
+try:
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+    from matplotlib.figure import Figure
+    import matplotlib.pyplot as plt
+    plt.rcParams['font.family'] = 'Malgun Gothic'
+    plt.rcParams['axes.unicode_minus'] = False
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
 
 
 # ============================================================================
@@ -258,32 +304,33 @@ A: 네, 콤마로 구분하여 여러 코인을 입력할 수 있습니다. 최�
 
 
 # ============================================================================
-# 다크 테마 스타일시트
+# 다크 테마 스타일시트 (v3.0 Enhanced)
 # ============================================================================
 DARK_STYLESHEET = """
 /* ============================================= */
 /* 기본 위젯 스타일 */
 /* ============================================= */
 QMainWindow, QWidget {
-    background-color: #1a1a2e;
+    background-color: #0f0f1a;
     color: #edf2f4;
     font-family: '맑은 고딕', 'Malgun Gothic', 'Segoe UI', sans-serif;
     font-size: 13px;
 }
 
 QDialog {
-    background-color: #1a1a2e;
+    background-color: #0f0f1a;
     font-family: '맑은 고딕', 'Malgun Gothic', sans-serif;
 }
 
 /* ============================================= */
-/* 그룹박스 */
+/* 그룹박스 - 글래스모피즘 효과 */
 /* ============================================= */
 QGroupBox {
-    border: 1px solid #3d5a80;
-    border-radius: 8px;
-    margin-top: 16px;
-    padding: 20px 15px 15px 15px;
+    background-color: rgba(22, 33, 62, 0.7);
+    border: 1px solid rgba(61, 90, 128, 0.6);
+    border-radius: 12px;
+    margin-top: 20px;
+    padding: 24px 18px 18px 18px;
     font-weight: bold;
     font-size: 14px;
     color: #90e0ef;
@@ -291,65 +338,108 @@ QGroupBox {
 
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 15px;
-    padding: 0 10px;
-    background-color: #1a1a2e;
+    left: 18px;
+    padding: 2px 12px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(0, 180, 216, 0.3), stop:1 rgba(114, 9, 183, 0.3));
+    border-radius: 6px;
+    color: #ffffff;
 }
 
 /* ============================================= */
-/* 버튼 */
+/* 버튼 - 그라데이션 & 호버 효과 */
 /* ============================================= */
 QPushButton {
-    background-color: #3d5a80;
-    color: #edf2f4;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #3d5a80, stop:1 #2c4a6e);
+    color: #ffffff;
     border: none;
-    border-radius: 6px;
-    padding: 10px 20px;
+    border-radius: 8px;
+    padding: 12px 24px;
     font-weight: bold;
     font-size: 13px;
-    min-height: 20px;
+    min-height: 22px;
 }
 
-QPushButton:hover { background-color: #4a6fa5; }
-QPushButton:pressed { background-color: #2c4a6e; }
-QPushButton:disabled { background-color: #2d2d44; color: #666680; }
+QPushButton:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #4a6fa5, stop:1 #3d5a80);
+    border: 1px solid rgba(0, 180, 216, 0.5);
+}
 
-QPushButton#loginBtn { background-color: #00b4d8; }
-QPushButton#loginBtn:hover { background-color: #0096c7; }
-QPushButton#startBtn { background-color: #e63946; font-size: 15px; padding: 12px 25px; }
-QPushButton#startBtn:hover { background-color: #d62839; }
-QPushButton#stopBtn { background-color: #6c757d; }
+QPushButton:pressed {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #2c4a6e, stop:1 #1a3a5c);
+}
+
+QPushButton:disabled {
+    background: #2d2d44;
+    color: #666680;
+    border: none;
+}
+
+/* 로그인 버튼 - 시안 그라데이션 */
+QPushButton#loginBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #00b4d8, stop:1 #0096c7);
+}
+QPushButton#loginBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #48cae4, stop:1 #00b4d8);
+    border: 1px solid #48cae4;
+}
+
+/* 시작 버튼 - 핑크/레드 그라데이션 */
+QPushButton#startBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #e63946, stop:1 #f72585);
+    font-size: 15px;
+    padding: 14px 28px;
+    border-radius: 10px;
+}
+QPushButton#startBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #ff4d5a, stop:1 #ff3d8a);
+    border: 1px solid #ff6b9d;
+}
+
+/* 중지 버튼 */
+QPushButton#stopBtn {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #6c757d, stop:1 #495057);
+}
+QPushButton#stopBtn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #7d8a93, stop:1 #6c757d);
+}
 
 /* ============================================= */
-/* 체크박스 */
+/* 체크박스 - 부드러운 전환 */
 /* ============================================= */
 QCheckBox {
-    spacing: 10px;
+    spacing: 12px;
     font-size: 13px;
     color: #edf2f4;
-    padding: 5px;
+    padding: 6px;
 }
 
 QCheckBox::indicator {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
     border: 2px solid #3d5a80;
     background-color: #16213e;
 }
 
 QCheckBox::indicator:checked {
-    background-color: #00b4d8;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #00b4d8, stop:1 #0077b6);
     border: 2px solid #00b4d8;
-    image: none;
-}
-
-QCheckBox::indicator:checked:after {
-    content: "✓";
 }
 
 QCheckBox::indicator:hover {
-    border: 2px solid #00b4d8;
+    border: 2px solid #48cae4;
+    background-color: rgba(0, 180, 216, 0.1);
 }
 
 QCheckBox:disabled {
@@ -357,58 +447,83 @@ QCheckBox:disabled {
 }
 
 /* ============================================= */
-/* 입력 필드 */
+/* 입력 필드 - 포커스 글로우 */
 /* ============================================= */
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
-    background-color: #16213e;
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QTimeEdit, QDateEdit {
+    background-color: rgba(22, 33, 62, 0.8);
     border: 1px solid #3d5a80;
-    border-radius: 5px;
-    padding: 10px;
+    border-radius: 8px;
+    padding: 12px 14px;
     color: #edf2f4;
     font-size: 13px;
     selection-background-color: #00b4d8;
-    min-height: 18px;
+    min-height: 20px;
 }
 
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {
+    border: 1px solid #4a6fa5;
+}
+
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus,
+QTimeEdit:focus, QDateEdit:focus {
     border: 2px solid #00b4d8;
+    background-color: rgba(0, 180, 216, 0.05);
 }
 
 QComboBox::drop-down {
     border: none;
-    padding-right: 10px;
+    padding-right: 12px;
+    width: 24px;
 }
 
 QComboBox::down-arrow {
     image: none;
-    border-left: 5px solid transparent;
-    border-right: 5px solid transparent;
-    border-top: 6px solid #90e0ef;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 7px solid #90e0ef;
 }
 
-/* ============================================= */
-/* 테이블 */
-/* ============================================= */
-QTableWidget {
+QComboBox QAbstractItemView {
     background-color: #16213e;
-    alternate-background-color: #1a2744;
-    gridline-color: #2d3a5a;
     border: 1px solid #3d5a80;
     border-radius: 8px;
-    color: #edf2f4;
-    font-size: 12px;
+    selection-background-color: #3d5a80;
+    outline: none;
 }
 
-QTableWidget::item { 
-    padding: 10px; 
-    border-bottom: 1px solid #2d3a5a; 
+/* ============================================= */
+/* 테이블 - 향상된 스타일 */
+/* ============================================= */
+QTableWidget {
+    background-color: rgba(22, 33, 62, 0.6);
+    alternate-background-color: rgba(26, 39, 68, 0.8);
+    gridline-color: rgba(45, 58, 90, 0.5);
+    border: 1px solid rgba(61, 90, 128, 0.5);
+    border-radius: 12px;
+    color: #edf2f4;
+    font-size: 13px;
+    outline: none;
 }
-QTableWidget::item:selected { background-color: #3d5a80; }
+
+QTableWidget::item {
+    padding: 12px 10px;
+    border-bottom: 1px solid rgba(45, 58, 90, 0.3);
+}
+
+QTableWidget::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(61, 90, 128, 0.8), stop:1 rgba(45, 58, 90, 0.6));
+}
+
+QTableWidget::item:hover {
+    background-color: rgba(61, 90, 128, 0.3);
+}
 
 QHeaderView::section {
-    background-color: #0f3460;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #0f3460, stop:1 #0a2647);
     color: #90e0ef;
-    padding: 12px;
+    padding: 14px 12px;
     border: none;
     border-bottom: 2px solid #00b4d8;
     font-weight: bold;
@@ -416,153 +531,293 @@ QHeaderView::section {
 }
 
 /* ============================================= */
-/* 텍스트 영역 */
+/* 텍스트 영역 - 콘솔 스타일 */
 /* ============================================= */
 QTextEdit {
-    background-color: #0d1b2a;
-    border: 1px solid #3d5a80;
-    border-radius: 8px;
+    background-color: rgba(13, 27, 42, 0.9);
+    border: 1px solid rgba(61, 90, 128, 0.5);
+    border-radius: 10px;
     color: #90e0ef;
-    font-family: 'Consolas', 'D2Coding', monospace;
+    font-family: 'Consolas', 'D2Coding', 'Cascadia Code', monospace;
     font-size: 12px;
-    padding: 12px;
-    line-height: 1.4;
+    padding: 14px;
+    line-height: 1.5;
 }
 
 /* ============================================= */
-/* 레이블 */
+/* 레이블 - 향상된 스타일 */
 /* ============================================= */
-QLabel { 
-    color: #b8c5d6; 
-    font-size: 13px; 
-}
-QLabel#depositLabel { color: #00b4d8; font-weight: bold; font-size: 15px; }
-QLabel#profitLabel { color: #f72585; font-weight: bold; font-size: 15px; }
-
-/* ============================================= */
-/* 상태바 */
-/* ============================================= */
-QStatusBar {
-    background-color: #0f3460;
-    color: #90e0ef;
-    border-top: 1px solid #3d5a80;
-    font-size: 12px;
-    padding: 5px;
-}
-
-/* ============================================= */
-/* 탭 위젯 */
-/* ============================================= */
-QTabWidget::pane { 
-    border: 1px solid #3d5a80; 
-    border-radius: 8px; 
-    background-color: #1a1a2e; 
-    padding: 5px;
-}
-QTabBar::tab {
-    background-color: #16213e;
+QLabel {
     color: #b8c5d6;
-    padding: 12px 25px;
-    margin-right: 2px;
-    border-top-left-radius: 6px;
-    border-top-right-radius: 6px;
     font-size: 13px;
 }
-QTabBar::tab:selected { background-color: #3d5a80; color: #edf2f4; font-weight: bold; }
-QTabBar::tab:hover:!selected { background-color: #2d3a5a; }
+
+QLabel#depositLabel {
+    color: #48cae4;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 8px 12px;
+    background: rgba(0, 180, 216, 0.1);
+    border-radius: 8px;
+}
+
+QLabel#profitLabel {
+    color: #ff6b9d;
+    font-weight: bold;
+    font-size: 16px;
+    padding: 8px 12px;
+    background: rgba(247, 37, 133, 0.1);
+    border-radius: 8px;
+}
+
+/* ============================================= */
+/* 상태바 - 그라데이션 */
+/* ============================================= */
+QStatusBar {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #0f3460, stop:1 #0a2647);
+    color: #90e0ef;
+    border-top: 1px solid rgba(0, 180, 216, 0.3);
+    font-size: 12px;
+    padding: 6px 10px;
+}
+
+/* ============================================= */
+/* 탭 위젯 - 모던 스타일 */
+/* ============================================= */
+QTabWidget::pane {
+    border: 1px solid rgba(61, 90, 128, 0.5);
+    border-radius: 12px;
+    background-color: rgba(26, 26, 46, 0.8);
+    padding: 8px;
+    margin-top: -1px;
+}
+
+QTabBar::tab {
+    background: rgba(22, 33, 62, 0.6);
+    color: #b8c5d6;
+    padding: 10px 16px;
+    margin-right: 3px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
+    font-size: 12px;
+    min-width: 60px;
+}
+
+QTabBar::tab:selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #3d5a80, stop:1 #2c4a6e);
+    color: #ffffff;
+    font-weight: bold;
+    border-bottom: 2px solid #00b4d8;
+}
+
+QTabBar::tab:hover:!selected {
+    background: rgba(45, 58, 90, 0.8);
+    color: #edf2f4;
+}
 
 /* ============================================= */
 /* 리스트 위젯 */
 /* ============================================= */
 QListWidget {
-    background-color: #16213e;
-    border: 1px solid #3d5a80;
-    border-radius: 6px;
-    padding: 5px;
+    background-color: rgba(22, 33, 62, 0.7);
+    border: 1px solid rgba(61, 90, 128, 0.5);
+    border-radius: 10px;
+    padding: 8px;
     font-size: 13px;
+    outline: none;
 }
 
 QListWidget::item {
-    padding: 10px;
-    border-radius: 4px;
-    margin: 2px;
+    padding: 12px 14px;
+    border-radius: 6px;
+    margin: 3px 2px;
 }
 
 QListWidget::item:selected {
-    background-color: #3d5a80;
-    color: #edf2f4;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #3d5a80, stop:1 #2c4a6e);
+    color: #ffffff;
 }
 
 QListWidget::item:hover:!selected {
-    background-color: #2d3a5a;
+    background-color: rgba(45, 58, 90, 0.6);
 }
 
 /* ============================================= */
-/* 스크롤바 */
+/* 스크롤바 - 슬림 디자인 */
 /* ============================================= */
 QScrollBar:vertical {
-    background-color: #16213e;
-    width: 12px;
-    border-radius: 6px;
-    margin: 0;
+    background-color: rgba(22, 33, 62, 0.3);
+    width: 10px;
+    border-radius: 5px;
+    margin: 2px;
 }
+
 QScrollBar::handle:vertical {
-    background-color: #3d5a80;
-    border-radius: 6px;
-    min-height: 30px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #3d5a80, stop:1 #4a6fa5);
+    border-radius: 5px;
+    min-height: 40px;
 }
+
 QScrollBar::handle:vertical:hover {
-    background-color: #4a6fa5;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #4a6fa5, stop:1 #5c82bd);
 }
+
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
 }
 
+QScrollBar:horizontal {
+    background-color: rgba(22, 33, 62, 0.3);
+    height: 10px;
+    border-radius: 5px;
+    margin: 2px;
+}
+
+QScrollBar::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #3d5a80, stop:1 #4a6fa5);
+    border-radius: 5px;
+    min-width: 40px;
+}
+
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+
 /* ============================================= */
-/* 메뉴바 */
+/* 메뉴바 - 그라데이션 */
 /* ============================================= */
 QMenuBar {
-    background-color: #0f3460;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #0f3460, stop:1 #0a2647);
     color: #edf2f4;
-    padding: 5px;
+    padding: 6px 8px;
     font-size: 13px;
+    border-bottom: 1px solid rgba(0, 180, 216, 0.2);
 }
 
 QMenuBar::item {
-    padding: 8px 15px;
-    border-radius: 4px;
+    padding: 8px 16px;
+    border-radius: 6px;
 }
 
 QMenuBar::item:selected {
-    background-color: #3d5a80;
+    background: rgba(61, 90, 128, 0.6);
 }
 
 QMenu {
-    background-color: #16213e;
-    border: 1px solid #3d5a80;
-    border-radius: 6px;
-    padding: 5px;
+    background-color: rgba(22, 33, 62, 0.95);
+    border: 1px solid rgba(61, 90, 128, 0.6);
+    border-radius: 10px;
+    padding: 8px;
 }
 
 QMenu::item {
-    padding: 10px 30px;
-    border-radius: 4px;
+    padding: 10px 24px 10px 16px;
+    border-radius: 6px;
+    margin: 2px 4px;
 }
 
 QMenu::item:selected {
-    background-color: #3d5a80;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 rgba(0, 180, 216, 0.3), stop:1 rgba(61, 90, 128, 0.4));
+}
+
+QMenu::separator {
+    height: 1px;
+    background: rgba(61, 90, 128, 0.4);
+    margin: 6px 10px;
 }
 
 /* ============================================= */
-/* 툴팁 */
+/* 툴팁 - 모던 스타일 */
 /* ============================================= */
 QToolTip {
-    background-color: #0f3460;
+    background-color: rgba(15, 52, 96, 0.95);
     color: #edf2f4;
-    border: 1px solid #3d5a80;
-    border-radius: 6px;
-    padding: 10px;
+    border: 1px solid rgba(0, 180, 216, 0.4);
+    border-radius: 8px;
+    padding: 10px 14px;
     font-size: 12px;
+}
+
+/* ============================================= */
+/* 프레임 - 카드 스타일 */
+/* ============================================= */
+QFrame#statCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(22, 33, 62, 0.9), stop:1 rgba(15, 25, 50, 0.9));
+    border: 1px solid rgba(61, 90, 128, 0.4);
+    border-radius: 14px;
+    padding: 16px;
+}
+
+/* ============================================= */
+/* 프로그레스바 */
+/* ============================================= */
+QProgressBar {
+    background-color: rgba(22, 33, 62, 0.6);
+    border: 1px solid rgba(61, 90, 128, 0.4);
+    border-radius: 8px;
+    height: 12px;
+    text-align: center;
+    font-size: 10px;
+    color: #edf2f4;
+}
+
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #00b4d8, stop:1 #48cae4);
+    border-radius: 7px;
+}
+
+/* ============================================= */
+/* 슬라이더 */
+/* ============================================= */
+QSlider::groove:horizontal {
+    background: rgba(22, 33, 62, 0.8);
+    height: 8px;
+    border-radius: 4px;
+}
+
+QSlider::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #00b4d8, stop:1 #0096c7);
+    width: 20px;
+    height: 20px;
+    margin: -6px 0;
+    border-radius: 10px;
+    border: 2px solid #48cae4;
+}
+
+QSlider::handle:horizontal:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 #48cae4, stop:1 #00b4d8);
+}
+
+/* ============================================= */
+/* 스플리터 */
+/* ============================================= */
+QSplitter::handle {
+    background: rgba(61, 90, 128, 0.3);
+    border-radius: 2px;
+}
+
+QSplitter::handle:hover {
+    background: rgba(0, 180, 216, 0.5);
+}
+
+QSplitter::handle:vertical {
+    height: 6px;
+}
+
+QSplitter::handle:horizontal {
+    width: 6px;
 }
 """
 
@@ -1026,7 +1281,7 @@ class UpbitProTrader(QMainWindow):
 
     def init_ui(self):
         """UI 초기화"""
-        self.setWindowTitle("Upbit Pro Algo-Trader v2.6 [24H 코인 자동매매]")
+        self.setWindowTitle("Upbit Pro Algo-Trader v3.0 [24H 코인 자동매매]")
         self.setGeometry(100, 100, 1200, 900)
         self.setMinimumSize(1000, 700)
         self.setStyleSheet(DARK_STYLESHEET)
@@ -1071,54 +1326,161 @@ class UpbitProTrader(QMainWindow):
         self.create_statusbar()
 
     def create_dashboard(self):
-        """대시보드 생성"""
+        """대시보드 생성 - v3.0 개선된 레이아웃"""
         group_dash = QGroupBox("📊 Trading Dashboard")
-        layout_dash = QHBoxLayout()
-        layout_dash.setSpacing(15)
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(16)
+        
+        # ===== 상단: API 연결 영역 =====
+        connect_layout = QHBoxLayout()
+        connect_layout.setSpacing(12)
         
         # API 키 입력
-        layout_dash.addWidget(QLabel("Access:"))
+        api_frame = QFrame()
+        api_layout = QHBoxLayout(api_frame)
+        api_layout.setContentsMargins(0, 0, 0, 0)
+        api_layout.setSpacing(10)
+        
+        lbl_access = QLabel("🔑 Access:")
+        lbl_access.setStyleSheet("color: #90e0ef; font-weight: bold;")
+        api_layout.addWidget(lbl_access)
+        
         self.input_access = QLineEdit()
         self.input_access.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_access.setMinimumWidth(150)
-        self.input_access.setPlaceholderText("Access Key")
-        layout_dash.addWidget(self.input_access)
+        self.input_access.setMinimumWidth(160)
+        self.input_access.setPlaceholderText("Access Key 입력")
+        self.input_access.setToolTip("업비트 Open API에서 발급받은 Access Key")
+        api_layout.addWidget(self.input_access)
         
-        layout_dash.addWidget(QLabel("Secret:"))
+        lbl_secret = QLabel("🔐 Secret:")
+        lbl_secret.setStyleSheet("color: #90e0ef; font-weight: bold;")
+        api_layout.addWidget(lbl_secret)
+        
         self.input_secret = QLineEdit()
         self.input_secret.setEchoMode(QLineEdit.EchoMode.Password)
-        self.input_secret.setMinimumWidth(150)
-        self.input_secret.setPlaceholderText("Secret Key")
-        layout_dash.addWidget(self.input_secret)
+        self.input_secret.setMinimumWidth(160)
+        self.input_secret.setPlaceholderText("Secret Key 입력")
+        self.input_secret.setToolTip("업비트 Open API에서 발급받은 Secret Key")
+        api_layout.addWidget(self.input_secret)
+        
+        connect_layout.addWidget(api_frame)
         
         # 접속 버튼
         self.btn_login = QPushButton("🔌 시스템 접속")
         self.btn_login.setObjectName("loginBtn")
-        self.btn_login.setMinimumSize(120, 40)
+        self.btn_login.setMinimumSize(140, 44)
+        self.btn_login.setToolTip("API 키를 사용하여 업비트에 연결합니다")
         self.btn_login.clicked.connect(self.login)
-        layout_dash.addWidget(self.btn_login)
+        connect_layout.addWidget(self.btn_login)
         
-        layout_dash.addSpacing(20)
+        connect_layout.addStretch(1)
         
-        # 잔고 표시
-        self.lbl_balance = QLabel("💰 주문가능금액: 0 원")
-        self.lbl_balance.setObjectName("depositLabel")
-        layout_dash.addWidget(self.lbl_balance)
+        # 연결 상태 표시
+        status_frame = QFrame()
+        status_layout = QHBoxLayout(status_frame)
+        status_layout.setContentsMargins(12, 6, 12, 6)
+        status_frame.setStyleSheet("""
+            QFrame {
+                background-color: rgba(255, 193, 7, 0.1);
+                border: 1px solid rgba(255, 193, 7, 0.3);
+                border-radius: 8px;
+            }
+        """)
         
-        # 실현손익 표시
-        self.lbl_total_profit = QLabel("📈 당일 실현손익: 0 원")
-        self.lbl_total_profit.setObjectName("profitLabel")
-        layout_dash.addWidget(self.lbl_total_profit)
-        
-        layout_dash.addStretch(1)
-        
-        # 연결 상태
         self.lbl_connection = QLabel("● 연결 대기")
-        self.lbl_connection.setStyleSheet("color: #ffc107; font-weight: bold;")
-        layout_dash.addWidget(self.lbl_connection)
+        self.lbl_connection.setStyleSheet("color: #ffc107; font-weight: bold; font-size: 13px;")
+        status_layout.addWidget(self.lbl_connection)
         
-        group_dash.setLayout(layout_dash)
+        connect_layout.addWidget(status_frame)
+        
+        main_layout.addLayout(connect_layout)
+        
+        # ===== 하단: 통계 카드 영역 =====
+        stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(16)
+        
+        # 잔고 카드
+        balance_card = self._create_stat_card(
+            "💰", "주문가능금액", "0 원", "#00b4d8", "depositCard"
+        )
+        self.lbl_balance = balance_card.findChild(QLabel, "valueLabel")
+        stats_layout.addWidget(balance_card)
+        
+        # 실현손익 카드
+        profit_card = self._create_stat_card(
+            "📈", "당일 실현손익", "0 원", "#f72585", "profitCard"
+        )
+        self.lbl_total_profit = profit_card.findChild(QLabel, "valueLabel")
+        stats_layout.addWidget(profit_card)
+        
+        # 거래 횟수 카드
+        trades_card = self._create_stat_card(
+            "🔄", "거래 횟수", "0 회", "#7209b7", "tradesCard"
+        )
+        self.lbl_trade_count = trades_card.findChild(QLabel, "valueLabel")
+        stats_layout.addWidget(trades_card)
+        
+        # 승률 카드
+        winrate_card = self._create_stat_card(
+            "🎯", "승률", "0.0 %", "#4cc9f0", "winrateCard"
+        )
+        self.lbl_winrate = winrate_card.findChild(QLabel, "valueLabel")
+        stats_layout.addWidget(winrate_card)
+        
+        main_layout.addLayout(stats_layout)
+        
+        group_dash.setLayout(main_layout)
         return group_dash
+    
+    def _create_stat_card(self, icon, title, value, color, object_name):
+        """통계 카드 위젯 생성"""
+        card = QFrame()
+        card.setObjectName(object_name)
+        card.setStyleSheet(f"""
+            QFrame#{object_name} {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(22, 33, 62, 0.95), stop:1 rgba(15, 25, 50, 0.95));
+                border: 1px solid rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.4);
+                border-radius: 14px;
+                padding: 4px;
+            }}
+            QFrame#{object_name}:hover {{
+                border: 1px solid rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.7);
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 rgba(30, 42, 74, 0.95), stop:1 rgba(20, 32, 58, 0.95));
+            }}
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setSpacing(6)
+        layout.setContentsMargins(16, 14, 16, 14)
+        
+        # 상단: 아이콘 + 타이틀
+        header_layout = QHBoxLayout()
+        
+        icon_label = QLabel(icon)
+        icon_label.setStyleSheet(f"font-size: 20px; color: {color};")
+        header_layout.addWidget(icon_label)
+        
+        title_label = QLabel(title)
+        title_label.setStyleSheet("color: #90e0ef; font-size: 12px; font-weight: bold;")
+        header_layout.addWidget(title_label)
+        
+        header_layout.addStretch(1)
+        layout.addLayout(header_layout)
+        
+        # 하단: 값
+        value_label = QLabel(value)
+        value_label.setObjectName("valueLabel")
+        value_label.setStyleSheet(f"""
+            color: {color};
+            font-size: 18px;
+            font-weight: bold;
+            padding-top: 4px;
+        """)
+        layout.addWidget(value_label)
+        
+        return card
 
     def create_tab_widget(self):
         """탭 위젯 생성"""
@@ -1127,6 +1489,12 @@ class UpbitProTrader(QMainWindow):
         tab_widget.addTab(self.create_advanced_tab(), "🔬 고급 설정")
         tab_widget.addTab(self.create_statistics_tab(), "📊 거래 통계")
         tab_widget.addTab(self.create_history_tab(), "📝 거래 내역")
+        # v3.0 신규 탭
+        tab_widget.addTab(self.create_telegram_tab(), "📱 텔레그램")
+        tab_widget.addTab(self.create_scheduler_tab(), "⏰ 스케줄러")
+        tab_widget.addTab(self.create_chart_tab(), "📈 수익 차트")
+        tab_widget.addTab(self.create_backtest_tab(), "🧪 백테스트")
+        tab_widget.addTab(self.create_paper_trading_tab(), "🎮 모의투자")
         return tab_widget
 
     def create_strategy_tab(self):
@@ -1507,6 +1875,746 @@ class UpbitProTrader(QMainWindow):
             self.log(f"💾 거래 기록 내보내기: {filename}")
         except Exception as e:
             QMessageBox.critical(self, "오류", f"내보내기 실패: {e}")
+
+    # ========================================================================
+    # v3.0 신규 탭들
+    # ========================================================================
+    def create_telegram_tab(self):
+        """텔레그램 알림 설정 탭"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 텔레그램 봇 설정
+        group_bot = QGroupBox("🤖 텔레그램 봇 설정")
+        bot_layout = QGridLayout()
+        
+        bot_layout.addWidget(QLabel("Bot Token:"), 0, 0)
+        self.input_telegram_token = QLineEdit()
+        self.input_telegram_token.setPlaceholderText("텔레그램 @BotFather에서 발급받은 토큰")
+        self.input_telegram_token.setEchoMode(QLineEdit.EchoMode.Password)
+        bot_layout.addWidget(self.input_telegram_token, 0, 1)
+        
+        bot_layout.addWidget(QLabel("Chat ID:"), 1, 0)
+        self.input_telegram_chat_id = QLineEdit()
+        self.input_telegram_chat_id.setPlaceholderText("알림을 받을 채팅 ID (@userinfobot으로 확인)")
+        bot_layout.addWidget(self.input_telegram_chat_id, 1, 1)
+        
+        group_bot.setLayout(bot_layout)
+        layout.addWidget(group_bot)
+        
+        # 알림 유형 설정
+        group_notify = QGroupBox("🔔 알림 설정")
+        notify_layout = QVBoxLayout()
+        
+        self.chk_telegram_buy = QCheckBox("매수 체결 알림")
+        self.chk_telegram_buy.setChecked(True)
+        notify_layout.addWidget(self.chk_telegram_buy)
+        
+        self.chk_telegram_sell = QCheckBox("매도 체결 알림")
+        self.chk_telegram_sell.setChecked(True)
+        notify_layout.addWidget(self.chk_telegram_sell)
+        
+        self.chk_telegram_loss = QCheckBox("손절 알림")
+        self.chk_telegram_loss.setChecked(True)
+        notify_layout.addWidget(self.chk_telegram_loss)
+        
+        self.chk_telegram_daily = QCheckBox("일일 리포트 (매일 자정)")
+        self.chk_telegram_daily.setChecked(True)
+        notify_layout.addWidget(self.chk_telegram_daily)
+        
+        self.chk_telegram_start_stop = QCheckBox("자동매매 시작/중지 알림")
+        self.chk_telegram_start_stop.setChecked(True)
+        notify_layout.addWidget(self.chk_telegram_start_stop)
+        
+        group_notify.setLayout(notify_layout)
+        layout.addWidget(group_notify)
+        
+        # 버튼 영역
+        btn_layout = QHBoxLayout()
+        
+        btn_save_telegram = QPushButton("💾 설정 저장")
+        btn_save_telegram.clicked.connect(self.save_telegram_settings)
+        btn_layout.addWidget(btn_save_telegram)
+        
+        btn_test_telegram = QPushButton("📤 테스트 메시지 발송")
+        btn_test_telegram.clicked.connect(self.send_telegram_test)
+        btn_layout.addWidget(btn_test_telegram)
+        
+        btn_layout.addStretch(1)
+        
+        self.lbl_telegram_status = QLabel("● 미연결")
+        self.lbl_telegram_status.setStyleSheet("color: #ffc107;")
+        btn_layout.addWidget(self.lbl_telegram_status)
+        
+        layout.addLayout(btn_layout)
+        layout.addStretch(1)
+        
+        return widget
+
+    def create_scheduler_tab(self):
+        """예약 매매 스케줄러 탭"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 스케줄러 활성화
+        self.chk_scheduler_enabled = QCheckBox("📅 예약 매매 스케줄러 활성화")
+        self.chk_scheduler_enabled.setStyleSheet("font-size: 15px; font-weight: bold;")
+        layout.addWidget(self.chk_scheduler_enabled)
+        
+        # 시간대 설정
+        group_time = QGroupBox("⏰ 매매 허용 시간대")
+        time_layout = QGridLayout()
+        
+        time_layout.addWidget(QLabel("시작 시간:"), 0, 0)
+        self.time_schedule_start = QTimeEdit()
+        self.time_schedule_start.setTime(QTime(9, 0))
+        self.time_schedule_start.setDisplayFormat("HH:mm")
+        time_layout.addWidget(self.time_schedule_start, 0, 1)
+        
+        time_layout.addWidget(QLabel("종료 시간:"), 0, 2)
+        self.time_schedule_end = QTimeEdit()
+        self.time_schedule_end.setTime(QTime(23, 0))
+        self.time_schedule_end.setDisplayFormat("HH:mm")
+        time_layout.addWidget(self.time_schedule_end, 0, 3)
+        
+        group_time.setLayout(time_layout)
+        layout.addWidget(group_time)
+        
+        # 요일 설정
+        group_days = QGroupBox("📆 매매 허용 요일")
+        days_layout = QHBoxLayout()
+        
+        self.chk_days = {}
+        day_names = ["월", "화", "수", "목", "금", "토", "일"]
+        for i, day in enumerate(day_names):
+            chk = QCheckBox(day)
+            chk.setChecked(i < 5)  # 평일만 기본 체크
+            self.chk_days[i] = chk
+            days_layout.addWidget(chk)
+        
+        group_days.setLayout(days_layout)
+        layout.addWidget(group_days)
+        
+        # 특별 설정
+        group_special = QGroupBox("⚡ 특별 설정")
+        special_layout = QVBoxLayout()
+        
+        self.chk_pause_on_volatility = QCheckBox("급격한 변동성 발생 시 자동 일시정지")
+        special_layout.addWidget(self.chk_pause_on_volatility)
+        
+        self.chk_daily_restart = QCheckBox("매일 자정에 자동 재시작")
+        special_layout.addWidget(self.chk_daily_restart)
+        
+        group_special.setLayout(special_layout)
+        layout.addWidget(group_special)
+        
+        # 저장 버튼
+        btn_save_schedule = QPushButton("💾 스케줄 저장")
+        btn_save_schedule.clicked.connect(self.save_scheduler_settings)
+        layout.addWidget(btn_save_schedule)
+        
+        layout.addStretch(1)
+        return widget
+
+    def create_chart_tab(self):
+        """수익 차트 탭"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(10)
+        layout.setContentsMargins(10, 10, 10, 10)
+        
+        if not MATPLOTLIB_AVAILABLE:
+            lbl_no_chart = QLabel("📊 차트 기능을 사용하려면 matplotlib 설치가 필요합니다.\n\npip install matplotlib")
+            lbl_no_chart.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl_no_chart.setStyleSheet("font-size: 14px; color: #ffc107;")
+            layout.addWidget(lbl_no_chart)
+            return widget
+        
+        # 차트 유형 선택
+        chart_type_layout = QHBoxLayout()
+        chart_type_layout.addWidget(QLabel("차트 유형:"))
+        
+        self.combo_chart_type = QComboBox()
+        self.combo_chart_type.addItems(["📈 누적 수익률", "🥧 종목별 손익", "📊 일별 손익"])
+        self.combo_chart_type.currentIndexChanged.connect(self.update_chart)
+        chart_type_layout.addWidget(self.combo_chart_type)
+        
+        btn_refresh_chart = QPushButton("🔄 새로고침")
+        btn_refresh_chart.clicked.connect(self.update_chart)
+        chart_type_layout.addWidget(btn_refresh_chart)
+        
+        chart_type_layout.addStretch(1)
+        layout.addLayout(chart_type_layout)
+        
+        # 차트 캔버스
+        self.chart_figure = Figure(figsize=(10, 6), dpi=100, facecolor='#1a1a2e')
+        self.chart_canvas = FigureCanvas(self.chart_figure)
+        self.chart_canvas.setStyleSheet("background-color: #1a1a2e;")
+        layout.addWidget(self.chart_canvas, 1)
+        
+        return widget
+
+    def create_backtest_tab(self):
+        """백테스트 탭"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        if not BACKTEST_MODULE_AVAILABLE:
+            lbl_no_bt = QLabel("🧪 백테스트 모듈 로드 실패. backtest_engine.py 파일을 확인해주세요.")
+            lbl_no_bt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl_no_bt.setStyleSheet("font-size: 14px; color: #e63946;")
+            layout.addWidget(lbl_no_bt)
+            return widget
+        
+        # 설정 영역
+        group_settings = QGroupBox("⚙️ 백테스트 설정")
+        settings_layout = QGridLayout()
+        
+        settings_layout.addWidget(QLabel("종목:"), 0, 0)
+        self.input_bt_ticker = QLineEdit("KRW-BTC")
+        settings_layout.addWidget(self.input_bt_ticker, 0, 1)
+        
+        settings_layout.addWidget(QLabel("시작일:"), 0, 2)
+        self.date_bt_start = QDateEdit()
+        self.date_bt_start.setCalendarPopup(True)
+        self.date_bt_start.setDate(QDate.currentDate().addMonths(-3))
+        settings_layout.addWidget(self.date_bt_start, 0, 3)
+        
+        settings_layout.addWidget(QLabel("종료일:"), 0, 4)
+        self.date_bt_end = QDateEdit()
+        self.date_bt_end.setCalendarPopup(True)
+        self.date_bt_end.setDate(QDate.currentDate())
+        settings_layout.addWidget(self.date_bt_end, 0, 5)
+        
+        settings_layout.addWidget(QLabel("초기 자금:"), 1, 0)
+        self.spin_bt_balance = QSpinBox()
+        self.spin_bt_balance.setRange(1000000, 1000000000)
+        self.spin_bt_balance.setValue(10000000)
+        self.spin_bt_balance.setSingleStep(1000000)
+        self.spin_bt_balance.setSuffix(" 원")
+        settings_layout.addWidget(self.spin_bt_balance, 1, 1)
+        
+        settings_layout.addWidget(QLabel("K값:"), 1, 2)
+        self.spin_bt_k = QDoubleSpinBox()
+        self.spin_bt_k.setRange(0.1, 1.0)
+        self.spin_bt_k.setValue(0.4)
+        self.spin_bt_k.setSingleStep(0.1)
+        settings_layout.addWidget(self.spin_bt_k, 1, 3)
+        
+        group_settings.setLayout(settings_layout)
+        layout.addWidget(group_settings)
+        
+        # 실행 버튼
+        btn_run_backtest = QPushButton("🚀 백테스트 실행")
+        btn_run_backtest.setMinimumHeight(40)
+        btn_run_backtest.setStyleSheet("font-size: 14px; font-weight: bold;")
+        btn_run_backtest.clicked.connect(self.run_backtest)
+        layout.addWidget(btn_run_backtest)
+        
+        # 결과 영역
+        group_result = QGroupBox("📊 백테스트 결과")
+        result_layout = QGridLayout()
+        
+        stat_style = "font-size: 13px; padding: 8px; background-color: #16213e; border-radius: 5px;"
+        
+        self.lbl_bt_trades = QLabel("총 거래: -")
+        self.lbl_bt_trades.setStyleSheet(stat_style)
+        result_layout.addWidget(self.lbl_bt_trades, 0, 0)
+        
+        self.lbl_bt_winrate = QLabel("승률: -")
+        self.lbl_bt_winrate.setStyleSheet(stat_style)
+        result_layout.addWidget(self.lbl_bt_winrate, 0, 1)
+        
+        self.lbl_bt_profit = QLabel("총 수익률: -")
+        self.lbl_bt_profit.setStyleSheet(stat_style)
+        result_layout.addWidget(self.lbl_bt_profit, 0, 2)
+        
+        self.lbl_bt_mdd = QLabel("MDD: -")
+        self.lbl_bt_mdd.setStyleSheet(stat_style)
+        result_layout.addWidget(self.lbl_bt_mdd, 1, 0)
+        
+        self.lbl_bt_pf = QLabel("Profit Factor: -")
+        self.lbl_bt_pf.setStyleSheet(stat_style)
+        result_layout.addWidget(self.lbl_bt_pf, 1, 1)
+        
+        self.lbl_bt_sharpe = QLabel("샤프비율: -")
+        self.lbl_bt_sharpe.setStyleSheet(stat_style)
+        result_layout.addWidget(self.lbl_bt_sharpe, 1, 2)
+        
+        group_result.setLayout(result_layout)
+        layout.addWidget(group_result)
+        
+        # 거래 내역 테이블
+        self.bt_table = QTableWidget()
+        bt_cols = ["진입시간", "청산시간", "진입가", "청산가", "수익률", "사유"]
+        self.bt_table.setColumnCount(len(bt_cols))
+        self.bt_table.setHorizontalHeaderLabels(bt_cols)
+        self.bt_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.bt_table.setMaximumHeight(200)
+        layout.addWidget(self.bt_table)
+        
+        return widget
+
+    def create_paper_trading_tab(self):
+        """페이퍼 트레이딩 (모의투자) 탭"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+        
+        # 모드 토글
+        mode_layout = QHBoxLayout()
+        
+        self.chk_paper_mode = QCheckBox("🎮 페이퍼 트레이딩 모드 (모의투자)")
+        self.chk_paper_mode.setStyleSheet("font-size: 15px; font-weight: bold;")
+        self.chk_paper_mode.stateChanged.connect(self.on_paper_mode_changed)
+        mode_layout.addWidget(self.chk_paper_mode)
+        
+        mode_layout.addStretch(1)
+        
+        self.lbl_paper_status = QLabel("● 실전 모드")
+        self.lbl_paper_status.setStyleSheet("color: #e63946; font-weight: bold;")
+        mode_layout.addWidget(self.lbl_paper_status)
+        
+        layout.addLayout(mode_layout)
+        
+        # 가상 자산
+        group_virtual = QGroupBox("💰 가상 자산 현황")
+        virtual_layout = QGridLayout()
+        
+        virtual_layout.addWidget(QLabel("초기 자금 설정:"), 0, 0)
+        self.spin_paper_balance = QSpinBox()
+        self.spin_paper_balance.setRange(1000000, 1000000000)
+        self.spin_paper_balance.setValue(10000000)
+        self.spin_paper_balance.setSingleStep(1000000)
+        self.spin_paper_balance.setSuffix(" 원")
+        virtual_layout.addWidget(self.spin_paper_balance, 0, 1)
+        
+        btn_reset_paper = QPushButton("🔄 자산 초기화")
+        btn_reset_paper.clicked.connect(self.reset_paper_trading)
+        virtual_layout.addWidget(btn_reset_paper, 0, 2)
+        
+        stat_style = "font-size: 14px; padding: 10px; background-color: #16213e; border-radius: 5px;"
+        
+        self.lbl_paper_balance = QLabel("💵 현재 원화: 10,000,000 원")
+        self.lbl_paper_balance.setStyleSheet(stat_style)
+        virtual_layout.addWidget(self.lbl_paper_balance, 1, 0)
+        
+        self.lbl_paper_holdings_value = QLabel("📦 보유 코인 평가: 0 원")
+        self.lbl_paper_holdings_value.setStyleSheet(stat_style)
+        virtual_layout.addWidget(self.lbl_paper_holdings_value, 1, 1)
+        
+        self.lbl_paper_total = QLabel("💰 총 평가자산: 10,000,000 원")
+        self.lbl_paper_total.setStyleSheet(stat_style)
+        virtual_layout.addWidget(self.lbl_paper_total, 1, 2)
+        
+        self.lbl_paper_profit = QLabel("📈 수익률: 0.00%")
+        self.lbl_paper_profit.setStyleSheet(stat_style + "color: #90e0ef;")
+        virtual_layout.addWidget(self.lbl_paper_profit, 2, 0, 1, 3)
+        
+        group_virtual.setLayout(virtual_layout)
+        layout.addWidget(group_virtual)
+        
+        # 가상 보유 내역
+        group_holdings = QGroupBox("📋 가상 보유 내역")
+        holdings_layout = QVBoxLayout()
+        
+        self.paper_table = QTableWidget()
+        paper_cols = ["종목", "수량", "평균단가", "현재가", "평가금액", "수익률"]
+        self.paper_table.setColumnCount(len(paper_cols))
+        self.paper_table.setHorizontalHeaderLabels(paper_cols)
+        self.paper_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        holdings_layout.addWidget(self.paper_table)
+        
+        group_holdings.setLayout(holdings_layout)
+        layout.addWidget(group_holdings, 1)
+        
+        return widget
+
+    # ========================================================================
+    # v3.0 신규 기능 메서드들
+    # ========================================================================
+    def save_telegram_settings(self):
+        """텔레그램 설정 저장"""
+        if TELEGRAM_MODULE_AVAILABLE:
+            notifier = get_telegram_notifier()
+            notifier.update_settings(
+                self.input_telegram_token.text().strip(),
+                self.input_telegram_chat_id.text().strip()
+            )
+            notifier.set_notifications(
+                self.chk_telegram_buy.isChecked(),
+                self.chk_telegram_sell.isChecked(),
+                self.chk_telegram_loss.isChecked(),
+                self.chk_telegram_daily.isChecked()
+            )
+            if notifier.enabled:
+                self.lbl_telegram_status.setText("● 연결됨")
+                self.lbl_telegram_status.setStyleSheet("color: #00b4d8;")
+                self.log("📱 텔레그램 설정이 저장되었습니다")
+            else:
+                self.lbl_telegram_status.setText("● 연결 실패")
+                self.lbl_telegram_status.setStyleSheet("color: #e63946;")
+        self.save_settings()
+    
+    def send_telegram_test(self):
+        """텔레그램 테스트 메시지 발송"""
+        if TELEGRAM_MODULE_AVAILABLE:
+            notifier = get_telegram_notifier()
+            if notifier.send_test_message():
+                QMessageBox.information(self, "성공", "테스트 메시지가 발송되었습니다!")
+            else:
+                QMessageBox.warning(self, "실패", "텔레그램 연결을 확인해주세요.")
+        else:
+            QMessageBox.warning(self, "경고", "텔레그램 모듈이 설치되지 않았습니다.\npip install python-telegram-bot")
+    
+    def save_scheduler_settings(self):
+        """스케줄러 설정 저장"""
+        self.log("⏰ 스케줄러 설정이 저장되었습니다")
+        self.save_settings()
+    
+    def is_trading_allowed_by_schedule(self):
+        """스케줄에 따른 매매 허용 여부 확인"""
+        if not hasattr(self, 'chk_scheduler_enabled') or not self.chk_scheduler_enabled.isChecked():
+            return True
+        
+        now = datetime.datetime.now()
+        weekday = now.weekday()
+        current_time = now.time()
+        
+        # 요일 체크
+        if weekday in self.chk_days and not self.chk_days[weekday].isChecked():
+            return False
+        
+        # 시간 체크
+        start_time = self.time_schedule_start.time().toPyTime()
+        end_time = self.time_schedule_end.time().toPyTime()
+        
+        if start_time <= end_time:
+            return start_time <= current_time <= end_time
+        else:
+            return current_time >= start_time or current_time <= end_time
+    
+    def update_chart(self):
+        """수익 차트 업데이트"""
+        if not MATPLOTLIB_AVAILABLE:
+            return
+        
+        self.chart_figure.clear()
+        ax = self.chart_figure.add_subplot(111)
+        ax.set_facecolor('#16213e')
+        
+        chart_type = self.combo_chart_type.currentIndex()
+        
+        if chart_type == 0:  # 누적 수익률
+            self._draw_cumulative_chart(ax)
+        elif chart_type == 1:  # 종목별 손익
+            self._draw_pie_chart(ax)
+        else:  # 일별 손익
+            self._draw_daily_chart(ax)
+        
+        self.chart_figure.tight_layout()
+        self.chart_canvas.draw()
+    
+    def _draw_cumulative_chart(self, ax):
+        """누적 수익률 차트"""
+        if not self.trade_history:
+            ax.text(0.5, 0.5, '거래 기록이 없습니다', ha='center', va='center',
+                   fontsize=14, color='#90e0ef', transform=ax.transAxes)
+            return
+        
+        profits = [0]
+        for trade in self.trade_history:
+            if trade.get('type') == 'SELL':
+                profits.append(profits[-1] + trade.get('profit', 0))
+        
+        ax.plot(range(len(profits)), profits, color='#00b4d8', linewidth=2)
+        ax.fill_between(range(len(profits)), profits, alpha=0.3, color='#00b4d8')
+        ax.set_xlabel('거래 횟수', color='#b8c5d6')
+        ax.set_ylabel('누적 수익 (원)', color='#b8c5d6')
+        ax.set_title('누적 수익 추이', color='#90e0ef', fontsize=14)
+        ax.tick_params(colors='#b8c5d6')
+        ax.grid(True, alpha=0.3, color='#3d5a80')
+    
+    def _draw_pie_chart(self, ax):
+        """종목별 손익 파이 차트"""
+        if not self.trade_history:
+            ax.text(0.5, 0.5, '거래 기록이 없습니다', ha='center', va='center',
+                   fontsize=14, color='#90e0ef', transform=ax.transAxes)
+            return
+        
+        coin_profits = {}
+        for trade in self.trade_history:
+            if trade.get('type') == 'SELL':
+                ticker = trade.get('ticker', 'Unknown')
+                coin = ticker.replace('KRW-', '')
+                coin_profits[coin] = coin_profits.get(coin, 0) + trade.get('profit', 0)
+        
+        if not coin_profits:
+            ax.text(0.5, 0.5, '매도 기록이 없습니다', ha='center', va='center',
+                   fontsize=14, color='#90e0ef', transform=ax.transAxes)
+            return
+        
+        labels = list(coin_profits.keys())
+        sizes = [abs(v) for v in coin_profits.values()]
+        colors = ['#00b4d8' if coin_profits[l] >= 0 else '#e63946' for l in labels]
+        
+        ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+        ax.set_title('종목별 손익 분포', color='#90e0ef', fontsize=14)
+    
+    def _draw_daily_chart(self, ax):
+        """일별 손익 막대 차트"""
+        if not self.trade_history:
+            ax.text(0.5, 0.5, '거래 기록이 없습니다', ha='center', va='center',
+                   fontsize=14, color='#90e0ef', transform=ax.transAxes)
+            return
+        
+        daily_profits = {}
+        for trade in self.trade_history:
+            if trade.get('type') == 'SELL':
+                date = trade.get('timestamp', '')[:10]
+                daily_profits[date] = daily_profits.get(date, 0) + trade.get('profit', 0)
+        
+        if not daily_profits:
+            ax.text(0.5, 0.5, '매도 기록이 없습니다', ha='center', va='center',
+                   fontsize=14, color='#90e0ef', transform=ax.transAxes)
+            return
+        
+        dates = list(daily_profits.keys())
+        profits = list(daily_profits.values())
+        colors = ['#00b4d8' if p >= 0 else '#e63946' for p in profits]
+        
+        ax.bar(range(len(dates)), profits, color=colors)
+        ax.set_xticks(range(len(dates)))
+        ax.set_xticklabels(dates, rotation=45, ha='right')
+        ax.set_xlabel('날짜', color='#b8c5d6')
+        ax.set_ylabel('손익 (원)', color='#b8c5d6')
+        ax.set_title('일별 손익', color='#90e0ef', fontsize=14)
+        ax.tick_params(colors='#b8c5d6')
+        ax.grid(True, alpha=0.3, color='#3d5a80', axis='y')
+    
+    def run_backtest(self):
+        """백테스트 실행"""
+        if not BACKTEST_MODULE_AVAILABLE:
+            QMessageBox.warning(self, "오류", "백테스트 모듈을 사용할 수 없습니다.")
+            return
+        
+        ticker = self.input_bt_ticker.text().strip().upper()
+        if not ticker.startswith("KRW-"):
+            ticker = "KRW-" + ticker
+        
+        start_date = self.date_bt_start.date().toString("yyyy-MM-dd")
+        end_date = self.date_bt_end.date().toString("yyyy-MM-dd")
+        initial_balance = self.spin_bt_balance.value()
+        k_value = self.spin_bt_k.value()
+        
+        self.log(f"🧪 백테스트 시작: {ticker} ({start_date} ~ {end_date})")
+        
+        engine = BacktestEngine(initial_balance)
+        engine.set_params({
+            'k_value': k_value,
+            'ts_start': self.spin_ts_start.value(),
+            'ts_stop': self.spin_ts_stop.value(),
+            'loss_cut': self.spin_loss.value(),
+            'betting_ratio': self.spin_betting.value()
+        })
+        
+        result = engine.run(ticker, start_date, end_date)
+        
+        if result:
+            self.lbl_bt_trades.setText(f"총 거래: {result.total_trades}회")
+            self.lbl_bt_winrate.setText(f"승률: {result.win_rate:.1f}%")
+            self.lbl_bt_profit.setText(f"총 수익률: {result.total_profit_rate:.2f}%")
+            self.lbl_bt_mdd.setText(f"MDD: {result.max_drawdown_rate:.2f}%")
+            self.lbl_bt_pf.setText(f"Profit Factor: {result.profit_factor:.2f}")
+            self.lbl_bt_sharpe.setText(f"샤프비율: {result.sharpe_ratio:.2f}")
+            
+            # 거래 내역 테이블 업데이트
+            self.bt_table.setRowCount(0)
+            for trade in result.trades[-20:]:  # 최근 20건만
+                row = self.bt_table.rowCount()
+                self.bt_table.insertRow(row)
+                self.bt_table.setItem(row, 0, QTableWidgetItem(str(trade.entry_time)[:16]))
+                self.bt_table.setItem(row, 1, QTableWidgetItem(str(trade.exit_time)[:16] if trade.exit_time else "-"))
+                self.bt_table.setItem(row, 2, QTableWidgetItem(f"{trade.entry_price:,.0f}"))
+                self.bt_table.setItem(row, 3, QTableWidgetItem(f"{trade.exit_price:,.0f}" if trade.exit_price else "-"))
+                
+                profit_item = QTableWidgetItem(f"{trade.profit_rate:.2f}%")
+                profit_item.setForeground(QColor("#00b4d8" if trade.profit_rate >= 0 else "#e63946"))
+                self.bt_table.setItem(row, 4, profit_item)
+                
+                self.bt_table.setItem(row, 5, QTableWidgetItem(trade.reason))
+            
+            self.log(f"✅ 백테스트 완료: 수익률 {result.total_profit_rate:.2f}%, 승률 {result.win_rate:.1f}%")
+        else:
+            QMessageBox.warning(self, "오류", "백테스트 실행에 실패했습니다.\n데이터가 충분한지 확인해주세요.")
+    
+    def on_paper_mode_changed(self, state):
+        """페이퍼 트레이딩 모드 변경"""
+        if state:
+            self.lbl_paper_status.setText("● 모의투자 모드")
+            self.lbl_paper_status.setStyleSheet("color: #00b4d8; font-weight: bold;")
+            self.log("🎮 페이퍼 트레이딩 모드가 활성화되었습니다")
+            # 모의투자 초기화
+            self.paper_balance = self.spin_paper_balance.value()
+            self.paper_holdings = {}
+        else:
+            self.lbl_paper_status.setText("● 실전 모드")
+            self.lbl_paper_status.setStyleSheet("color: #e63946; font-weight: bold;")
+            self.log("⚠️ 실전 모드로 전환되었습니다")
+    
+    def reset_paper_trading(self):
+        """페이퍼 트레이딩 초기화"""
+        self.paper_balance = self.spin_paper_balance.value()
+        self.paper_holdings = {}
+        self.paper_table.setRowCount(0)
+        
+        self.lbl_paper_balance.setText(f"💵 현재 원화: {self.paper_balance:,} 원")
+        self.lbl_paper_holdings_value.setText("📦 보유 코인 평가: 0 원")
+        self.lbl_paper_total.setText(f"💰 총 평가자산: {self.paper_balance:,} 원")
+        self.lbl_paper_profit.setText("📈 수익률: 0.00%")
+        
+        self.log("🔄 페이퍼 트레이딩이 초기화되었습니다")
+
+    def _paper_check_buy(self, ticker, curr, info):
+        """페이퍼 트레이딩 매수 조건 확인"""
+        # 목표가 돌파 확인
+        if curr < info['target']:
+            return
+        
+        # MA5 위 확인
+        if curr < info['ma5']:
+            return
+        
+        # 이미 보유 중인지 확인
+        if ticker in self.paper_holdings:
+            return
+        
+        # 가상 매수 실행
+        self._paper_execute_buy(ticker, curr)
+    
+    def _paper_execute_buy(self, ticker, price):
+        """페이퍼 트레이딩 가상 매수"""
+        if not hasattr(self, 'paper_balance'):
+            self.paper_balance = self.spin_paper_balance.value()
+            self.paper_holdings = {}
+        
+        # 투자 금액 계산
+        ratio = self.spin_betting.value() / 100
+        invest_amount = self.paper_balance * ratio
+        
+        if invest_amount < 5000:  # 최소 주문 금액
+            return
+        
+        # 가상 매수 처리
+        quantity = invest_amount / price
+        self.paper_balance -= invest_amount
+        
+        self.paper_holdings[ticker] = {
+            'quantity': quantity,
+            'buy_price': price,
+            'invest_amount': invest_amount,
+            'high_since_buy': price
+        }
+        
+        self.log(f"🎮 [모의] {ticker} 매수: {quantity:.8f} @ {price:,.0f}원")
+        self._update_paper_display()
+    
+    def _paper_check_sell(self, ticker, curr, info):
+        """페이퍼 트레이딩 매도 조건 확인"""
+        if ticker not in self.paper_holdings:
+            return
+        
+        holding = self.paper_holdings[ticker]
+        buy_price = holding['buy_price']
+        profit_rate = (curr - buy_price) / buy_price * 100
+        
+        # 고점 갱신
+        if curr > holding['high_since_buy']:
+            holding['high_since_buy'] = curr
+        
+        # 손절 확인
+        loss_limit = -self.spin_loss.value()
+        if profit_rate <= loss_limit:
+            self._paper_execute_sell(ticker, curr, "손절")
+            return
+        
+        # 트레일링 스톱 확인
+        ts_start = self.spin_ts_start.value()
+        ts_stop = self.spin_ts_stop.value()
+        max_profit = (holding['high_since_buy'] - buy_price) / buy_price * 100
+        
+        if max_profit >= ts_start:
+            drop = (holding['high_since_buy'] - curr) / holding['high_since_buy'] * 100
+            if drop >= ts_stop:
+                self._paper_execute_sell(ticker, curr, "TS")
+    
+    def _paper_execute_sell(self, ticker, price, reason):
+        """페이퍼 트레이딩 가상 매도"""
+        if ticker not in self.paper_holdings:
+            return
+        
+        holding = self.paper_holdings[ticker]
+        sell_amount = holding['quantity'] * price
+        profit = sell_amount - holding['invest_amount']
+        profit_rate = (price - holding['buy_price']) / holding['buy_price'] * 100
+        
+        self.paper_balance += sell_amount
+        del self.paper_holdings[ticker]
+        
+        self.log(f"🎮 [모의] {ticker} 매도 ({reason}): 손익 {profit:+,.0f}원 ({profit_rate:+.2f}%)")
+        self._update_paper_display()
+    
+    def _update_paper_display(self):
+        """페이퍼 트레이딩 UI 업데이트"""
+        if not hasattr(self, 'paper_balance'):
+            return
+        
+        # 보유 코인 평가액 계산
+        holdings_value = 0
+        for ticker, holding in self.paper_holdings.items():
+            if ticker in self.universe:
+                current_price = self.universe[ticker].get('current', holding['buy_price'])
+                holdings_value += holding['quantity'] * current_price
+        
+        total_value = self.paper_balance + holdings_value
+        initial = self.spin_paper_balance.value()
+        profit_rate = (total_value - initial) / initial * 100 if initial > 0 else 0
+        
+        # UI 업데이트
+        self.lbl_paper_balance.setText(f"💵 현재 원화: {self.paper_balance:,.0f} 원")
+        self.lbl_paper_holdings_value.setText(f"📦 보유 코인 평가: {holdings_value:,.0f} 원")
+        self.lbl_paper_total.setText(f"💰 총 평가자산: {total_value:,.0f} 원")
+        
+        color = "#00b4d8" if profit_rate >= 0 else "#e63946"
+        self.lbl_paper_profit.setText(f"📈 수익률: {profit_rate:+.2f}%")
+        self.lbl_paper_profit.setStyleSheet(f"font-size: 14px; padding: 10px; background-color: #16213e; border-radius: 5px; color: {color};")
+        
+        # 테이블 업데이트
+        self.paper_table.setRowCount(0)
+        for ticker, holding in self.paper_holdings.items():
+            row = self.paper_table.rowCount()
+            self.paper_table.insertRow(row)
+            
+            current_price = self.universe.get(ticker, {}).get('current', holding['buy_price'])
+            eval_amount = holding['quantity'] * current_price
+            pnl_rate = (current_price - holding['buy_price']) / holding['buy_price'] * 100
+            
+            self.paper_table.setItem(row, 0, QTableWidgetItem(ticker))
+            self.paper_table.setItem(row, 1, QTableWidgetItem(f"{holding['quantity']:.8f}"))
+            self.paper_table.setItem(row, 2, QTableWidgetItem(f"{holding['buy_price']:,.0f}"))
+            self.paper_table.setItem(row, 3, QTableWidgetItem(f"{current_price:,.0f}"))
+            self.paper_table.setItem(row, 4, QTableWidgetItem(f"{eval_amount:,.0f}"))
+            
+            pnl_item = QTableWidgetItem(f"{pnl_rate:+.2f}%")
+            pnl_item.setForeground(QColor("#00b4d8" if pnl_rate >= 0 else "#e63946"))
+            self.paper_table.setItem(row, 5, pnl_item)
 
     def create_splitter(self):
         """스플리터 생성"""
@@ -2316,6 +3424,15 @@ class UpbitProTrader(QMainWindow):
 
     def _check_buy_condition(self, ticker, curr, info):
         """매수 조건 확인"""
+        # v3.0: 스케줄러 체크
+        if not self.is_trading_allowed_by_schedule():
+            return
+        
+        # v3.0: 페이퍼 트레이딩 모드면 별도 처리
+        if hasattr(self, 'chk_paper_mode') and self.chk_paper_mode.isChecked():
+            self._paper_check_buy(ticker, curr, info)
+            return
+        
         # 1. 목표가 돌파
         if curr < info['target']:
             return
@@ -2462,6 +3579,10 @@ class UpbitProTrader(QMainWindow):
                     # v2.5: 거래 기록 추가
                     self.add_trade_record(ticker, 'BUY', avg_price, executed_volume, 0, '매수 체결')
                     
+                    # v3.0: 텔레그램 알림
+                    if TELEGRAM_MODULE_AVAILABLE:
+                        get_telegram_notifier().send_buy_alert(ticker, avg_price, total_price)
+                    
                     self.get_balance()
             else:
                 # 아직 체결 안됨, 다시 확인
@@ -2527,12 +3648,37 @@ class UpbitProTrader(QMainWindow):
                 # v2.5: 거래 기록 추가
                 self.add_trade_record(ticker, 'SELL', trades_price, executed_volume, profit, reason)
                 
+                # v3.0: 텔레그램 알림
+                if TELEGRAM_MODULE_AVAILABLE:
+                    profit_rate = (trades_price - info['buy_price']) / info['buy_price'] * 100 if info['buy_price'] > 0 else 0
+                    if reason == '손절':
+                        get_telegram_notifier().send_loss_cut_alert(ticker, trades_price, profit_rate)
+                    else:
+                        get_telegram_notifier().send_sell_alert(ticker, trades_price, profit_rate, reason)
+                
                 self._update_statistics()
                 self.get_balance()
             else:
                 QTimer.singleShot(2000, lambda: self.check_sell_execution(ticker, uuid, reason))
         except Exception as e:
             self.logger.error(f"매도 체결 확인 실패 ({ticker}): {e}")
+
+
+
+    def _update_statistics(self):
+        """통계 및 대시보드 업데이트"""
+        # 1. 거래 횟수
+        if hasattr(self, 'lbl_trade_count'):
+            self.lbl_trade_count.setText(f"{self.trade_count} 회")
+            
+        # 2. 승률
+        if hasattr(self, 'lbl_winrate'):
+            win_rate = (self.win_count / self.trade_count * 100) if self.trade_count > 0 else 0.0
+            self.lbl_winrate.setText(f"{win_rate:.1f} %")
+            
+        # 3. 실현 손익 (대시보드 카드)
+        if hasattr(self, 'lbl_total_profit'):
+            self.lbl_total_profit.setText(f"📈 당일 실현손익: {self.total_realized_profit:,.0f} 원")
 
     # ------------------------------------------------------------------
     # 일괄 매도/매수 기능 (v2.6 신규)
@@ -2892,11 +4038,58 @@ class UpbitProTrader(QMainWindow):
 # ============================================================================
 # 메인 실행
 # ============================================================================
+def exception_hook(exctype, value, tb):
+    """전역 예외 핸들러 - PyInstaller 패키징 시 크래시 방지"""
+    import traceback
+    error_msg = ''.join(traceback.format_exception(exctype, value, tb))
+    print(f"[CRITICAL ERROR]\n{error_msg}")
+    
+    # 로그 파일에도 기록
+    try:
+        log_path = Path("logs")
+        log_path.mkdir(exist_ok=True)
+        with open(log_path / "crash.log", "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*50}\n{datetime.datetime.now()}\n{error_msg}\n")
+    except:
+        pass
+    
+    # 메시지 박스 표시 (앱이 초기화된 경우)
+    try:
+        from PyQt6.QtWidgets import QMessageBox
+        QMessageBox.critical(None, "오류 발생", 
+            f"프로그램 오류가 발생했습니다:\n\n{value}\n\n자세한 내용은 logs/crash.log를 확인하세요.")
+    except:
+        pass
+    
+    sys.__excepthook__(exctype, value, tb)
+
 if __name__ == "__main__":
+    # 전역 예외 핸들러 설정
+    sys.excepthook = exception_hook
+    
+    # HiDPI 설정 (PyInstaller 패키징 시 필수)
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+    
+    # PyQt6 HiDPI 속성 설정 (QApplication 생성 전에 설정해야 함)
+    try:
+        from PyQt6.QtCore import Qt
+        from PyQt6.QtWidgets import QApplication
+        QApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
+    except Exception as e:
+        print(f"HiDPI 설정 경고: {e}")
+    
+    # 애플리케이션 생성
     app = QApplication(sys.argv)
     app.setStyle('Fusion')
     
-    trader = UpbitProTrader()
-    trader.show()
-    
-    sys.exit(app.exec())
+    try:
+        trader = UpbitProTrader()
+        trader.show()
+        sys.exit(app.exec())
+    except Exception as e:
+        exception_hook(type(e), e, e.__traceback__)
+        sys.exit(1)
+
