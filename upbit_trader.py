@@ -26,27 +26,59 @@ v2.5 기능:
 - API 호출 재시도 로직
 """
 
+# ============================================================================
+# 조기 오류 로깅 (패키징 디버깅용)
+# ============================================================================
 import sys
 import os
-import json
-import datetime
-import time
-import logging
-import threading
-import gc
 from pathlib import Path
-import winreg
+
+def _early_crash_log(msg):
+    """패키징된 exe 시작 시 크래시 로깅"""
+    try:
+        log_dir = Path(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else '.') / 'logs'
+        log_dir.mkdir(exist_ok=True)
+        with open(log_dir / 'startup_crash.log', 'a', encoding='utf-8') as f:
+            import datetime
+            f.write(f"[{datetime.datetime.now()}] {msg}\n")
+    except:
+        pass
+
+# 조기 로깅 시작
+_early_crash_log("=== 프로그램 시작 ===")
+
+try:
+    import json
+    import datetime
+    import time
+    import logging
+    import threading
+    import gc
+    import winreg
+    _early_crash_log("기본 모듈 로드 성공")
+except Exception as e:
+    _early_crash_log(f"기본 모듈 로드 실패: {e}")
+    input(f"기본 모듈 로드 실패: {e}\n아무 키나 누르세요...")
+    sys.exit(1)
 
 try:
     import pyupbit
     import pandas as pd
-except ImportError:
-    print("pyupbit 라이브러리가 필요합니다. 'pip install pyupbit' 명령으로 설치해주세요.")
+    _early_crash_log("pyupbit/pandas 로드 성공")
+except ImportError as e:
+    _early_crash_log(f"pyupbit/pandas 로드 실패: {e}")
+    input(f"pyupbit 라이브러리가 필요합니다: {e}\n아무 키나 누르세요...")
     sys.exit(1)
 
-from PyQt6.QtWidgets import *
-from PyQt6.QtCore import *
-from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QTextCursor
+try:
+    from PyQt6.QtWidgets import *
+    from PyQt6.QtCore import *
+    from PyQt6.QtGui import QColor, QFont, QAction, QIcon, QTextCursor
+    _early_crash_log("PyQt6 로드 성공")
+except Exception as e:
+    _early_crash_log(f"PyQt6 로드 실패: {e}")
+    input(f"PyQt6 로드 실패: {e}\n아무 키나 누르세요...")
+    sys.exit(1)
 
 # v3.0 신규 모듈
 try:

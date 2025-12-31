@@ -1,0 +1,21 @@
+# Upbit Pro Algo-Trader v3.0 Requirements
+# 설치: pip install -r requirements.txt
+
+# ============ 필수 라이브러리 ============
+PyQt6>=6.4.0
+pyupbit>=0.2.33
+pandas>=2.0.0
+numpy>=1.24.0
+
+# ============ 선택 라이브러리 (권장) ============
+# 텔레그램 알림
+python-telegram-bot>=20.0
+
+# API 키 암호화
+cryptography>=41.0.0
+
+# 차트 시각화
+matplotlib>=3.7.0
+
+# ============ 빌드 도구 ============
+pyinstaller>=5.13.0
