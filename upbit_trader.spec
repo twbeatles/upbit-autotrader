@@ -1,58 +1,40 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Upbit Pro Algo-Trader v3.0 PyInstaller Spec File
-빌드: pyinstaller upbit_trader.spec --clean
-결과: dist/UpbitTrader/UpbitTrader.exe
+Upbit Pro Algo-Trader v2.7 PyInstaller Spec File (Onefile 버전)
+빌드 명령: pyinstaller upbit_trader.spec --clean
+결과: dist/UpbitTrader.exe
+
+변경사항:
+- Onefile 빌드 설정 (단일 실행 파일)
+- Strip 비활성화 (Windows 빌드 오류 해결)
+- 확장 모듈 포함
 """
 
-from PyInstaller.utils.hooks import collect_submodules, collect_data_files
+from PyInstaller.utils.hooks import collect_submodules
+import sys
+import os
 
-# pandas 전체 서브모듈 수집
-pandas_imports = collect_submodules('pandas')
-numpy_imports = collect_submodules('numpy')
-
-# Hidden Imports
+# 필수 의존성
 hiddenimports = [
-    # pyupbit 및 의존성
-    'pyupbit',
-    'requests',
-    'urllib3',
-    'certifi',
-    'charset_normalizer',
-    'idna',
-    'websocket',
-    'websocket._abnf',
-    'websocket._core',
-    'websocket._exceptions',
-    'jwt',
-    
-    # PyQt6
-    'PyQt6',
-    'PyQt6.QtCore',
-    'PyQt6.QtWidgets',
-    'PyQt6.QtGui',
-    'PyQt6.sip',
-    
-    # v3.0 선택 모듈
-    'telegram',
-    'telegram.ext',
-    'cryptography',
-    'cryptography.fernet',
-    'matplotlib',
-    'matplotlib.backends.backend_qtagg',
-    'matplotlib.figure',
-    
-] + pandas_imports + numpy_imports
-
-# 데이터 파일
-datas = [
-    ('telegram_notifier.py', '.'),
-    ('crypto_utils.py', '.'),
-    ('backtest_engine.py', '.'),
-    ('strategies.py', '.'),
+    'pyupbit', 'requests', 'websocket', 'jwt',
+    'pandas', 'numpy', 
+    'PyQt6', 'PyQt6.QtCore', 'PyQt6.QtWidgets', 'PyQt6.QtGui', 'PyQt6.sip',
+    'csv', 'json', 'logging',
+    # v2.7: 빌드 오류 해결 (jaraco 모듈)
+    'jaraco', 'jaraco.text', 'jaraco.classes', 'jaraco.context', 'jaraco.functools',
+    'pkg_resources.extern'
 ]
 
 block_cipher = None
+
+# 확장 모듈 파일 (소스와 같은 위치에 있다고 가정)
+datas = [
+    ('upbit_analytics.py', '.'),
+    ('upbit_indicators.py', '.'),
+    ('upbit_backtester.py', '.'),
+    ('upbit_notifiers.py', '.'),
+    # 설정 파일은 없으면 프로그램이 생성함
+]
 
 a = Analysis(
     ['upbit_trader.py'],
@@ -64,23 +46,10 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # 확실히 불필요한 것만 제외
-        'tkinter', '_tkinter',
-        'unittest', 'pytest', '_pytest',
-        'IPython', 'jupyter', 'notebook',
-        'sphinx', 'docutils',
-        
-        # 불필요 PyQt6 모듈
-        'PyQt6.QtBluetooth', 'PyQt6.QtDBus',
-        'PyQt6.QtMultimedia', 'PyQt6.QtMultimediaWidgets',
-        'PyQt6.QtNfc', 'PyQt6.QtOpenGL',
-        'PyQt6.QtPositioning', 'PyQt6.QtQml',
-        'PyQt6.QtQuick', 'PyQt6.QtQuickWidgets',
-        'PyQt6.QtRemoteObjects', 'PyQt6.QtSensors',
-        'PyQt6.QtSerialPort', 'PyQt6.QtSql',
-        'PyQt6.QtWebChannel', 'PyQt6.QtWebEngine',
-        'PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets',
-        'PyQt6.QtWebSockets',
+        'tkinter', 'matplotlib', 'scipy', 'sklearn', 'PIL', 'cv2', 'notebook', 'jupyter',
+        'PyQt6.QtWebEngine', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets',
+        'PyQt6.QtQml', 'PyQt6.QtQuick', 'PyQt6.Qt3DCore', 'PyQt6.Qt3DRender',
+        'ipython', 'unittest', 'test', 'distutils', 'setuptools'
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -88,41 +57,33 @@ a = Analysis(
     noarchive=False,
 )
 
+# 다이어트: 불필요한 바이너리 제거
+a.binaries = [x for x in a.binaries if not any(name in x[0].lower() for name in [
+    'opengl32sw', 'd3dcompiler', 'libglesv2', 'qt6webengine', 'qt6quick', 'qt6qml'
+])]
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# Onefile 빌드는 EXE에 모든 것을 포함 (COLLECT 제거)
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
     name='UpbitTrader',
     debug=False,
     bootloader_ignore_signals=False,
-    strip=False,
-    upx=False,  # UPX 비활성화 (호환성)
-    console=True,  # 디버깅용
+    strip=False,          # 오류 해결: strip 비활성화
+    upx=True,             # UPX 압축 (가능한 경우)
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,        # GUI 프로그램이므로 콘솔 숨김
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=None,            # 아이콘 파일이 있다면 'icon.ico' 등 지정
 )
-
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    strip=False,
-    upx=False,
-    upx_exclude=[],
-    name='UpbitTrader',
-)
-
-# ============================================================
-# 빌드: pyinstaller upbit_trader.spec --clean
-# 결과: dist/UpbitTrader/UpbitTrader.exe
-#
-# 문제 해결 후 console=False 로 변경
-# ============================================================
