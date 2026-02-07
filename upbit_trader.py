@@ -1,19 +1,19 @@
 """
-Upbit Pro Algo-Trader v2.7
+Upbit Pro Algo-Trader v3.0
 업비트 OpenAPI 기반 자동매매 프로그램
 
 변동성 돌파 전략 + 이동평균 필터 + 트레일링 스톱
 24시간 코인 마켓 최적화
 
-v2.7 신규 기능:
+v3.0 신규 기능:
+- 코드 모듈화 (config, strategy, dialogs 분리)
+- 고급 리스크 관리 (재진입 쿨다운, 시간 청산, 동적 포지션)
+- 고급 알고리즘 (MTF, 갭 분석, 돌파 확인)
+- 긴급 전량 청산 기능
+
+v2.7 기능:
 - 일괄 매도/매수 기능 (2중 확인 다이얼로그)
 - 완료 후 자동매매 시작 옵션
-
-v2.5 기능:
-- 거래 히스토리 탭 및 거래 기록 관리
-- 스토캐스틱 RSI, DMI/ADX 지표 추가
-- 진입 점수 시스템 (가중치 기반 스코어링)
-- API 호출 재시도 로직
 """
 
 import sys
@@ -56,6 +56,21 @@ try:
     BACKTESTER_AVAILABLE = True
 except ImportError:
     BACKTESTER_AVAILABLE = False
+
+# v3.0: 분리된 모듈 import
+try:
+    from upbit_config import Config as ConfigV3
+    from upbit_strategy import UpbitStrategyManager
+    from upbit_dialogs import (
+        PresetManagerDialog as PresetManagerDialogV3,
+        HelpDialog as HelpDialogV3,
+        SettingsDialog as SettingsDialogV3,
+        EmergencyCloseDialog,
+        DARK_STYLESHEET as DARK_STYLESHEET_V3
+    )
+    V3_MODULES_AVAILABLE = True
+except ImportError:
+    V3_MODULES_AVAILABLE = False
 
 # ============================================================================
 # 설정 클래스
@@ -989,6 +1004,27 @@ class UpbitProTrader(QMainWindow):
             'sound_enabled': False
         }
         
+        # v3.0: 전략 매니저 초기화
+        if V3_MODULES_AVAILABLE:
+            self.strategy = UpbitStrategyManager(self)
+            self.logger_main = logging.getLogger('UpbitTrader')
+            self.logger_main.info("v3.0 전략 매니저 로드됨")
+        else:
+            self.strategy = None
+        
+        # v3.0: 고급 기능 설정 초기화
+        self.advanced_settings = {
+            'use_cooldown': False,
+            'cooldown_minutes': 30,
+            'use_time_exit': False,
+            'max_holding_hours': 24,
+            'use_dynamic_position': False,
+            'use_mtf': False,
+            'use_gap_analysis': False,
+            'use_breakout_confirm': False,
+            'breakout_confirm_ticks': 3,
+        }
+        
         # v2.5 신규: 거래 히스토리
         self.trade_history = []
         self.load_trade_history()
@@ -1018,7 +1054,7 @@ class UpbitProTrader(QMainWindow):
         # 처음 실행 확인
         self.check_first_run()
         
-        self.logger.info("프로그램 초기화 완료")
+        self.logger.info("프로그램 초기화 완료 (v3.0)")
 
     def setup_logging(self):
         """로깅 시스템 설정"""
@@ -1360,6 +1396,95 @@ class UpbitProTrader(QMainWindow):
         
         group_risk.setLayout(risk_layout)
         layout.addWidget(group_risk)
+        
+        # v3.0: 고급 리스크 관리
+        if V3_MODULES_AVAILABLE:
+            group_adv_risk = QGroupBox("🚀 고급 리스크 관리 (v3.0)")
+            adv_risk_layout = QGridLayout()
+            
+            # 재진입 쿨다운
+            self.chk_use_cooldown = QCheckBox("재진입 쿨다운 사용")
+            self.chk_use_cooldown.setToolTip("매도 후 일정 시간 동안 동일 코인 재매수 방지\n휩쏘에 휘둘리지 않도록 보호")
+            adv_risk_layout.addWidget(self.chk_use_cooldown, 0, 0)
+            
+            adv_risk_layout.addWidget(QLabel("쿨다운 시간:"), 0, 1)
+            self.spin_cooldown = QSpinBox()
+            self.spin_cooldown.setRange(5, 120)
+            self.spin_cooldown.setValue(30)
+            self.spin_cooldown.setSuffix(" 분")
+            adv_risk_layout.addWidget(self.spin_cooldown, 0, 2)
+            
+            # 시간 기반 청산
+            self.chk_use_time_exit = QCheckBox("시간 기반 청산")
+            self.chk_use_time_exit.setToolTip("일정 시간 경과 시 자동 청산")
+            adv_risk_layout.addWidget(self.chk_use_time_exit, 1, 0)
+            
+            adv_risk_layout.addWidget(QLabel("최대 보유:"), 1, 1)
+            self.spin_max_holding_hours = QSpinBox()
+            self.spin_max_holding_hours.setRange(1, 72)
+            self.spin_max_holding_hours.setValue(24)
+            self.spin_max_holding_hours.setSuffix(" 시간")
+            adv_risk_layout.addWidget(self.spin_max_holding_hours, 1, 2)
+            
+            # 동적 포지션 사이징
+            self.chk_use_dynamic_position = QCheckBox("동적 포지션 사이징 (Anti-Martingale)")
+            self.chk_use_dynamic_position.setToolTip("연속 이익 시 투자비중 확대, 연속 손실 시 축소")
+            adv_risk_layout.addWidget(self.chk_use_dynamic_position, 2, 0, 1, 3)
+            
+            group_adv_risk.setLayout(adv_risk_layout)
+            layout.addWidget(group_adv_risk)
+            
+            # v3.0: 고급 알고리즘
+            group_adv_algo = QGroupBox("🧠 고급 알고리즘 (v3.0)")
+            adv_algo_layout = QGridLayout()
+            
+            # MTF
+            self.chk_use_mtf = QCheckBox("다중 시간프레임(MTF) 분석")
+            self.chk_use_mtf.setToolTip("일봉과 단기봉 추세 일치 시에만 매수")
+            adv_algo_layout.addWidget(self.chk_use_mtf, 0, 0)
+            
+            # 갭 분석
+            self.chk_use_gap = QCheckBox("갭 분석 및 K값 자동 조정")
+            self.chk_use_gap.setToolTip("갭업 시 K값 축소(신중), 갭다운 시 K값 확대(적극)")
+            adv_algo_layout.addWidget(self.chk_use_gap, 0, 1)
+            
+            # 돌파 확인
+            self.chk_use_breakout_confirm = QCheckBox("돌파 확인 (N틱 유지)")
+            self.chk_use_breakout_confirm.setToolTip("목표가 돌파 후 일정 틱 동안 유지되어야 매수")
+            adv_algo_layout.addWidget(self.chk_use_breakout_confirm, 1, 0)
+            
+            adv_algo_layout.addWidget(QLabel("확인 틱수:"), 1, 1)
+            self.spin_breakout_ticks = QSpinBox()
+            self.spin_breakout_ticks.setRange(1, 10)
+            self.spin_breakout_ticks.setValue(3)
+            adv_algo_layout.addWidget(self.spin_breakout_ticks, 1, 2)
+            
+            group_adv_algo.setLayout(adv_algo_layout)
+            layout.addWidget(group_adv_algo)
+            
+            # 긴급 청산 버튼
+            group_emergency = QGroupBox("🚨 긴급 조치")
+            emergency_layout = QHBoxLayout()
+            
+            self.btn_emergency_close = QPushButton("🚨 전량 긴급 청산")
+            self.btn_emergency_close.setStyleSheet("""
+                QPushButton {
+                    background-color: #e63946;
+                    font-weight: bold;
+                    font-size: 14px;
+                    padding: 15px 30px;
+                }
+                QPushButton:hover {
+                    background-color: #d62839;
+                }
+            """)
+            self.btn_emergency_close.clicked.connect(self.show_emergency_dialog)
+            self.btn_emergency_close.setToolTip("모든 보유 코인을 시장가로 즉시 매도합니다")
+            emergency_layout.addWidget(self.btn_emergency_close)
+            emergency_layout.addStretch(1)
+            
+            group_emergency.setLayout(emergency_layout)
+            layout.addWidget(group_emergency)
         
         # 프리셋
         group_preset = QGroupBox("📋 전략 프리셋")
@@ -3162,6 +3287,65 @@ class UpbitProTrader(QMainWindow):
         self.history_table.setItem(row, 5, profit_item)
         
         self.history_table.setItem(row, 6, QTableWidgetItem(record.get('reason', '')))
+
+    # ------------------------------------------------------------------
+    # v3.0: 긴급 청산
+    # ------------------------------------------------------------------
+    def show_emergency_dialog(self):
+        """긴급 청산 다이얼로그 표시"""
+        if not V3_MODULES_AVAILABLE:
+            QMessageBox.warning(self, "경고", "v3.0 모듈을 사용할 수 없습니다.")
+            return
+        
+        holdings = self.get_all_holdings()
+        dialog = EmergencyCloseDialog(self, holdings)
+        
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self.execute_emergency_close()
+    
+    def get_all_holdings(self):
+        """현재 보유 중인 모든 코인 정보 반환"""
+        holdings = []
+        
+        for ticker, info in self.universe.items():
+            if info.get('state') == '보유중' and info.get('qty', 0) > 0:
+                buy_price = info.get('buy_price', 0)
+                current = info.get('current', 0)
+                
+                if buy_price > 0:
+                    pnl = (current - buy_price) / buy_price * 100
+                else:
+                    pnl = 0
+                
+                holdings.append({
+                    'ticker': ticker,
+                    'qty': info.get('qty', 0),
+                    'buy_price': buy_price,
+                    'current': current,
+                    'pnl': pnl
+                })
+        
+        return holdings
+    
+    def execute_emergency_close(self):
+        """긴급 전량 청산 실행"""
+        holdings = self.get_all_holdings()
+        
+        if not holdings:
+            self.log("⚠️ 청산할 보유 코인이 없습니다")
+            return
+        
+        self.log("🚨 긴급 전량 청산 시작")
+        
+        for h in holdings:
+            ticker = h['ticker']
+            try:
+                self.execute_sell(ticker, "긴급청산")
+                self.log(f"🚨 [{ticker}] 긴급 청산 완료")
+            except Exception as e:
+                self.log(f"[ERROR] {ticker} 긴급 청산 실패: {e}")
+        
+        self.log("🚨 긴급 전량 청산 종료")
 
     def closeEvent(self, event):
         """종료 처리"""

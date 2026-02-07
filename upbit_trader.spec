@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Upbit Pro Algo-Trader v2.7 PyInstaller Spec File (Final Fix)
+Upbit Pro Algo-Trader v3.0 PyInstaller Spec File
 빌드 명령: pyinstaller upbit_trader.spec --clean
 결과: dist/UpbitTrader.exe
 """
@@ -15,13 +15,19 @@ hiddenimports = [
     'PyQt6', 'PyQt6.QtCore', 'PyQt6.QtWidgets', 'PyQt6.QtGui', 'PyQt6.sip',
     'csv', 'json', 'logging',
     'pkg_resources.extern',
-    'jaraco', 'jaraco.text', 'jaraco.classes', 'jaraco.context', 'jaraco.functools', 'jaraco.collections'
+    'jaraco', 'jaraco.text', 'jaraco.classes', 'jaraco.context', 'jaraco.functools', 'jaraco.collections',
+    'platformdirs',
 ]
 
 block_cipher = None
 
-# 확장 모듈
+# v3.0: 모듈화된 파일들 + 확장 모듈
 datas = [
+    # v3.0 핵심 모듈
+    ('upbit_config.py', '.'),
+    ('upbit_strategy.py', '.'),
+    ('upbit_dialogs.py', '.'),
+    # v2.7 확장 모듈
     ('upbit_analytics.py', '.'),
     ('upbit_indicators.py', '.'),
     ('upbit_backtester.py', '.'),
@@ -41,7 +47,7 @@ a = Analysis(
         'tkinter', 'matplotlib', 'scipy', 'sklearn', 'PIL', 'cv2', 'notebook', 'jupyter',
         'PyQt6.QtWebEngine', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets',
         'PyQt6.QtQml', 'PyQt6.QtQuick', 'PyQt6.Qt3DCore', 'PyQt6.Qt3DRender',
-        'ipython', 'unittest', 'test', 'distutils', 'setuptools'
+        'ipython', 'unittest', 'test',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -49,7 +55,7 @@ a = Analysis(
     noarchive=False,
 )
 
-# 다이어트
+# 다이어트: 불필요한 바이너리 제거
 a.binaries = [x for x in a.binaries if not any(name in x[0].lower() for name in [
     'opengl32sw', 'd3dcompiler', 'libglesv2', 'qt6webengine', 'qt6quick', 'qt6qml'
 ])]
