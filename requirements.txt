@@ -1,0 +1,25 @@
+# Upbit Pro Algo-Trader v2.7 Dependencies
+
+# Core Trading & Data
+pyupbit>=0.2.30
+pandas>=2.0.0
+numpy>=1.24.0
+
+# GUI
+PyQt6>=6.4.0
+
+# Network & Security
+requests>=2.31.0
+websocket-client>=1.6.0
+PyJWT>=2.8.0
+
+# Build & Distribution
+pyinstaller>=6.0.0
+setuptools>=68.0.0
+
+# Error Resolution (Implicit Dependencies)
+# jaraco.text and others are often part of setuptools or standalone
+jaraco.text
+jaraco.classes
+jaraco.context
+jaraco.functools
