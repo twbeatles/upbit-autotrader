@@ -16,35 +16,106 @@ class UpbitOrderService:
     def has_pending(self, ticker: str) -> bool:
         return ticker in self.pending_orders
 
-    def mark_pending(self, ticker: str, side: str, uuid: str) -> None:
+    def mark_pending(
+        self,
+        ticker: str,
+        side: str,
+        uuid: str,
+        session_id: int = 0,
+        source: str = "",
+        reserved_krw: float = 0.0,
+        retry_count: int = 0,
+    ) -> None:
+        now = datetime.datetime.now()
         self.pending_orders[ticker] = {
             "side": side,
             "uuid": uuid,
-            "requested_at": datetime.datetime.now(),
+            "requested_at": now,
+            "session_id": int(session_id or 0),
+            "source": source or "",
+            "reserved_krw": float(reserved_krw or 0.0),
+            "last_checked_at": now,
+            "retry_count": int(retry_count or 0),
         }
 
     def clear_pending(self, ticker: str) -> None:
         self.pending_orders.pop(ticker, None)
 
-    def place_buy_market(self, upbit, ticker: str, krw_amount: float) -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    def clear_pending_if_uuid(self, ticker: str, uuid: str) -> bool:
+        pending = self.pending_orders.get(ticker)
+        if not pending:
+            return False
+        if str(pending.get("uuid")) != str(uuid):
+            return False
+        self.pending_orders.pop(ticker, None)
+        return True
+
+    def update_pending(self, ticker: str, **fields: Any) -> Optional[Dict[str, Any]]:
+        pending = self.pending_orders.get(ticker)
+        if not pending:
+            return None
+        pending.update(fields)
+        return pending
+
+    def list_pending(self) -> Dict[str, Dict[str, Any]]:
+        return dict(self.pending_orders)
+
+    def get_pending_by_uuid(self, uuid: str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        for ticker, pending in self.pending_orders.items():
+            if str(pending.get("uuid")) == str(uuid):
+                return ticker, pending
+        return None, None
+
+    def place_buy_market(
+        self,
+        upbit,
+        ticker: str,
+        krw_amount: float,
+        pending_meta: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         pending = self.get_pending(ticker)
         if pending:
             return False, None, f"이미 {pending['side']} 주문이 대기 중입니다."
 
         result = upbit.buy_market_order(ticker, krw_amount)
         if result and "uuid" in result:
-            self.mark_pending(ticker, "BUY", result["uuid"])
+            meta = pending_meta or {}
+            self.mark_pending(
+                ticker,
+                "BUY",
+                result["uuid"],
+                session_id=meta.get("session_id", 0),
+                source=meta.get("source", ""),
+                reserved_krw=meta.get("reserved_krw", 0.0),
+                retry_count=meta.get("retry_count", 0),
+            )
             return True, result, ""
         return False, result, "매수 주문 응답이 비정상입니다."
 
-    def place_sell_market(self, upbit, ticker: str, qty: float, side: str = "SELL") -> Tuple[bool, Optional[Dict[str, Any]], str]:
+    def place_sell_market(
+        self,
+        upbit,
+        ticker: str,
+        qty: float,
+        side: str = "SELL",
+        pending_meta: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[bool, Optional[Dict[str, Any]], str]:
         pending = self.get_pending(ticker)
         if pending:
             return False, None, f"이미 {pending['side']} 주문이 대기 중입니다."
 
         result = upbit.sell_market_order(ticker, qty)
         if result and "uuid" in result:
-            self.mark_pending(ticker, side, result["uuid"])
+            meta = pending_meta or {}
+            self.mark_pending(
+                ticker,
+                side,
+                result["uuid"],
+                session_id=meta.get("session_id", 0),
+                source=meta.get("source", ""),
+                reserved_krw=meta.get("reserved_krw", 0.0),
+                retry_count=meta.get("retry_count", 0),
+            )
             return True, result, ""
         return False, result, "매도 주문 응답이 비정상입니다."
 

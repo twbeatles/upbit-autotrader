@@ -150,8 +150,24 @@ class TraderSettingsController:
 
     def send_notification(self, title, message):
         """트레이 알림 표시"""
-        if self.system_settings.get('show_tray_notifications', True):
-            self.tray_icon.showMessage(title, message, QSystemTrayIcon.MessageIcon.Information, 3000)
+        if not self.system_settings.get('show_tray_notifications', True):
+            return
+
+        tray_icon = getattr(self, "tray_icon", None)
+        if tray_icon is None or not hasattr(tray_icon, "showMessage"):
+            return
+
+        try:
+            message_icon = None
+            if hasattr(tray_icon, "MessageIcon") and hasattr(tray_icon.MessageIcon, "Information"):
+                message_icon = tray_icon.MessageIcon.Information
+            if message_icon is None:
+                tray_icon.showMessage(title, message)
+            else:
+                tray_icon.showMessage(title, message, message_icon, 3000)
+        except Exception as e:
+            if hasattr(self, "logger"):
+                self.logger.warning(f"트레이 알림 실패: {e}")
 
     def check_first_run(self):
         """처음 실행 시 가이드 표시"""

@@ -182,6 +182,9 @@ class Config:
         "day": 30,
     }
     HISTORY_FLUSH_DEBOUNCE_MS = 1000
+    PENDING_RECONCILE_INTERVAL_MS = 10000
+    PENDING_STALE_TIMEOUT_SEC = 90
+    ORDER_STATUS_RETRY_DELAYS_SEC = (0.3, 0.6, 1.2)
     
     # ========================================================================
     # 기본 프리셋 정의

@@ -101,7 +101,9 @@ class TraderTradingController:
         self.table.setRowCount(0)
         self.is_running = True
         self.daily_loss_triggered = False
-        self.pending_orders.clear()
+        self._ensure_order_stability_state()
+        self._next_trading_session()
+        self._reconcile_pending_orders(force=False)
         self._ensure_indicator_cache_state()
         self._indicator_cache.clear()
         
@@ -189,6 +191,7 @@ class TraderTradingController:
         self.is_running = False
         self.price_thread.stop()
         self.price_thread.wait(2000)
+        self._reconcile_pending_orders(force=True)
         
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
@@ -404,6 +407,117 @@ class TraderTradingController:
             self._indicator_cache = {}
         if not hasattr(self, '_indicator_cache_ttl_sec'):
             self._indicator_cache_ttl_sec = dict(getattr(Config, 'INDICATOR_CACHE_TTL_BY_INTERVAL', {}))
+    def _ensure_order_stability_state(self):
+        if not hasattr(self, "_reserved_krw_by_ticker"):
+            self._reserved_krw_by_ticker = {}
+        if not hasattr(self, "_active_session_id"):
+            self._active_session_id = 0
+        if not hasattr(self, "_order_error_log_ts"):
+            self._order_error_log_ts = {}
+    def _next_trading_session(self):
+        self._ensure_order_stability_state()
+        self._active_session_id += 1
+        return self._active_session_id
+    def _get_reserved_krw_total(self):
+        self._ensure_order_stability_state()
+        return sum(max(0.0, float(v or 0.0)) for v in self._reserved_krw_by_ticker.values())
+    def _get_available_krw(self):
+        balance = float(getattr(self, "balance", 0) or 0)
+        return max(0.0, balance - self._get_reserved_krw_total())
+    def _reserve_krw_for_buy(self, ticker, amount, session_id=0):
+        self._ensure_order_stability_state()
+        amount = float(amount or 0.0)
+        if amount <= 0:
+            return False
+        existing = float(self._reserved_krw_by_ticker.get(ticker, 0.0) or 0.0)
+        available = self._get_available_krw() + existing
+        if amount > (available + 1e-8):
+            return False
+        self._reserved_krw_by_ticker[ticker] = amount
+        return True
+    def _release_reserved_krw(self, ticker):
+        self._ensure_order_stability_state()
+        return float(self._reserved_krw_by_ticker.pop(ticker, 0.0) or 0.0)
+    def _sync_reserved_with_pending(self):
+        self._ensure_order_stability_state()
+        if not hasattr(self, "order_service"):
+            self._reserved_krw_by_ticker.clear()
+            return
+        if hasattr(self.order_service, "list_pending"):
+            pending_tickers = set(self.order_service.list_pending().keys())
+        else:
+            pending_tickers = set(getattr(self, "pending_orders", {}).keys())
+        for ticker in list(self._reserved_krw_by_ticker.keys()):
+            if ticker not in pending_tickers:
+                self._reserved_krw_by_ticker.pop(ticker, None)
+    def _safe_log_order_error(self, uuid, message):
+        self._ensure_order_stability_state()
+        now_ts = time.time()
+        key = str(uuid)
+        last_ts = float(self._order_error_log_ts.get(key, 0.0) or 0.0)
+        if (now_ts - last_ts) < 5.0:
+            return
+        self._order_error_log_ts[key] = now_ts
+        if hasattr(self, "logger"):
+            self.logger.warning(message)
+    def _safe_get_order(self, uuid):
+        if not getattr(self, "upbit", None) or not uuid:
+            return None
+        delays = tuple(getattr(Config, "ORDER_STATUS_RETRY_DELAYS_SEC", (0.3, 0.6, 1.2)))
+        if not delays:
+            delays = (0.0,)
+        last_error = None
+        for idx, delay in enumerate(delays):
+            try:
+                return self.upbit.get_order(uuid)
+            except Exception as e:
+                last_error = e
+                self._safe_log_order_error(uuid, f"주문 상태 조회 실패 ({uuid}): {e}")
+                if idx < len(delays) - 1 and delay > 0:
+                    time.sleep(delay)
+        if last_error is not None and hasattr(self, "logger"):
+            self.logger.error(f"주문 상태 조회 최종 실패 ({uuid}): {last_error}")
+        return None
+    def _reconcile_pending_orders(self, force=False):
+        self._ensure_order_stability_state()
+        if not getattr(self, "upbit", None) or not hasattr(self, "order_service"):
+            return
+        now = datetime.datetime.now()
+        stale_timeout = float(getattr(Config, "PENDING_STALE_TIMEOUT_SEC", 90))
+        if hasattr(self.order_service, "list_pending"):
+            pending_items = self.order_service.list_pending().items()
+        else:
+            pending_items = getattr(self, "pending_orders", {}).items()
+        for ticker, pending in list(pending_items):
+            uuid = pending.get("uuid")
+            requested_at = pending.get("requested_at")
+            if not isinstance(requested_at, datetime.datetime):
+                requested_at = now
+            order = self._safe_get_order(uuid)
+            age_sec = max(0.0, (now - requested_at).total_seconds())
+            if not order:
+                if force and age_sec >= stale_timeout:
+                    if self.order_service.clear_pending_if_uuid(ticker, uuid):
+                        self._release_reserved_krw(ticker)
+                        if hasattr(self, "log"):
+                            self.log(f"⚠️ [{ticker}] 대기 주문 로컬 정리(시간초과)")
+                continue
+            state = str(order.get("state", "")).lower()
+            prev_retry = int(pending.get("retry_count", 0) or 0)
+            self.order_service.update_pending(
+                ticker,
+                last_checked_at=now,
+                retry_count=prev_retry + 1,
+            )
+            if state in ("done", "cancel"):
+                if self.order_service.clear_pending_if_uuid(ticker, uuid):
+                    self._release_reserved_krw(ticker)
+            elif force and age_sec >= stale_timeout:
+                if self.order_service.clear_pending_if_uuid(ticker, uuid):
+                    self._release_reserved_krw(ticker)
+                    if hasattr(self, "log"):
+                        self.log(f"⚠️ [{ticker}] 장기 대기 주문 로컬 정리")
+        self._sync_reserved_with_pending()
     def _get_indicator_cache_ttl(self, interval):
         self._ensure_indicator_cache_state()
         return float(self._indicator_cache_ttl_sec.get(interval, 5))
@@ -794,6 +908,7 @@ class TraderTradingController:
         if not self.upbit:
             return
 
+        self._ensure_order_stability_state()
         if self.order_service.has_pending(ticker):
             pending = self.order_service.get_pending(ticker)
             self.log(f"[{ticker}] 중복 주문 방지: {pending['side']} 주문 대기 중")
@@ -803,118 +918,193 @@ class TraderTradingController:
             ratio = self.strategy.calculate_dynamic_position_size(ticker) / 100
         else:
             ratio = self.spin_betting.value() / 100
-        bet_cash = self.balance * ratio
+        available_krw = self._get_available_krw()
+        bet_cash = available_krw * ratio
         
         if bet_cash < 5000:  # 업비트 최소 주문금액
             self.log(f"[{ticker}] 매수금액 부족 (최소 5,000원)")
             return
+        session_id = getattr(self, "_active_session_id", 0)
+        if not self._reserve_krw_for_buy(ticker, bet_cash, session_id=session_id):
+            self.log(f"[{ticker}] 사용 가능 잔고 부족 (가용: {self._get_available_krw():,.0f}원)")
+            return
         
         try:
             # 시장가 매수
-            ok, result, err_msg = self.order_service.place_buy_market(self.upbit, ticker, bet_cash)
+            ok, result, err_msg = self.order_service.place_buy_market(
+                self.upbit,
+                ticker,
+                bet_cash,
+                pending_meta={
+                    "session_id": session_id,
+                    "source": "auto_buy",
+                    "reserved_krw": bet_cash,
+                },
+            )
             
             if ok and result and 'uuid' in result:
-                info = self.universe[ticker]
-                info['state'] = '주문중'
-                self.set_table_item(info['row'], 4, "⏳ 주문중", "#ffc107")
+                info = self.universe.get(ticker)
+                if info:
+                    info['state'] = '주문중'
+                    self.set_table_item(info['row'], 4, "⏳ 주문중", "#ffc107")
                 
                 self.log(f"📤 [{ticker}] 매수 주문: {bet_cash:,.0f}원")
                 self.logger.info(f"매수 주문: {ticker} {bet_cash:,.0f}원")
                 
                 # 체결 확인
-                QTimer.singleShot(2000, lambda: self.check_buy_execution(ticker, result['uuid']))
+                QTimer.singleShot(
+                    2000,
+                    lambda t=ticker, u=result['uuid'], s=session_id: self.check_buy_execution(
+                        t, u, retry_count=0, session_id=s
+                    ),
+                )
             else:
+                self._release_reserved_krw(ticker)
                 self.log(f"[ERROR] 매수 주문 실패: {err_msg} / {result}")
                 
         except Exception as e:
             self.order_service.clear_pending(ticker)
+            self._release_reserved_krw(ticker)
             self.log(f"[ERROR] 매수 주문 실패: {e}")
             self.logger.error(f"매수 주문 실패 ({ticker}): {e}")
 
-    def check_buy_execution(self, ticker, uuid, retry_count=0):
+    def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
         """매수 체결 확인 (최대 30회 재시도, 60초 타임아웃)"""
         MAX_RETRIES = 30  # 최대 30회 (60초)
-        
+        if hasattr(self, "_ensure_order_stability_state"):
+            self._ensure_order_stability_state()
+        pending = self.order_service.get_pending(ticker)
+        if not pending:
+            return
+        if pending and str(pending.get("uuid")) != str(uuid):
+            return
+        clear_pending_if_uuid = getattr(self.order_service, "clear_pending_if_uuid", None)
+        release_reserved = getattr(self, "_release_reserved_krw", None)
+
         try:
-            order = self.upbit.get_order(uuid)
-            if order and order.get('state') == 'done':
-                info = self.universe[ticker]
+            if hasattr(self, "_safe_get_order"):
+                order = self._safe_get_order(uuid)
+            else:
+                order = self.upbit.get_order(uuid)
+            state = str(order.get("state", "")).lower() if order else "wait"
+            if pending and hasattr(self.order_service, "update_pending"):
+                self.order_service.update_pending(
+                    ticker,
+                    last_checked_at=datetime.datetime.now(),
+                    retry_count=int(pending.get("retry_count", 0) or 0) + 1,
+                )
+
+            if session_id is not None and session_id != getattr(self, "_active_session_id", 0):
+                if state in ("done", "cancel"):
+                    if callable(clear_pending_if_uuid):
+                        cleared = self.order_service.clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                        cleared = True
+                    if cleared and callable(release_reserved):
+                        release_reserved(ticker)
+                return
+
+            if state == 'done':
+                info = self.universe.get(ticker)
 
                 # 체결 정보
                 executed_volume, total_price, avg_price = self.order_service.get_buy_fill_metrics(order)
 
                 if executed_volume > 0 and total_price > 0:
-                    
-                    info['qty'] = executed_volume
-                    info['buy_price'] = avg_price
-                    info['invest_amt'] = total_price
-                    info['high_since_buy'] = avg_price
-                    info['max_profit_rate'] = 0.0
-                    info['partial_sold'] = []
-                    info['state'] = '보유중'
+                    if info:
+                        info['qty'] = executed_volume
+                        info['buy_price'] = avg_price
+                        info['invest_amt'] = total_price
+                        info['high_since_buy'] = avg_price
+                        info['max_profit_rate'] = 0.0
+                        info['partial_sold'] = []
+                        info['state'] = '보유중'
 
-                    if self.strategy:
-                        self.strategy.set_holding_start(ticker)
-                        self.strategy.clear_recent_prices(ticker)
-                        self.strategy.clear_partial_profit(ticker)
-                    
-                    row = info['row']
-                    qty_item = info.get('ui_items', {}).get('qty')
-                    if qty_item is None:
-                        qty_item = QTableWidgetItem("-")
-                        self.table.setItem(row, 5, qty_item)
-                        info.setdefault('ui_items', {})['qty'] = qty_item
-                    qty_item.setText(f"{executed_volume:.8f}")
+                        if self.strategy:
+                            self.strategy.set_holding_start(ticker)
+                            self.strategy.clear_recent_prices(ticker)
+                            self.strategy.clear_partial_profit(ticker)
 
-                    buy_price_item = info.get('ui_items', {}).get('buy_price')
-                    if buy_price_item is None:
-                        buy_price_item = QTableWidgetItem("-")
-                        self.table.setItem(row, 6, buy_price_item)
-                        info.setdefault('ui_items', {})['buy_price'] = buy_price_item
-                    buy_price_item.setText(f"{avg_price:,.0f}")
+                        row = info['row']
+                        qty_item = info.get('ui_items', {}).get('qty')
+                        if qty_item is None:
+                            qty_item = QTableWidgetItem("-")
+                            self.table.setItem(row, 5, qty_item)
+                            info.setdefault('ui_items', {})['qty'] = qty_item
+                        qty_item.setText(f"{executed_volume:.8f}")
 
-                    invest_item = info.get('ui_items', {}).get('invest')
-                    if invest_item is None:
-                        invest_item = QTableWidgetItem("-")
-                        self.table.setItem(row, 9, invest_item)
-                        info.setdefault('ui_items', {})['invest'] = invest_item
-                    invest_item.setText(f"{total_price:,.0f}")
-                    self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
-                    
+                        buy_price_item = info.get('ui_items', {}).get('buy_price')
+                        if buy_price_item is None:
+                            buy_price_item = QTableWidgetItem("-")
+                            self.table.setItem(row, 6, buy_price_item)
+                            info.setdefault('ui_items', {})['buy_price'] = buy_price_item
+                        buy_price_item.setText(f"{avg_price:,.0f}")
+
+                        invest_item = info.get('ui_items', {}).get('invest')
+                        if invest_item is None:
+                            invest_item = QTableWidgetItem("-")
+                            self.table.setItem(row, 9, invest_item)
+                            info.setdefault('ui_items', {})['invest'] = invest_item
+                        invest_item.setText(f"{total_price:,.0f}")
+                        self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
+
                     self.log(f"✅ [{ticker}] 매수 체결: {executed_volume:.8f} @ {avg_price:,.0f}원")
-                    
-                    # v2.7: 거래 기록 추가
                     self.add_trade_record(ticker, 'BUY', avg_price, executed_volume, 0, '매수 체결')
-                    
                     self.get_balance()
                 else:
-                    info['state'] = '감시중'
-                    self.set_table_item(info['row'], 4, "👀 감시중", "#00b894")
+                    if info:
+                        info['state'] = '감시중'
+                        self.set_table_item(info['row'], 4, "👀 감시중", "#00b894")
                     self.log(f"⚠️ [{ticker}] 매수 체결 정보가 유효하지 않습니다(수량/금액 0). 상태를 감시중으로 복원합니다.")
-                self.order_service.clear_pending(ticker)
-            elif order and order.get('state') == 'cancel':
+                if callable(clear_pending_if_uuid):
+                    clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+                if callable(release_reserved):
+                    release_reserved(ticker)
+            elif state == 'cancel':
                 # 주문 취소됨
                 info = self.universe.get(ticker)
                 if info:
                     info['state'] = '감시중'
                     self.set_table_item(info['row'], 4, "👀 감시중", "#00b894")
                 self.log(f"⚠️ [{ticker}] 매수 주문 취소됨")
-                self.order_service.clear_pending(ticker)
+                if callable(clear_pending_if_uuid):
+                    clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+                if callable(release_reserved):
+                    release_reserved(ticker)
             else:
                 # 아직 체결 안됨, 재시도 횟수 확인
                 if retry_count < MAX_RETRIES:
-                    QTimer.singleShot(2000, lambda: self.check_buy_execution(ticker, uuid, retry_count + 1))
+                    QTimer.singleShot(
+                        2000,
+                        lambda t=ticker, u=uuid, rc=retry_count + 1, s=session_id: self.check_buy_execution(
+                            t, u, rc, s
+                        ),
+                    )
                 else:
-                    # 타임아웃 - 상태 복원
                     self.log(f"[ERROR] [{ticker}] 매수 체결 확인 타임아웃 (60초)")
                     self.logger.error(f"매수 체결 확인 타임아웃: {ticker}, uuid={uuid}")
                     info = self.universe.get(ticker)
                     if info:
                         info['state'] = '체결확인실패'
                         self.set_table_item(info['row'], 4, "❓ 확인필요", "#ffc107")
-                    self.order_service.clear_pending(ticker)
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                    if callable(release_reserved):
+                        release_reserved(ticker)
         except Exception as e:
-            self.order_service.clear_pending(ticker)
+            if callable(clear_pending_if_uuid):
+                clear_pending_if_uuid(ticker, uuid)
+            else:
+                self.order_service.clear_pending(ticker)
+            if callable(release_reserved):
+                release_reserved(ticker)
             self.logger.error(f"체결 확인 실패 ({ticker}): {e}")
 
     def execute_sell(self, ticker, reason):
@@ -922,6 +1112,7 @@ class TraderTradingController:
         if not self.upbit:
             return
 
+        self._ensure_order_stability_state()
         if self.order_service.has_pending(ticker):
             pending = self.order_service.get_pending(ticker)
             self.log(f"[{ticker}] 중복 주문 방지: {pending['side']} 주문 대기 중")
@@ -935,10 +1126,18 @@ class TraderTradingController:
         qty = info['qty']
         if qty == 0:
             return
+        session_id = getattr(self, "_active_session_id", 0)
         
         try:
             ok, result, err_msg = self.order_service.place_sell_market(
-                self.upbit, ticker, qty, side="SELL"
+                self.upbit,
+                ticker,
+                qty,
+                side="SELL",
+                pending_meta={
+                    "session_id": session_id,
+                    "source": "auto_sell",
+                },
             )
             
             if ok and result and 'uuid' in result:
@@ -947,7 +1146,12 @@ class TraderTradingController:
                 self.log(f"📤 [{ticker}] 매도 주문: {qty:.8f} ({reason})")
                 self.logger.info(f"매도 주문: {ticker} {qty:.8f} ({reason})")
                 
-                QTimer.singleShot(2000, lambda: self.check_sell_execution(ticker, result['uuid'], reason))
+                QTimer.singleShot(
+                    2000,
+                    lambda t=ticker, u=result['uuid'], r=reason, s=session_id: self.check_sell_execution(
+                        t, u, r, retry_count=0, session_id=s
+                    ),
+                )
             else:
                 self.log(f"[ERROR] 매도 주문 실패: {err_msg} / {result}")
                 
@@ -970,9 +1174,17 @@ class TraderTradingController:
             self.log(f"[{ticker}] 중복 주문 방지: {pending['side']} 주문 대기 중")
             return False
 
+        session_id = getattr(self, "_active_session_id", 0)
         try:
             ok, result, err_msg = self.order_service.place_sell_market(
-                self.upbit, ticker, qty, side="PARTIAL_SELL"
+                self.upbit,
+                ticker,
+                qty,
+                side="PARTIAL_SELL",
+                pending_meta={
+                    "session_id": session_id,
+                    "source": "partial_sell",
+                },
             )
             
             if ok and result and 'uuid' in result:
@@ -980,9 +1192,12 @@ class TraderTradingController:
                 self.logger.info(f"분할 매도: {ticker} {qty:.8f} ({reason})")
                 
                 # 체결 확인 (분할 매도용)
-                QTimer.singleShot(2000, lambda: self._check_partial_sell_execution(
-                    ticker, result['uuid'], qty, reason, level
-                ))
+                QTimer.singleShot(
+                    2000,
+                    lambda t=ticker, u=result['uuid'], q=qty, r=reason, lv=level, s=session_id: self._check_partial_sell_execution(
+                        t, u, q, r, lv, retry_count=0, session_id=s
+                    ),
+                )
                 return True
             else:
                 self.log(f"[ERROR] 분할 매도 실패: {err_msg} / {result}")
@@ -994,22 +1209,54 @@ class TraderTradingController:
             self.logger.error(f"분할 매도 실패 ({ticker}): {e}")
             return False
 
-    def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, retry_count=0):
+    def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, retry_count=0, session_id=None):
         """분할 매도 체결 확인"""
         MAX_RETRIES = 30
-        
+        pending = self.order_service.get_pending(ticker)
+        if not pending:
+            return
+        if pending and str(pending.get("uuid")) != str(uuid):
+            return
+        clear_pending_if_uuid = getattr(self.order_service, "clear_pending_if_uuid", None)
+
         try:
-            order = self.upbit.get_order(uuid)
-            if order and order.get('state') == 'done':
+            if hasattr(self, "_safe_get_order"):
+                order = self._safe_get_order(uuid)
+            else:
+                order = self.upbit.get_order(uuid)
+            state = str(order.get("state", "")).lower() if order else "wait"
+            if pending and hasattr(self.order_service, "update_pending"):
+                self.order_service.update_pending(
+                    ticker,
+                    last_checked_at=datetime.datetime.now(),
+                    retry_count=int(pending.get("retry_count", 0) or 0) + 1,
+                )
+
+            if session_id is not None and session_id != getattr(self, "_active_session_id", 0):
+                if state in ("done", "cancel"):
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                return
+
+            if state == 'done':
                 info = self.universe.get(ticker)
                 if not info:
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
                     return
 
                 executed_volume, _, trades_price = self.order_service.get_sell_fill_metrics(order)
 
                 if executed_volume <= 0 or trades_price <= 0:
                     self.log(f"⚠️ [{ticker}] 분할 매도 체결 정보가 유효하지 않습니다.")
-                    self.order_service.clear_pending(ticker)
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
                     return
                 
                 # 보유 수량 감소
@@ -1043,30 +1290,76 @@ class TraderTradingController:
                 self._update_statistics()
                 
                 self.get_balance()
-                self.order_service.clear_pending(ticker)
-            elif order and order.get('state') == 'cancel':
-                self.order_service.clear_pending(ticker)
+                if callable(clear_pending_if_uuid):
+                    clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+            elif state == 'cancel':
+                if callable(clear_pending_if_uuid):
+                    clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
                 self.log(f"⚠️ [{ticker}] 분할 매도 주문 취소됨")
             else:
                 if retry_count < MAX_RETRIES:
-                    QTimer.singleShot(2000, lambda: self._check_partial_sell_execution(
-                        ticker, uuid, qty, reason, level, retry_count + 1
-                    ))
+                    QTimer.singleShot(
+                        2000,
+                        lambda t=ticker, u=uuid, q=qty, r=reason, lv=level, rc=retry_count + 1, s=session_id: self._check_partial_sell_execution(
+                            t, u, q, r, lv, rc, s
+                        ),
+                    )
                 else:
                     self.log(f"[ERROR] [{ticker}] 분할 매도 체결 확인 타임아웃")
-                    self.order_service.clear_pending(ticker)
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
         except Exception as e:
-            self.order_service.clear_pending(ticker)
+            if callable(clear_pending_if_uuid):
+                clear_pending_if_uuid(ticker, uuid)
+            else:
+                self.order_service.clear_pending(ticker)
             self.logger.error(f"분할 매도 체결 확인 실패 ({ticker}): {e}")
 
-    def check_sell_execution(self, ticker, uuid, reason, retry_count=0):
+    def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=None):
         """매도 체결 확인 (최대 30회 재시도, 60초 타임아웃)"""
         MAX_RETRIES = 30  # 최대 30회 (60초)
-        
+        pending = self.order_service.get_pending(ticker)
+        if not pending:
+            return
+        if pending and str(pending.get("uuid")) != str(uuid):
+            return
+        clear_pending_if_uuid = getattr(self.order_service, "clear_pending_if_uuid", None)
+
         try:
-            order = self.upbit.get_order(uuid)
-            if order and order.get('state') == 'done':
-                info = self.universe[ticker]
+            if hasattr(self, "_safe_get_order"):
+                order = self._safe_get_order(uuid)
+            else:
+                order = self.upbit.get_order(uuid)
+            state = str(order.get("state", "")).lower() if order else "wait"
+            if pending and hasattr(self.order_service, "update_pending"):
+                self.order_service.update_pending(
+                    ticker,
+                    last_checked_at=datetime.datetime.now(),
+                    retry_count=int(pending.get("retry_count", 0) or 0) + 1,
+                )
+
+            if session_id is not None and session_id != getattr(self, "_active_session_id", 0):
+                if state in ("done", "cancel"):
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                return
+
+            if state == 'done':
+                info = self.universe.get(ticker)
+                if not info:
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                    return
 
                 executed_volume, sell_amount, trades_price = self.order_service.get_sell_fill_metrics(order)
 
@@ -1074,7 +1367,10 @@ class TraderTradingController:
                     info['state'] = '보유중'
                     self.set_table_item(info['row'], 4, "💼 보유중", "#00b4d8")
                     self.log(f"⚠️ [{ticker}] 매도 체결 정보가 유효하지 않습니다.")
-                    self.order_service.clear_pending(ticker)
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
                     return
                 
                 # 손익 계산
@@ -1104,36 +1400,48 @@ class TraderTradingController:
                         self.strategy.set_cooldown(ticker, cooldown_minutes)
                 
                 self.log(f"✅ [{ticker}] 매도 체결 (손익: {profit:+,.0f}원)")
-                
-                # v2.7: 거래 기록 추가
                 self.add_trade_record(ticker, 'SELL', trades_price, executed_volume, profit, reason)
                 
                 self._update_statistics()
                 self.get_balance()
-                self.order_service.clear_pending(ticker)
-            elif order and order.get('state') == 'cancel':
-                # 주문 취소됨
+                if callable(clear_pending_if_uuid):
+                    clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+            elif state == 'cancel':
                 self.log(f"⚠️ [{ticker}] 매도 주문 취소됨")
                 info = self.universe.get(ticker)
                 if info and info['qty'] > 0:
                     info['state'] = '보유중'
                     self.set_table_item(info['row'], 4, "💼 보유중", "#00b4d8")
-                self.order_service.clear_pending(ticker)
-            else:
-                # 아직 체결 안됨, 재시도 횟수 확인
-                if retry_count < MAX_RETRIES:
-                    QTimer.singleShot(2000, lambda: self.check_sell_execution(ticker, uuid, reason, retry_count + 1))
+                if callable(clear_pending_if_uuid):
+                    clear_pending_if_uuid(ticker, uuid)
                 else:
-                    # 타임아웃 - 로그만 기록 (실제 주문은 여전히 대기 중일 수 있음)
+                    self.order_service.clear_pending(ticker)
+            else:
+                if retry_count < MAX_RETRIES:
+                    QTimer.singleShot(
+                        2000,
+                        lambda t=ticker, u=uuid, r=reason, rc=retry_count + 1, s=session_id: self.check_sell_execution(
+                            t, u, r, rc, s
+                        ),
+                    )
+                else:
                     self.log(f"[ERROR] [{ticker}] 매도 체결 확인 타임아웃 (60초)")
                     self.logger.error(f"매도 체결 확인 타임아웃: {ticker}, uuid={uuid}")
                     info = self.universe.get(ticker)
                     if info:
                         info['state'] = '체결확인실패'
                         self.set_table_item(info['row'], 4, "❓ 확인필요", "#ffc107")
-                    self.order_service.clear_pending(ticker)
+                    if callable(clear_pending_if_uuid):
+                        clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
         except Exception as e:
-            self.order_service.clear_pending(ticker)
+            if callable(clear_pending_if_uuid):
+                clear_pending_if_uuid(ticker, uuid)
+            else:
+                self.order_service.clear_pending(ticker)
             self.logger.error(f"매도 체결 확인 실패 ({ticker}): {e}")
 
     # ------------------------------------------------------------------

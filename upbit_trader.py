@@ -59,6 +59,9 @@ class UpbitProTrader(
         self.daily_loss_triggered = False
         self.order_service = UpbitOrderService()
         self.pending_orders = self.order_service.pending_orders
+        self._active_session_id = 0
+        self._reserved_krw_by_ticker = {}
+        self._order_error_log_ts = {}
         
         # 시스템 설정 초기화
         self.system_settings = {
@@ -162,6 +165,9 @@ class UpbitProTrader(
         self.timer_monitor = QTimer(self)
         self.timer_monitor.start(1000)
         self.timer_monitor.timeout.connect(self.on_timer_tick)
+        self.timer_pending_reconcile = QTimer(self)
+        self.timer_pending_reconcile.start(Config.PENDING_RECONCILE_INTERVAL_MS)
+        self.timer_pending_reconcile.timeout.connect(lambda: self._reconcile_pending_orders(force=False))
 
     def on_timer_tick(self):
         """1초마다 실행"""
@@ -216,6 +222,8 @@ class UpbitProTrader(
         if hasattr(self, '_flush_trade_history'):
             self._flush_trade_history()
         self.save_trade_history()
+        if hasattr(self, "_reconcile_pending_orders"):
+            self._reconcile_pending_orders(force=True)
         
         self.price_thread.stop()
         self.price_thread.wait(2000)

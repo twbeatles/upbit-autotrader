@@ -1,4 +1,6 @@
-﻿from PyQt6.QtCore import QTimer
+﻿import datetime
+
+from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox, QInputDialog
 
 from upbit_holdings_service import get_account_holdings as get_account_holdings_v2
@@ -30,6 +32,9 @@ class TraderBatchController:
         if not self.upbit:
             QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
             return
+        if hasattr(self, "_ensure_order_stability_state"):
+            self._ensure_order_stability_state()
+        session_id = getattr(self, "_active_session_id", 0)
         
         # 보유 코인 조회
         holdings = self.get_account_holdings()
@@ -54,7 +59,6 @@ class TraderBatchController:
             return
         
         # 2차 확인 - 코인 개수 입력
-        from PyQt6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getText(self, "🔐 2차 확인", 
             f"매도할 코인 개수 '{len(holdings)}'를 입력하세요:")
         
@@ -93,7 +97,14 @@ class TraderBatchController:
 
                     # Universe 외부 종목은 서비스 경유 + 외부 체결확인 루틴 사용
                     ok, result, err_msg = self.order_service.place_sell_market(
-                        self.upbit, ticker, qty, side="SELL"
+                        self.upbit,
+                        ticker,
+                        qty,
+                        side="SELL",
+                        pending_meta={
+                            "session_id": session_id,
+                            "source": "batch_sell",
+                        },
                     )
                     if ok and result and 'uuid' in result:
                         self.log(f"  ✅ [{ticker}] 매도 주문 접수: {qty:.8f}")
@@ -101,7 +112,7 @@ class TraderBatchController:
                         QTimer.singleShot(
                             2000,
                             lambda t=ticker, u=result['uuid']: self._check_external_sell_execution(
-                                t, u, reason="일괄매도", context_label="일괄 매도"
+                                t, u, reason="일괄매도", context_label="일괄 매도", retry_count=0
                             ),
                         )
                     else:
@@ -128,6 +139,9 @@ class TraderBatchController:
         if not self.upbit:
             QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
             return
+        if hasattr(self, "_ensure_order_stability_state"):
+            self._ensure_order_stability_state()
+        session_id = getattr(self, "_active_session_id", 0)
         
         # 코인 목록 파싱
         coins_text = self.input_coins.text().replace(" ", "")
@@ -139,20 +153,21 @@ class TraderBatchController:
         
         # 잔고 확인
         self.get_balance()
-        if self.balance < 5000 * len(coins):
+        available_krw = self._get_available_krw() if hasattr(self, "_get_available_krw") else float(self.balance)
+        if available_krw < 5000 * len(coins):
             QMessageBox.warning(self, "경고", 
-                f"잔고가 부족합니다.\n필요 최소 금액: {5000 * len(coins):,}원\n현재 잔고: {self.balance:,.0f}원")
+                f"잔고가 부족합니다.\n필요 최소 금액: {5000 * len(coins):,}원\n현재 가용 잔고: {available_krw:,.0f}원")
             return
         
         # 투자금 계산 (균등 분배)
-        invest_per_coin = self.balance / len(coins)
+        invest_per_coin = available_krw / len(coins)
         
         # 1차 확인
         coins_text_display = "\n".join([f"  • {c}: {invest_per_coin:,.0f}원" for c in coins])
         reply = QMessageBox.warning(self, "⚠️ 일괄 매수 확인",
             f"정말로 아래 코인들을 매수하시겠습니까?\n\n"
             f"【매수 계획】\n{coins_text_display}\n\n"
-            f"💰 총 투자금: {self.balance:,.0f}원\n"
+            f"💰 총 투자금(가용): {available_krw:,.0f}원\n"
             f"📊 종목당 투자금: {invest_per_coin:,.0f}원\n\n"
             f"⚠️ 이 작업은 취소할 수 없습니다!",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
@@ -162,7 +177,6 @@ class TraderBatchController:
             return
         
         # 2차 확인 - 코인 개수 입력
-        from PyQt6.QtWidgets import QInputDialog
         text, ok = QInputDialog.getText(self, "🔐 2차 확인",
             f"매수할 코인 개수 '{len(coins)}'를 입력하세요:")
         
@@ -179,10 +193,12 @@ class TraderBatchController:
         if table is not None:
             table.setUpdatesEnabled(False)
         try:
-            for coin in coins:
+            for idx, coin in enumerate(coins):
                 try:
-                    # 실제 매수 금액 (수수료 고려해서 약간 줄임)
-                    buy_amount = invest_per_coin * 0.9995
+                    # 남은 종목 수 기준으로 가용 잔고를 재분배해 과주문을 방지
+                    remaining = max(1, len(coins) - idx)
+                    available_now = self._get_available_krw() if hasattr(self, "_get_available_krw") else float(self.balance)
+                    buy_amount = (available_now / remaining) * 0.9995
                     if buy_amount < 5000:
                         self.log(f"  ⚠️ [{coin}] 최소 주문금액 미달")
                         continue
@@ -192,7 +208,21 @@ class TraderBatchController:
                         self.log(f"  ⚠️ [{coin}] 기존 {pending['side']} 주문 대기 중으로 건너뜀")
                         continue
 
-                    ok, result, err_msg = self.order_service.place_buy_market(self.upbit, coin, buy_amount)
+                    if hasattr(self, "_reserve_krw_for_buy"):
+                        if not self._reserve_krw_for_buy(coin, buy_amount, session_id=session_id):
+                            self.log(f"  ⚠️ [{coin}] 가용 잔고 부족으로 건너뜀")
+                            continue
+
+                    ok, result, err_msg = self.order_service.place_buy_market(
+                        self.upbit,
+                        coin,
+                        buy_amount,
+                        pending_meta={
+                            "session_id": session_id,
+                            "source": "batch_buy",
+                            "reserved_krw": buy_amount,
+                        },
+                    )
                     if ok and result and 'uuid' in result:
                         self.log(f"  ✅ [{coin}] 매수 주문 접수: {buy_amount:,.0f}원")
                         bought_count += 1
@@ -202,17 +232,26 @@ class TraderBatchController:
                             info = self.universe[coin]
                             info['state'] = '주문중'
                             self.set_table_item(info['row'], 4, "⏳ 주문중", "#ffc107")
-                            QTimer.singleShot(2000, lambda t=coin, u=result['uuid']: self.check_buy_execution(t, u))
+                            QTimer.singleShot(
+                                2000,
+                                lambda t=coin, u=result['uuid']: self.check_buy_execution(
+                                    t, u, retry_count=0
+                                ),
+                            )
                         else:
                             QTimer.singleShot(
                                 2000,
                                 lambda t=coin, u=result['uuid']: self._check_external_buy_execution(
-                                    t, u, reason="일괄매수"
+                                    t, u, reason="일괄매수", retry_count=0
                                 ),
                             )
                     else:
+                        if hasattr(self, "_release_reserved_krw"):
+                            self._release_reserved_krw(coin)
                         self.log(f"  ❌ [{coin}] 매수 실패: {err_msg} / {result}")
                 except Exception as e:
+                    if hasattr(self, "_release_reserved_krw"):
+                        self._release_reserved_krw(coin)
                     self.log(f"  ❌ [{coin}] 매수 오류: {e}")
         finally:
             if table is not None:
@@ -253,6 +292,9 @@ class TraderBatchController:
         if not self.upbit:
             self.log("⚠️ API 미연결 상태입니다")
             return
+        if hasattr(self, "_ensure_order_stability_state"):
+            self._ensure_order_stability_state()
+        session_id = getattr(self, "_active_session_id", 0)
 
         holdings = self.get_account_holdings()
         
@@ -277,7 +319,14 @@ class TraderBatchController:
                         continue
 
                     ok, result, err_msg = self.order_service.place_sell_market(
-                        self.upbit, ticker, qty, side="SELL"
+                        self.upbit,
+                        ticker,
+                        qty,
+                        side="SELL",
+                        pending_meta={
+                            "session_id": session_id,
+                            "source": "emergency_close",
+                        },
                     )
                     if ok and result and 'uuid' in result:
                         sold_count += 1
@@ -288,13 +337,18 @@ class TraderBatchController:
                             info = self.universe[ticker]
                             info['state'] = '매도주문중'
                             self.set_table_item(info['row'], 4, "⏳ 매도주문중", "#ffc107")
-                            QTimer.singleShot(2000, lambda t=ticker, u=result['uuid']: self.check_sell_execution(t, u, "긴급청산"))
+                            QTimer.singleShot(
+                                2000,
+                                lambda t=ticker, u=result['uuid']: self.check_sell_execution(
+                                    t, u, "긴급청산", retry_count=0
+                                ),
+                            )
                         else:
                             # Universe 밖 코인은 주문 확인을 최소 로깅/정리 용도로만 수행
                             QTimer.singleShot(
                                 2000,
                                 lambda t=ticker, u=result['uuid']: self._check_external_sell_execution(
-                                    t, u, reason="긴급청산", context_label="긴급 청산"
+                                    t, u, reason="긴급청산", context_label="긴급 청산", retry_count=0
                                 ),
                             )
                     else:
@@ -308,12 +362,37 @@ class TraderBatchController:
 
         self.log(f"🚨 긴급 전량 청산 주문 완료: {sold_count}/{len(holdings)}")
 
-    def _check_external_buy_execution(self, ticker, uuid, reason="외부매수", retry_count=0):
+    def _check_external_buy_execution(self, ticker, uuid, reason="외부매수", retry_count=0, session_id=None):
         """Universe 외부 코인 매수 체결 확인용"""
         MAX_RETRIES = 30
+        pending = self.order_service.get_pending(ticker)
+        if not pending:
+            return
+        if pending and str(pending.get("uuid")) != str(uuid):
+            return
         try:
-            order = self.upbit.get_order(uuid)
-            if order and order.get('state') == 'done':
+            order = self._safe_get_order(uuid) if hasattr(self, "_safe_get_order") else self.upbit.get_order(uuid)
+            state = str(order.get("state", "")).lower() if order else "wait"
+            if pending:
+                now = datetime.datetime.now()
+                if hasattr(self.order_service, "update_pending"):
+                    self.order_service.update_pending(
+                        ticker,
+                        last_checked_at=now,
+                        retry_count=int(pending.get("retry_count", 0) or 0) + 1,
+                    )
+
+            if session_id is not None and session_id != getattr(self, "_active_session_id", 0):
+                if state in ("done", "cancel"):
+                    if hasattr(self.order_service, "clear_pending_if_uuid"):
+                        self.order_service.clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                    if hasattr(self, "_release_reserved_krw"):
+                        self._release_reserved_krw(ticker)
+                return
+
+            if state == 'done':
                 executed_volume, total_cost, avg_price = self.order_service.get_buy_fill_metrics(order)
                 if executed_volume > 0 and total_cost > 0:
                     self.log(f"✅ [{ticker}] {reason} 체결 완료: {executed_volume:.8f} @ {avg_price:,.0f}원")
@@ -321,29 +400,74 @@ class TraderBatchController:
                     self.get_balance()
                 else:
                     self.log(f"⚠️ [{ticker}] {reason} 체결 정보가 유효하지 않습니다.")
-                self.order_service.clear_pending(ticker)
-            elif order and order.get('state') == 'cancel':
-                self.order_service.clear_pending(ticker)
+                if hasattr(self.order_service, "clear_pending_if_uuid"):
+                    self.order_service.clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+                if hasattr(self, "_release_reserved_krw"):
+                    self._release_reserved_krw(ticker)
+            elif state == 'cancel':
+                if hasattr(self.order_service, "clear_pending_if_uuid"):
+                    self.order_service.clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+                if hasattr(self, "_release_reserved_krw"):
+                    self._release_reserved_krw(ticker)
                 self.log(f"⚠️ [{ticker}] {reason} 주문 취소")
             else:
                 if retry_count < MAX_RETRIES:
                     QTimer.singleShot(
                         2000,
-                        lambda: self._check_external_buy_execution(ticker, uuid, reason, retry_count + 1),
+                        lambda t=ticker, u=uuid, r=reason, rc=retry_count + 1, s=session_id: self._check_external_buy_execution(
+                            t, u, r, rc, s
+                        ),
                     )
                 else:
-                    self.order_service.clear_pending(ticker)
+                    if hasattr(self.order_service, "clear_pending_if_uuid"):
+                        self.order_service.clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                    if hasattr(self, "_release_reserved_krw"):
+                        self._release_reserved_krw(ticker)
                     self.log(f"[ERROR] [{ticker}] {reason} 체결 확인 타임아웃")
         except Exception as e:
-            self.order_service.clear_pending(ticker)
+            if hasattr(self.order_service, "clear_pending_if_uuid"):
+                self.order_service.clear_pending_if_uuid(ticker, uuid)
+            else:
+                self.order_service.clear_pending(ticker)
+            if hasattr(self, "_release_reserved_krw"):
+                self._release_reserved_krw(ticker)
             self.log(f"[ERROR] [{ticker}] {reason} 체결 확인 실패: {e}")
 
-    def _check_external_sell_execution(self, ticker, uuid, reason="외부매도", context_label="외부 매도", retry_count=0):
+    def _check_external_sell_execution(self, ticker, uuid, reason="외부매도", context_label="외부 매도", retry_count=0, session_id=None):
         """Universe 외부 코인 매도 체결 확인용"""
         MAX_RETRIES = 30
+        pending = self.order_service.get_pending(ticker)
+        if not pending:
+            return
+        if pending and str(pending.get("uuid")) != str(uuid):
+            return
         try:
-            order = self.upbit.get_order(uuid)
-            if order and order.get('state') == 'done':
+            order = self._safe_get_order(uuid) if hasattr(self, "_safe_get_order") else self.upbit.get_order(uuid)
+            state = str(order.get("state", "")).lower() if order else "wait"
+            if pending:
+                now = datetime.datetime.now()
+                if hasattr(self.order_service, "update_pending"):
+                    self.order_service.update_pending(
+                        ticker,
+                        last_checked_at=now,
+                        retry_count=int(pending.get("retry_count", 0) or 0) + 1,
+                    )
+
+            if session_id is not None and session_id != getattr(self, "_active_session_id", 0):
+                if state in ("done", "cancel"):
+                    if hasattr(self.order_service, "clear_pending_if_uuid"):
+                        self.order_service.clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
+                return
+
+            if state == 'done':
                 executed_volume, _, avg_net_price = self.order_service.get_sell_fill_metrics(order)
                 if executed_volume > 0 and avg_net_price > 0:
                     self.log(f"✅ [{ticker}] {context_label} 체결 완료")
@@ -351,23 +475,37 @@ class TraderBatchController:
                     self.get_balance()
                 else:
                     self.log(f"⚠️ [{ticker}] {context_label} 체결 정보가 유효하지 않습니다.")
-                self.order_service.clear_pending(ticker)
-            elif order and order.get('state') == 'cancel':
-                self.order_service.clear_pending(ticker)
+                if hasattr(self.order_service, "clear_pending_if_uuid"):
+                    self.order_service.clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
+            elif state == 'cancel':
+                if hasattr(self.order_service, "clear_pending_if_uuid"):
+                    self.order_service.clear_pending_if_uuid(ticker, uuid)
+                else:
+                    self.order_service.clear_pending(ticker)
                 self.log(f"⚠️ [{ticker}] {context_label} 주문 취소")
             else:
                 if retry_count < MAX_RETRIES:
                     QTimer.singleShot(
                         2000,
                         lambda: self._check_external_sell_execution(
-                            ticker, uuid, reason, context_label, retry_count + 1
+                            ticker, uuid, reason, context_label, retry_count + 1, session_id
                         ),
                     )
                 else:
-                    self.order_service.clear_pending(ticker)
+                    if hasattr(self.order_service, "clear_pending_if_uuid"):
+                        self.order_service.clear_pending_if_uuid(ticker, uuid)
+                    else:
+                        self.order_service.clear_pending(ticker)
                     self.log(f"[ERROR] [{ticker}] {context_label} 체결 확인 타임아웃")
         except Exception as e:
-            self.order_service.clear_pending(ticker)
+            if hasattr(self.order_service, "clear_pending_if_uuid"):
+                self.order_service.clear_pending_if_uuid(ticker, uuid)
+            else:
+                self.order_service.clear_pending(ticker)
             self.log(f"[ERROR] [{ticker}] {context_label} 체결 확인 실패: {e}")
+
+
 
 
