@@ -4,6 +4,10 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox, QInputDialog
 
 from upbit_holdings_service import get_account_holdings as get_account_holdings_v2
+try:
+    import pyupbit
+except ImportError:
+    pyupbit = None
 
 try:
     from upbit_dialogs import EmergencyCloseDialog
@@ -16,6 +20,43 @@ except ImportError:
 class TraderBatchController:
     def get_account_holdings(self):
         """현재 보유 중인 모든 KRW 마켓 코인 조회"""
+        if hasattr(self, "_is_paper_mode") and self._is_paper_mode():
+            svc = self._ensure_paper_service_state() if hasattr(self, "_ensure_paper_service_state") else None
+            if svc is None:
+                return []
+            holdings_raw = svc.get_holdings()
+            tickers = list(holdings_raw.keys())
+            prices_map = {}
+            if pyupbit is not None and tickers:
+                try:
+                    prices = pyupbit.get_current_price(tickers)
+                    if isinstance(prices, dict):
+                        prices_map = prices
+                except Exception:
+                    prices_map = {}
+            holdings = []
+            for ticker, h in holdings_raw.items():
+                qty = float(h.get("qty", 0.0) or 0.0)
+                if qty <= 0:
+                    continue
+                buy_price = float(h.get("avg_buy_price", 0.0) or 0.0)
+                current = float(prices_map.get(ticker, self.universe.get(ticker, {}).get("current", buy_price)) or buy_price)
+                value = qty * current
+                pnl = ((current - buy_price) / buy_price * 100.0) if buy_price > 0 and current > 0 else 0.0
+                holdings.append(
+                    {
+                        "ticker": ticker,
+                        "currency": ticker.replace("KRW-", ""),
+                        "qty": qty,
+                        "buy_price": buy_price,
+                        "current_price": current,
+                        "value": value,
+                        "pnl": pnl,
+                    }
+                )
+            self.logger.info(f"[PAPER] 보유 코인 조회: {len(holdings)}개")
+            return holdings
+
         if not self.upbit:
             return []
 
@@ -29,7 +70,7 @@ class TraderBatchController:
 
     def execute_batch_sell(self):
         """모든 보유 코인 일괄 시장가 매도"""
-        if not self.upbit:
+        if not self.upbit and not (hasattr(self, "_is_paper_mode") and self._is_paper_mode()):
             QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
             return
         if hasattr(self, "_ensure_order_stability_state"):
@@ -96,16 +137,25 @@ class TraderBatchController:
                         continue
 
                     # Universe 외부 종목은 서비스 경유 + 외부 체결확인 루틴 사용
-                    ok, result, err_msg = self.order_service.place_sell_market(
-                        self.upbit,
-                        ticker,
-                        qty,
-                        side="SELL",
-                        pending_meta={
-                            "session_id": session_id,
-                            "source": "batch_sell",
-                        },
-                    )
+                    if hasattr(self, "_place_sell_order"):
+                        ok, result, err_msg = self._place_sell_order(
+                            ticker,
+                            qty,
+                            side="SELL",
+                            session_id=session_id,
+                            source="batch_sell",
+                        )
+                    else:
+                        ok, result, err_msg = self.order_service.place_sell_market(
+                            self.upbit,
+                            ticker,
+                            qty,
+                            side="SELL",
+                            pending_meta={
+                                "session_id": session_id,
+                                "source": "batch_sell",
+                            },
+                        )
                     if ok and result and 'uuid' in result:
                         self.log(f"  ✅ [{ticker}] 매도 주문 접수: {qty:.8f}")
                         sold_count += 1
@@ -136,7 +186,7 @@ class TraderBatchController:
 
     def execute_batch_buy(self):
         """입력된 코인들 현재가로 일괄 매수"""
-        if not self.upbit:
+        if not self.upbit and not (hasattr(self, "_is_paper_mode") and self._is_paper_mode()):
             QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
             return
         if hasattr(self, "_ensure_order_stability_state"):
@@ -213,16 +263,24 @@ class TraderBatchController:
                             self.log(f"  ⚠️ [{coin}] 가용 잔고 부족으로 건너뜀")
                             continue
 
-                    ok, result, err_msg = self.order_service.place_buy_market(
-                        self.upbit,
-                        coin,
-                        buy_amount,
-                        pending_meta={
-                            "session_id": session_id,
-                            "source": "batch_buy",
-                            "reserved_krw": buy_amount,
-                        },
-                    )
+                    if hasattr(self, "_place_buy_order"):
+                        ok, result, err_msg = self._place_buy_order(
+                            coin,
+                            buy_amount,
+                            session_id=session_id,
+                            source="batch_buy",
+                        )
+                    else:
+                        ok, result, err_msg = self.order_service.place_buy_market(
+                            self.upbit,
+                            coin,
+                            buy_amount,
+                            pending_meta={
+                                "session_id": session_id,
+                                "source": "batch_buy",
+                                "reserved_krw": buy_amount,
+                            },
+                        )
                     if ok and result and 'uuid' in result:
                         self.log(f"  ✅ [{coin}] 매수 주문 접수: {buy_amount:,.0f}원")
                         bought_count += 1
@@ -278,8 +336,11 @@ class TraderBatchController:
             return
 
         if not self.upbit:
-            QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
-            return
+            if hasattr(self, "_is_paper_mode") and self._is_paper_mode():
+                pass
+            else:
+                QMessageBox.warning(self, "경고", "먼저 API에 연결해주세요.")
+                return
         
         holdings = self.get_account_holdings()
         dialog = EmergencyCloseDialog(self, holdings)
@@ -289,7 +350,7 @@ class TraderBatchController:
 
     def execute_emergency_close(self):
         """긴급 전량 청산 실행"""
-        if not self.upbit:
+        if not self.upbit and not (hasattr(self, "_is_paper_mode") and self._is_paper_mode()):
             self.log("⚠️ API 미연결 상태입니다")
             return
         if hasattr(self, "_ensure_order_stability_state"):
@@ -318,16 +379,25 @@ class TraderBatchController:
                         self.log(f"⚠️ [{ticker}] 기존 {pending['side']} 주문 대기 중으로 긴급청산 건너뜀")
                         continue
 
-                    ok, result, err_msg = self.order_service.place_sell_market(
-                        self.upbit,
-                        ticker,
-                        qty,
-                        side="SELL",
-                        pending_meta={
-                            "session_id": session_id,
-                            "source": "emergency_close",
-                        },
-                    )
+                    if hasattr(self, "_place_sell_order"):
+                        ok, result, err_msg = self._place_sell_order(
+                            ticker,
+                            qty,
+                            side="SELL",
+                            session_id=session_id,
+                            source="emergency_close",
+                        )
+                    else:
+                        ok, result, err_msg = self.order_service.place_sell_market(
+                            self.upbit,
+                            ticker,
+                            qty,
+                            side="SELL",
+                            pending_meta={
+                                "session_id": session_id,
+                                "source": "emergency_close",
+                            },
+                        )
                     if ok and result and 'uuid' in result:
                         sold_count += 1
                         self.log(f"🚨 [{ticker}] 긴급 청산 주문 접수 ({qty:.8f})")

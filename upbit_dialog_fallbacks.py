@@ -150,7 +150,11 @@ class PresetManagerDialog(QDialog):
 • 손절률: {preset.get('loss', '-')}%<br>
 • 투자비중: {preset.get('betting', '-')}%<br>
 • RSI 상한: {preset.get('rsi_upper', '-')}<br>
-• 최대 보유: {preset.get('max_holdings', '-')}개
+• 최대 보유: {preset.get('max_holdings', '-')}개<br>
+• 전략엔진: {'ON' if preset.get('use_strategy_engine') else 'OFF'}<br>
+• 모드: {preset.get('strategy_mode', '-')}<br>
+• 단일전략: {preset.get('single_strategy', '-')}<br>
+• 페이퍼 모드: {'ON' if preset.get('paper_trading') else 'OFF'}
 """
         self.detail_label.setText(details)
     

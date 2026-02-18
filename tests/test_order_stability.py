@@ -373,3 +373,46 @@ def test_clear_pending_if_uuid_prevents_wrong_pending_cleanup():
     assert service.has_pending("KRW-BTC")
     assert service.clear_pending_if_uuid("KRW-BTC", "uuid-1")
     assert not service.has_pending("KRW-BTC")
+
+
+def test_execute_buy_uses_paper_route_without_live_api_calls():
+    class _FakeLiveApi:
+        def __init__(self):
+            self.buy_calls = 0
+
+        def buy_market_order(self, *_):
+            self.buy_calls += 1
+            return {"uuid": "live-buy-1"}
+
+    class _Trader(TraderTradingController):
+        def __init__(self):
+            self.upbit = _FakeLiveApi()
+            self.order_service = UpbitOrderService()
+            self.pending_orders = self.order_service.pending_orders
+            from upbit_paper_order_service import UpbitPaperOrderService
+
+            self.paper_order_service = UpbitPaperOrderService(fee_rate=0.0005, slippage_bps=0)
+            self.paper_order_service.seed_balance(100000.0)
+            self.chk_paper_trading = _Check(True)
+            self.spin_paper_fee_bps = _Spin(5.0)
+            self.spin_paper_slippage_bps = _Spin(0.0)
+            self.spin_betting = _Spin(10.0)
+            self.balance = 100000.0
+            self.universe = {"KRW-BTC": {"row": 0, "state": "감시중", "qty": 0, "current": 1000.0}}
+            self._reserved_krw_by_ticker = {}
+            self._active_session_id = 1
+            self.logger = _DummyLogger()
+            self.strategy = None
+
+        def set_table_item(self, *_):
+            return None
+
+        def log(self, *_):
+            return None
+
+    trader = _Trader()
+    with patch("upbit_trader_trading_controller.QTimer.singleShot", side_effect=lambda *_: None):
+        trader.execute_buy("KRW-BTC", 1000.0)
+
+    assert trader.upbit.buy_calls == 0
+    assert trader.order_service.has_pending("KRW-BTC")

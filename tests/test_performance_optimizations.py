@@ -254,3 +254,20 @@ def test_on_price_update_avoids_setitem_when_ui_items_present():
 
     assert trader.table.set_item_calls == 0
     assert trader.universe["KRW-BTC"]["ui_items"]["price"].text == "12,345"
+
+
+def test_snapshot_expanded_indicators_still_single_api_call():
+    trader = _IndicatorTrader()
+    df = _build_ohlcv()
+    interval = Config.CANDLE_INTERVALS[Config.DEFAULT_CANDLE]
+
+    with patch("upbit_trader_trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
+        snap = trader._get_indicator_snapshot("KRW-BTC", interval)
+        assert snap is not None
+        assert "ema_fast" in snap
+        assert "donchian_upper" in snap
+        assert "zscore" in snap
+        assert "adx" in snap
+        assert "realized_vol_pct" in snap
+
+    assert mock_ohlcv.call_count == 1

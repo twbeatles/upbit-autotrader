@@ -20,7 +20,9 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 
 from upbit_config import Config
 from upbit_order_service import UpbitOrderService
+from upbit_paper_order_service import UpbitPaperOrderService
 from upbit_price_thread import PriceUpdateThread
+from upbit_strategy_engine import StrategyEngine
 from upbit_trader_batch_controller import TraderBatchController
 from upbit_trader_history_controller import TraderHistoryController
 from upbit_trader_settings_controller import TraderSettingsController
@@ -59,6 +61,11 @@ class UpbitProTrader(
         self.daily_loss_triggered = False
         self.order_service = UpbitOrderService()
         self.pending_orders = self.order_service.pending_orders
+        self.paper_order_service = UpbitPaperOrderService(
+            fee_rate=Config.DEFAULT_PAPER_FEE_BPS / 10000.0,
+            slippage_bps=Config.DEFAULT_PAPER_SLIPPAGE_BPS,
+        )
+        self.strategy_engine = StrategyEngine(self)
         self._active_session_id = 0
         self._reserved_krw_by_ticker = {}
         self._order_error_log_ts = {}

@@ -9,7 +9,7 @@ import pyupbit
 import pandas as pd
 import numpy as np
 from dataclasses import dataclass, field
-from typing import List, Dict, Callable, Optional
+from typing import List, Dict, Callable, Optional, Any
 from datetime import datetime, timedelta
 import json
 
@@ -83,7 +83,8 @@ class UpbitBacktestEngine:
     
     def run_backtest(self, ticker: str, strategy_func: Callable,
                      interval: str = "day", count: int = 200,
-                     commission: float = 0.0005) -> BacktestResult:
+                     commission: float = 0.0005,
+                     strategy_params: Optional[Dict[str, float]] = None) -> BacktestResult:
         """
         백테스트 실행
         
@@ -112,7 +113,11 @@ class UpbitBacktestEngine:
         
         # 시뮬레이션
         for i in range(30, len(df)):  # 충분한 과거 데이터 확보
-            signal = strategy_func(df.iloc[:i+1], i)
+            params = strategy_params or {}
+            try:
+                signal = strategy_func(df.iloc[:i+1], i, **params)
+            except TypeError:
+                signal = strategy_func(df.iloc[:i+1], i)
             current_price = df['close'].iloc[i]
             current_time = df['datetime'].iloc[i]
             
@@ -367,3 +372,128 @@ def ma_crossover_strategy(df: pd.DataFrame, i: int,
         return 'SELL'
     
     return 'HOLD'
+
+
+def donchian_breakout_strategy(df: pd.DataFrame, i: int, period: int = 20) -> str:
+    if i < period + 1:
+        return 'HOLD'
+    upper = df['high'].iloc[i-period:i].max()
+    lower = df['low'].iloc[i-period:i].min()
+    current = df['close'].iloc[i]
+    if current > upper:
+        return 'BUY'
+    if current < lower:
+        return 'SELL'
+    return 'HOLD'
+
+
+def ema_cross_trend_strategy(df: pd.DataFrame, i: int, fast: int = 12, slow: int = 26) -> str:
+    if i < slow + 2:
+        return 'HOLD'
+    close = df['close'].iloc[: i + 1]
+    ema_fast = close.ewm(span=fast, adjust=False).mean()
+    ema_slow = close.ewm(span=slow, adjust=False).mean()
+    if ema_fast.iloc[-1] > ema_slow.iloc[-1] and ema_fast.iloc[-2] <= ema_slow.iloc[-2]:
+        return 'BUY'
+    if ema_fast.iloc[-1] < ema_slow.iloc[-1] and ema_fast.iloc[-2] >= ema_slow.iloc[-2]:
+        return 'SELL'
+    return 'HOLD'
+
+
+def time_series_momentum_strategy(df: pd.DataFrame, i: int, lookback: int = 20, threshold_pct: float = 1.0) -> str:
+    if i < lookback:
+        return 'HOLD'
+    base = df['close'].iloc[i - lookback]
+    if base <= 0:
+        return 'HOLD'
+    ret = (df['close'].iloc[i] - base) / base * 100.0
+    if ret >= threshold_pct:
+        return 'BUY'
+    if ret <= -threshold_pct:
+        return 'SELL'
+    return 'HOLD'
+
+
+def rsi_reversion_strategy(df: pd.DataFrame, i: int, period: int = 14, oversold: float = 30, exit_rsi: float = 55) -> str:
+    if i < period + 2:
+        return 'HOLD'
+    close = df['close'].iloc[: i + 1]
+    delta = close.diff()
+    gain = delta.where(delta > 0, 0).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    rs = gain / loss.replace(0, np.nan)
+    rsi = 100 - (100 / (1 + rs))
+    current_rsi = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+    if current_rsi <= oversold:
+        return 'BUY'
+    if current_rsi >= exit_rsi:
+        return 'SELL'
+    return 'HOLD'
+
+
+def bollinger_reversion_strategy(df: pd.DataFrame, i: int, period: int = 20, std_mult: float = 2.0) -> str:
+    if i < period + 2:
+        return 'HOLD'
+    close = df['close'].iloc[: i + 1]
+    ma = close.rolling(window=period).mean().iloc[-1]
+    std = close.rolling(window=period).std().iloc[-1]
+    if pd.isna(ma) or pd.isna(std) or std == 0:
+        return 'HOLD'
+    lower = ma - std_mult * std
+    current = close.iloc[-1]
+    if current <= lower:
+        return 'BUY'
+    if current >= ma:
+        return 'SELL'
+    return 'HOLD'
+
+
+def zscore_reversion_strategy(df: pd.DataFrame, i: int, period: int = 20, entry_z: float = -1.8, exit_z: float = -0.3) -> str:
+    if i < period + 2:
+        return 'HOLD'
+    close = df['close'].iloc[: i + 1]
+    ma = close.rolling(window=period).mean().iloc[-1]
+    std = close.rolling(window=period).std().iloc[-1]
+    if pd.isna(ma) or pd.isna(std) or std == 0:
+        return 'HOLD'
+    z = (close.iloc[-1] - ma) / std
+    if z <= entry_z:
+        return 'BUY'
+    if z >= exit_z:
+        return 'SELL'
+    return 'HOLD'
+
+
+def ensemble_basic_strategy(df: pd.DataFrame, i: int, threshold: int = 2) -> str:
+    votes = [
+        volatility_breakout_strategy(df, i),
+        ema_cross_trend_strategy(df, i),
+        time_series_momentum_strategy(df, i),
+        rsi_reversion_strategy(df, i),
+        bollinger_reversion_strategy(df, i),
+        zscore_reversion_strategy(df, i),
+    ]
+    buy_votes = sum(1 for v in votes if v == 'BUY')
+    sell_votes = sum(1 for v in votes if v == 'SELL')
+    if buy_votes >= threshold and buy_votes > sell_votes:
+        return 'BUY'
+    if sell_votes >= threshold and sell_votes > buy_votes:
+        return 'SELL'
+    return 'HOLD'
+
+
+STRATEGY_REGISTRY: Dict[str, Dict[str, Any]] = {
+    "volatility_breakout": {"name": "변동성 돌파", "func": volatility_breakout_strategy, "params": {"k": 0.4}},
+    "ma_crossover": {"name": "MA 크로스오버", "func": ma_crossover_strategy, "params": {"short": 5, "long": 20}},
+    "donchian_breakout": {"name": "돈치안 돌파", "func": donchian_breakout_strategy, "params": {"period": 20}},
+    "ema_cross_trend": {"name": "EMA 크로스", "func": ema_cross_trend_strategy, "params": {"fast": 12, "slow": 26}},
+    "time_series_momentum": {"name": "시계열 모멘텀", "func": time_series_momentum_strategy, "params": {"lookback": 20, "threshold_pct": 1.0}},
+    "rsi_reversion": {"name": "RSI 평균회귀", "func": rsi_reversion_strategy, "params": {"period": 14, "oversold": 30, "exit_rsi": 55}},
+    "bollinger_reversion": {"name": "볼린저 평균회귀", "func": bollinger_reversion_strategy, "params": {"period": 20, "std_mult": 2.0}},
+    "zscore_reversion": {"name": "Z-Score 평균회귀", "func": zscore_reversion_strategy, "params": {"period": 20, "entry_z": -1.8, "exit_z": -0.3}},
+    "ensemble_basic": {"name": "앙상블(기본)", "func": ensemble_basic_strategy, "params": {"threshold": 2}},
+}
+
+
+def get_strategy_registry() -> Dict[str, Dict[str, Any]]:
+    return dict(STRATEGY_REGISTRY)

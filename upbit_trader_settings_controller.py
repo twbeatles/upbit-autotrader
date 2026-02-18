@@ -30,6 +30,22 @@ class TraderSettingsController:
             "use_partial_tp": self.chk_use_partial_tp.isChecked(),
             "use_entry_scoring": self.chk_use_entry_scoring.isChecked(),
             "entry_score_threshold": self.spin_entry_score_threshold.value(),
+            "use_strategy_engine": self.chk_use_strategy_engine.isChecked() if hasattr(self, "chk_use_strategy_engine") else Config.DEFAULT_USE_STRATEGY_ENGINE,
+            "strategy_mode": self.combo_strategy_mode.currentData() if hasattr(self, "combo_strategy_mode") else Config.DEFAULT_STRATEGY_MODE,
+            "single_strategy": self.combo_single_strategy.currentData() if hasattr(self, "combo_single_strategy") else Config.DEFAULT_SINGLE_STRATEGY,
+            "ensemble_threshold": self.spin_ensemble_threshold.value() if hasattr(self, "spin_ensemble_threshold") else Config.DEFAULT_ENSEMBLE_THRESHOLD,
+            "active_strategies": self.input_active_strategies.text().strip() if hasattr(self, "input_active_strategies") else ",".join(Config.DEFAULT_ACTIVE_STRATEGIES),
+            "strategy_weights": self.input_strategy_weights.text().strip() if hasattr(self, "input_strategy_weights") else "",
+            "use_volatility_targeting": self.chk_use_volatility_targeting.isChecked() if hasattr(self, "chk_use_volatility_targeting") else Config.DEFAULT_USE_VOLATILITY_TARGETING,
+            "target_vol_pct": self.spin_target_vol.value() if hasattr(self, "spin_target_vol") else Config.DEFAULT_TARGET_VOL_PCT,
+            "use_regime_filter": self.chk_use_regime_filter.isChecked() if hasattr(self, "chk_use_regime_filter") else Config.DEFAULT_USE_REGIME_FILTER,
+            "regime_min_adx": self.spin_regime_min_adx.value() if hasattr(self, "spin_regime_min_adx") else Config.DEFAULT_REGIME_MIN_ADX,
+            "use_drawdown_guard": self.chk_use_drawdown_guard.isChecked() if hasattr(self, "chk_use_drawdown_guard") else Config.DEFAULT_USE_DRAWDOWN_GUARD,
+            "drawdown_guard_pct": self.spin_drawdown_guard.value() if hasattr(self, "spin_drawdown_guard") else Config.DEFAULT_DRAWDOWN_GUARD_PCT,
+            "max_consecutive_losses": self.spin_max_consecutive_losses.value() if hasattr(self, "spin_max_consecutive_losses") else Config.DEFAULT_MAX_CONSECUTIVE_LOSSES,
+            "paper_trading": self.chk_paper_trading.isChecked() if hasattr(self, "chk_paper_trading") else Config.DEFAULT_PAPER_TRADING,
+            "paper_fee_bps": self.spin_paper_fee_bps.value() if hasattr(self, "spin_paper_fee_bps") else Config.DEFAULT_PAPER_FEE_BPS,
+            "paper_slippage_bps": self.spin_paper_slippage_bps.value() if hasattr(self, "spin_paper_slippage_bps") else Config.DEFAULT_PAPER_SLIPPAGE_BPS,
             # API 키 저장 (DPAPI 암호화 저장소로 전달)
             "access_key": self.input_access.text().strip(),
             "secret_key": self.input_secret.text().strip(),
@@ -79,6 +95,44 @@ class TraderSettingsController:
             self.chk_use_partial_tp.setChecked(s.get("use_partial_tp", False))
             self.chk_use_entry_scoring.setChecked(s.get("use_entry_scoring", False))
             self.spin_entry_score_threshold.setValue(s.get("entry_score_threshold", Config.ENTRY_SCORE_THRESHOLD))
+            if hasattr(self, "chk_use_strategy_engine"):
+                self.chk_use_strategy_engine.setChecked(s.get("use_strategy_engine", Config.DEFAULT_USE_STRATEGY_ENGINE))
+            if hasattr(self, "combo_strategy_mode"):
+                mode = s.get("strategy_mode", Config.DEFAULT_STRATEGY_MODE)
+                idx = self.combo_strategy_mode.findData(mode)
+                if idx >= 0:
+                    self.combo_strategy_mode.setCurrentIndex(idx)
+            if hasattr(self, "combo_single_strategy"):
+                sid = s.get("single_strategy", Config.DEFAULT_SINGLE_STRATEGY)
+                idx = self.combo_single_strategy.findData(sid)
+                if idx >= 0:
+                    self.combo_single_strategy.setCurrentIndex(idx)
+            if hasattr(self, "spin_ensemble_threshold"):
+                self.spin_ensemble_threshold.setValue(s.get("ensemble_threshold", Config.DEFAULT_ENSEMBLE_THRESHOLD))
+            if hasattr(self, "input_active_strategies"):
+                self.input_active_strategies.setText(s.get("active_strategies", ",".join(Config.DEFAULT_ACTIVE_STRATEGIES)))
+            if hasattr(self, "input_strategy_weights"):
+                self.input_strategy_weights.setText(s.get("strategy_weights", ""))
+            if hasattr(self, "chk_use_volatility_targeting"):
+                self.chk_use_volatility_targeting.setChecked(s.get("use_volatility_targeting", Config.DEFAULT_USE_VOLATILITY_TARGETING))
+            if hasattr(self, "spin_target_vol"):
+                self.spin_target_vol.setValue(s.get("target_vol_pct", Config.DEFAULT_TARGET_VOL_PCT))
+            if hasattr(self, "chk_use_regime_filter"):
+                self.chk_use_regime_filter.setChecked(s.get("use_regime_filter", Config.DEFAULT_USE_REGIME_FILTER))
+            if hasattr(self, "spin_regime_min_adx"):
+                self.spin_regime_min_adx.setValue(s.get("regime_min_adx", Config.DEFAULT_REGIME_MIN_ADX))
+            if hasattr(self, "chk_use_drawdown_guard"):
+                self.chk_use_drawdown_guard.setChecked(s.get("use_drawdown_guard", Config.DEFAULT_USE_DRAWDOWN_GUARD))
+            if hasattr(self, "spin_drawdown_guard"):
+                self.spin_drawdown_guard.setValue(s.get("drawdown_guard_pct", Config.DEFAULT_DRAWDOWN_GUARD_PCT))
+            if hasattr(self, "spin_max_consecutive_losses"):
+                self.spin_max_consecutive_losses.setValue(s.get("max_consecutive_losses", Config.DEFAULT_MAX_CONSECUTIVE_LOSSES))
+            if hasattr(self, "chk_paper_trading"):
+                self.chk_paper_trading.setChecked(s.get("paper_trading", Config.DEFAULT_PAPER_TRADING))
+            if hasattr(self, "spin_paper_fee_bps"):
+                self.spin_paper_fee_bps.setValue(s.get("paper_fee_bps", Config.DEFAULT_PAPER_FEE_BPS))
+            if hasattr(self, "spin_paper_slippage_bps"):
+                self.spin_paper_slippage_bps.setValue(s.get("paper_slippage_bps", Config.DEFAULT_PAPER_SLIPPAGE_BPS))
 
             if hasattr(self, 'chk_use_cooldown'):
                 self.chk_use_cooldown.setChecked(s.get("use_cooldown", self.advanced_settings['use_cooldown']))

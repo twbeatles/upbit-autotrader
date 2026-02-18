@@ -7,6 +7,8 @@ from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox
 
 from upbit_config import Config
 from upbit_entry_filter import should_enter_by_score
+from upbit_strategy_catalog import get_default_active_strategies, get_default_weights
+from upbit_strategy_engine import StrategyConfig
 
 try:
     import pandas as pd
@@ -38,6 +40,8 @@ class TraderTradingController:
                 self.is_connected = True
                 self.balance = balance
                 self.initial_balance = balance
+                self._paper_seeded = False
+                self._seed_paper_balance_once()
                 
                 self.lbl_balance.setText(f"💰 주문가능금액: {balance:,.0f} 원")
                 self.lbl_connection.setText("● 연결됨")
@@ -61,6 +65,14 @@ class TraderTradingController:
 
     def get_balance(self):
         """잔고 조회"""
+        if self._is_paper_mode():
+            svc = self._ensure_paper_service_state()
+            if svc is None:
+                return
+            self.balance = float(svc.get_krw_balance())
+            self.lbl_balance.setText(f"💰 주문가능금액: {self.balance:,.0f} 원 [PAPER]")
+            return
+
         if not self.upbit:
             return
         try:
@@ -103,6 +115,7 @@ class TraderTradingController:
         self.daily_loss_triggered = False
         self._ensure_order_stability_state()
         self._next_trading_session()
+        self._seed_paper_balance_once()
         self._reconcile_pending_orders(force=False)
         self._ensure_indicator_cache_state()
         self._indicator_cache.clear()
@@ -450,6 +463,146 @@ class TraderTradingController:
         for ticker in list(self._reserved_krw_by_ticker.keys()):
             if ticker not in pending_tickers:
                 self._reserved_krw_by_ticker.pop(ticker, None)
+    def _is_paper_mode(self):
+        return bool(hasattr(self, "chk_paper_trading") and self.chk_paper_trading.isChecked())
+    def _ensure_paper_service_state(self):
+        svc = getattr(self, "paper_order_service", None)
+        if svc is None:
+            return None
+        fee_bps = self.spin_paper_fee_bps.value() if hasattr(self, "spin_paper_fee_bps") else Config.DEFAULT_PAPER_FEE_BPS
+        slip_bps = self.spin_paper_slippage_bps.value() if hasattr(self, "spin_paper_slippage_bps") else Config.DEFAULT_PAPER_SLIPPAGE_BPS
+        if hasattr(svc, "set_cost_model"):
+            svc.set_cost_model(fee_rate=float(fee_bps) / 10000.0, slippage_bps=float(slip_bps))
+        return svc
+    def _seed_paper_balance_once(self):
+        if not self._is_paper_mode():
+            return
+        svc = self._ensure_paper_service_state()
+        if svc is None:
+            return
+        try:
+            if hasattr(self, "_paper_seeded") and self._paper_seeded:
+                return
+            seed = float(getattr(self, "balance", 0.0) or 0.0)
+            if seed <= 0 and getattr(self, "upbit", None):
+                api_balance = self.upbit.get_balance("KRW")
+                if api_balance is not None:
+                    seed = float(api_balance)
+            if seed > 0:
+                svc.seed_balance(seed)
+            self._paper_seeded = True
+        except Exception:
+            return
+    def _parse_active_strategy_ids(self):
+        text = self.input_active_strategies.text().strip() if hasattr(self, "input_active_strategies") else ""
+        items = [s.strip() for s in text.split(",") if s.strip()]
+        if not items:
+            items = list(get_default_active_strategies())
+        return items
+    def _resolve_market_price(self, ticker):
+        info = self.universe.get(ticker, {}) if hasattr(self, "universe") else {}
+        price = float(info.get("current", 0.0) or 0.0)
+        if price > 0:
+            return price
+        if pyupbit is not None:
+            try:
+                fetched = pyupbit.get_current_price(ticker)
+                if fetched is not None:
+                    return float(fetched)
+            except Exception:
+                return 0.0
+        return 0.0
+    def _parse_strategy_weights(self):
+        raw = self.input_strategy_weights.text().strip() if hasattr(self, "input_strategy_weights") else ""
+        parsed = {}
+        if raw:
+            for token in raw.split(","):
+                token = token.strip()
+                if not token or ":" not in token:
+                    continue
+                sid, value = token.split(":", 1)
+                sid = sid.strip()
+                try:
+                    parsed[sid] = float(value.strip())
+                except ValueError:
+                    continue
+        defaults = get_default_weights()
+        if not parsed:
+            parsed = dict(defaults)
+        for sid, w in defaults.items():
+            parsed.setdefault(sid, float(w))
+        return parsed
+    def _get_strategy_runtime_config(self):
+        enabled = self.chk_use_strategy_engine.isChecked() if hasattr(self, "chk_use_strategy_engine") else Config.DEFAULT_USE_STRATEGY_ENGINE
+        mode = self.combo_strategy_mode.currentData() if hasattr(self, "combo_strategy_mode") else Config.DEFAULT_STRATEGY_MODE
+        single_strategy = self.combo_single_strategy.currentData() if hasattr(self, "combo_single_strategy") else Config.DEFAULT_SINGLE_STRATEGY
+        threshold = self.spin_ensemble_threshold.value() if hasattr(self, "spin_ensemble_threshold") else Config.DEFAULT_ENSEMBLE_THRESHOLD
+        cfg = StrategyConfig(
+            enabled=bool(enabled),
+            mode=str(mode or Config.DEFAULT_STRATEGY_MODE),
+            single_strategy=str(single_strategy or Config.DEFAULT_SINGLE_STRATEGY),
+            ensemble_threshold=float(threshold),
+            active_strategies=self._parse_active_strategy_ids(),
+            weights=self._parse_strategy_weights(),
+            use_volatility_targeting=self.chk_use_volatility_targeting.isChecked() if hasattr(self, "chk_use_volatility_targeting") else Config.DEFAULT_USE_VOLATILITY_TARGETING,
+            use_regime_filter=self.chk_use_regime_filter.isChecked() if hasattr(self, "chk_use_regime_filter") else Config.DEFAULT_USE_REGIME_FILTER,
+            use_drawdown_guard=self.chk_use_drawdown_guard.isChecked() if hasattr(self, "chk_use_drawdown_guard") else Config.DEFAULT_USE_DRAWDOWN_GUARD,
+        )
+        return cfg
+    def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy"):
+        if self._is_paper_mode():
+            svc = self._ensure_paper_service_state()
+            self._seed_paper_balance_once()
+            if svc is None:
+                return False, None, "paper service unavailable"
+            market_price = self._resolve_market_price(ticker)
+            ok, result, err_msg = svc.place_buy_market(ticker, krw_amount, market_price)
+            if ok and result and "uuid" in result:
+                self.order_service.mark_pending(
+                    ticker,
+                    "BUY",
+                    result["uuid"],
+                    session_id=session_id,
+                    source=source,
+                    reserved_krw=krw_amount,
+                )
+            return ok, result, err_msg
+        return self.order_service.place_buy_market(
+            self.upbit,
+            ticker,
+            krw_amount,
+            pending_meta={
+                "session_id": session_id,
+                "source": source,
+                "reserved_krw": krw_amount,
+            },
+        )
+    def _place_sell_order(self, ticker, qty, side="SELL", session_id=0, source="auto_sell"):
+        if self._is_paper_mode():
+            svc = self._ensure_paper_service_state()
+            if svc is None:
+                return False, None, "paper service unavailable"
+            market_price = self._resolve_market_price(ticker)
+            ok, result, err_msg = svc.place_sell_market(ticker, qty, market_price)
+            if ok and result and "uuid" in result:
+                self.order_service.mark_pending(
+                    ticker,
+                    side,
+                    result["uuid"],
+                    session_id=session_id,
+                    source=source,
+                )
+            return ok, result, err_msg
+        return self.order_service.place_sell_market(
+            self.upbit,
+            ticker,
+            qty,
+            side=side,
+            pending_meta={
+                "session_id": session_id,
+                "source": source,
+            },
+        )
     def _safe_log_order_error(self, uuid, message):
         self._ensure_order_stability_state()
         now_ts = time.time()
@@ -461,7 +614,14 @@ class TraderTradingController:
         if hasattr(self, "logger"):
             self.logger.warning(message)
     def _safe_get_order(self, uuid):
-        if not getattr(self, "upbit", None) or not uuid:
+        if not uuid:
+            return None
+        if self._is_paper_mode():
+            svc = self._ensure_paper_service_state()
+            if svc is None:
+                return None
+            return svc.get_order(uuid)
+        if not getattr(self, "upbit", None):
             return None
         delays = tuple(getattr(Config, "ORDER_STATUS_RETRY_DELAYS_SEC", (0.3, 0.6, 1.2)))
         if not delays:
@@ -480,7 +640,9 @@ class TraderTradingController:
         return None
     def _reconcile_pending_orders(self, force=False):
         self._ensure_order_stability_state()
-        if not getattr(self, "upbit", None) or not hasattr(self, "order_service"):
+        if not hasattr(self, "order_service"):
+            return
+        if not self._is_paper_mode() and not getattr(self, "upbit", None):
             return
         now = datetime.datetime.now()
         stale_timeout = float(getattr(Config, "PENDING_STALE_TIMEOUT_SEC", 90))
@@ -578,6 +740,54 @@ class TraderTradingController:
             bb_std = float(close.rolling(window=bb_period).std().iloc[-1])
             bb_upper = bb_middle + (bb_std * Config.DEFAULT_BB_STD)
             bb_lower = bb_middle - (bb_std * Config.DEFAULT_BB_STD)
+        ema_fast = ema_slow = ema_fast_prev = 0.0
+        if len(close) >= 30:
+            ema_fast_series = close.ewm(span=12, adjust=False).mean()
+            ema_slow_series = close.ewm(span=26, adjust=False).mean()
+            ema_fast = float(ema_fast_series.iloc[-1])
+            ema_slow = float(ema_slow_series.iloc[-1])
+            ema_fast_prev = float(ema_fast_series.iloc[-2]) if len(ema_fast_series) >= 2 else ema_fast
+        donchian_upper = donchian_lower = None
+        if len(df) >= 21:
+            donchian_upper = float(df["high"].iloc[-21:-1].max())
+            donchian_lower = float(df["low"].iloc[-21:-1].min())
+        zscore = 0.0
+        if len(close) >= 21:
+            rolling_mean = close.rolling(window=20).mean().iloc[-1]
+            rolling_std = close.rolling(window=20).std().iloc[-1]
+            if rolling_std and rolling_std > 0:
+                zscore = float((close.iloc[-1] - rolling_mean) / rolling_std)
+        ts_momentum_pct = 0.0
+        if len(close) >= 21:
+            base = float(close.iloc[-21])
+            if base > 0:
+                ts_momentum_pct = float((close.iloc[-1] - base) / base * 100.0)
+        realized_vol_pct = 0.0
+        if len(close) >= 21:
+            ret = close.pct_change().dropna()
+            if len(ret) >= 20:
+                realized_vol_pct = float(ret.iloc[-20:].std() * (20 ** 0.5) * 100.0)
+        adx = 0.0
+        if len(df) >= 30:
+            high = df["high"]
+            low = df["low"]
+            tr1 = high - low
+            tr2 = (high - close.shift()).abs()
+            tr3 = (low - close.shift()).abs()
+            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+            plus_dm = high.diff()
+            minus_dm = -low.diff()
+            plus_dm[(plus_dm < 0) | (plus_dm < minus_dm)] = 0
+            minus_dm[(minus_dm < 0) | (minus_dm < plus_dm)] = 0
+            period = 14
+            atr = tr.rolling(window=period).mean().replace(0, float("nan"))
+            plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
+            minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+            di_sum = (plus_di + minus_di).replace(0, float("nan"))
+            dx = 100 * (plus_di - minus_di).abs() / di_sum
+            adx_val = dx.rolling(window=period).mean().iloc[-1]
+            if not pd.isna(adx_val):
+                adx = float(adx_val)
         snapshot = {
             'rsi': rsi,
             'macd': macd,
@@ -588,6 +798,15 @@ class TraderTradingController:
             'bb_upper': bb_upper,
             'bb_middle': bb_middle,
             'bb_lower': bb_lower,
+            'ema_fast': ema_fast,
+            'ema_slow': ema_slow,
+            'ema_fast_prev': ema_fast_prev,
+            'donchian_upper': donchian_upper,
+            'donchian_lower': donchian_lower,
+            'zscore': zscore,
+            'adx': adx,
+            'realized_vol_pct': realized_vol_pct,
+            'ts_momentum_pct': ts_momentum_pct,
         }
         self._indicator_cache[cache_key] = {'ts': now_ts, 'data': snapshot}
         if len(self._indicator_cache) > 1024:
@@ -759,6 +978,7 @@ class TraderTradingController:
             or (hasattr(self, 'chk_use_macd') and self.chk_use_macd.isChecked())
             or self.chk_use_volume.isChecked()
             or self.chk_use_entry_scoring.isChecked()
+            or (hasattr(self, "chk_use_strategy_engine") and self.chk_use_strategy_engine.isChecked())
         )
         snapshot = None
         if need_snapshot:
@@ -817,7 +1037,25 @@ class TraderTradingController:
                     f"(근거: {reason_summary})"
                 )
                 return
-        
+
+        # 8. 전략 엔진 체크 (single/ensemble)
+        strategy_signal = None
+        cfg = self._get_strategy_runtime_config() if hasattr(self, "_get_strategy_runtime_config") else None
+        if cfg and cfg.enabled and hasattr(self, "strategy_engine"):
+            snapshot = snapshot or self._get_indicator_snapshot(
+                ticker,
+                interval,
+                rsi_period=self.spin_rsi_period.value(),
+                volume_period=Config.DEFAULT_VOLUME_PERIOD,
+                bb_period=Config.DEFAULT_BB_PERIOD,
+            )
+            strategy_signal = self.strategy_engine.evaluate_entry(ticker, curr, info, snapshot or {}, cfg)
+            if strategy_signal.action != "BUY":
+                reason_text = ", ".join(strategy_signal.reasons[:2]) if strategy_signal.reasons else "전략 점수 미충족"
+                self.log(f"[{ticker}] 전략 엔진 보류: {reason_text}")
+                return
+            score = strategy_signal.score
+
         # 매수 실행
         if score is None:
             self.log(f"[{ticker}] 진입 조건 충족")
@@ -869,6 +1107,24 @@ class TraderTradingController:
             if self.strategy.check_holding_time_exit(ticker, self.spin_max_holding_hours.value()):
                 self.execute_sell(ticker, "시간청산")
                 return
+
+        # 1-2. 전략 엔진 기반 청산
+        cfg = self._get_strategy_runtime_config() if hasattr(self, "_get_strategy_runtime_config") else None
+        if cfg and cfg.enabled and hasattr(self, "strategy_engine"):
+            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
+            snapshot = self._get_indicator_snapshot(
+                ticker,
+                interval,
+                rsi_period=self.spin_rsi_period.value(),
+                volume_period=Config.DEFAULT_VOLUME_PERIOD,
+                bb_period=Config.DEFAULT_BB_PERIOD,
+            )
+            signal = self.strategy_engine.evaluate_exit(ticker, curr, info, snapshot or {}, cfg)
+            if signal.action == "SELL":
+                reason = signal.reasons[0] if signal.reasons else "전략청산"
+                self.log(f"📉 [{ticker}] 전략 청산 신호 ({signal.strategy_id})")
+                self.execute_sell(ticker, f"전략:{reason}")
+                return
         
         # 2. 분할 익절 (v2.7 신규)
         if hasattr(self, 'chk_use_partial_tp') and self.chk_use_partial_tp.isChecked():
@@ -905,7 +1161,7 @@ class TraderTradingController:
 
     def execute_buy(self, ticker, curr_price):
         """매수 주문"""
-        if not self.upbit:
+        if not self.upbit and not self._is_paper_mode():
             return
 
         self._ensure_order_stability_state()
@@ -918,6 +1174,18 @@ class TraderTradingController:
             ratio = self.strategy.calculate_dynamic_position_size(ticker) / 100
         else:
             ratio = self.spin_betting.value() / 100
+        cfg = self._get_strategy_runtime_config() if hasattr(self, "_get_strategy_runtime_config") else None
+        if cfg and cfg.enabled and hasattr(self, "strategy_engine"):
+            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
+            snapshot = self._get_indicator_snapshot(
+                ticker,
+                interval,
+                rsi_period=self.spin_rsi_period.value(),
+                volume_period=Config.DEFAULT_VOLUME_PERIOD,
+                bb_period=Config.DEFAULT_BB_PERIOD,
+            )
+            adjusted_pct = self.strategy_engine.evaluate_position_size(ratio * 100.0, snapshot or {}, cfg)
+            ratio = adjusted_pct / 100.0
         available_krw = self._get_available_krw()
         bet_cash = available_krw * ratio
         
@@ -931,15 +1199,11 @@ class TraderTradingController:
         
         try:
             # 시장가 매수
-            ok, result, err_msg = self.order_service.place_buy_market(
-                self.upbit,
+            ok, result, err_msg = self._place_buy_order(
                 ticker,
                 bet_cash,
-                pending_meta={
-                    "session_id": session_id,
-                    "source": "auto_buy",
-                    "reserved_krw": bet_cash,
-                },
+                session_id=session_id,
+                source="auto_buy",
             )
             
             if ok and result and 'uuid' in result:
@@ -1109,7 +1373,7 @@ class TraderTradingController:
 
     def execute_sell(self, ticker, reason):
         """매도 주문"""
-        if not self.upbit:
+        if not self.upbit and not self._is_paper_mode():
             return
 
         self._ensure_order_stability_state()
@@ -1129,15 +1393,12 @@ class TraderTradingController:
         session_id = getattr(self, "_active_session_id", 0)
         
         try:
-            ok, result, err_msg = self.order_service.place_sell_market(
-                self.upbit,
+            ok, result, err_msg = self._place_sell_order(
                 ticker,
                 qty,
                 side="SELL",
-                pending_meta={
-                    "session_id": session_id,
-                    "source": "auto_sell",
-                },
+                session_id=session_id,
+                source="auto_sell",
             )
             
             if ok and result and 'uuid' in result:
@@ -1162,7 +1423,7 @@ class TraderTradingController:
 
     def _execute_partial_sell(self, ticker, qty, reason, level=None):
         """부분 매도 주문 (v2.7 신규 - 분할 익절용)"""
-        if not self.upbit:
+        if not self.upbit and not self._is_paper_mode():
             return False
         
         info = self.universe.get(ticker)
@@ -1176,15 +1437,12 @@ class TraderTradingController:
 
         session_id = getattr(self, "_active_session_id", 0)
         try:
-            ok, result, err_msg = self.order_service.place_sell_market(
-                self.upbit,
+            ok, result, err_msg = self._place_sell_order(
                 ticker,
                 qty,
                 side="PARTIAL_SELL",
-                pending_meta={
-                    "session_id": session_id,
-                    "source": "partial_sell",
-                },
+                session_id=session_id,
+                source="partial_sell",
             )
             
             if ok and result and 'uuid' in result:

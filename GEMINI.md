@@ -1,4 +1,4 @@
-# Upbit Pro Algo-Trader v3.1
+﻿# Upbit Pro Algo-Trader v3.2
 
 업비트 OpenAPI 기반 자동매매 프로그램 - Gemini AI 가이드
 
@@ -9,102 +9,94 @@
 | 언어 | Python 3.10+ |
 | GUI | PyQt6 |
 | API | pyupbit |
-| 버전 | v3.1 (2026-02-13) |
+| 버전 | v3.2 (2026-02-18) |
 | 메인 파일 | `upbit_trader.py` |
 
 ---
 
-## 모듈 구성
+## 모듈 구성 (핵심)
 
 | 파일 | 역할 |
 |------|------|
-| `upbit_trader.py` | UI/오케스트레이션/상태관리 |
-| `upbit_config.py` | 단일 설정 상수 |
-| `upbit_strategy.py` | 전략/고급 리스크 로직 |
-| `upbit_dialogs.py` | 긴급청산 포함 다이얼로그 |
-| `upbit_security.py` | DPAPI 암복호화 |
-| `upbit_settings_store.py` | 설정 저장소(v2 스키마, 마이그레이션) |
-| `upbit_order_service.py` | pending 주문 추적/중복 차단 |
-| `upbit_holdings_service.py` | 계좌 KRW 보유조회 |
-| `upbit_entry_filter.py` | 진입 점수 게이트 |
+| `upbit_trader.py` | 앱 초기화, 컨트롤러 결합, 라이프사이클 |
+| `upbit_trader_ui_controller.py` | 화면/메뉴/전략 UI |
+| `upbit_trader_settings_controller.py` | 설정 저장/로드 |
+| `upbit_trader_trading_controller.py` | 진입/청산/주문/체결 |
+| `upbit_trader_batch_controller.py` | 일괄 주문/긴급 청산 |
+| `upbit_trader_history_controller.py` | 거래 내역/분석/백테스트 |
+| `upbit_strategy.py` | 기존 고급 리스크 상태 머신 |
+| `upbit_strategy_engine.py` | v3.2 전략 엔진 |
+| `upbit_strategy_catalog.py` | v3.2 전략 메타 |
+| `upbit_order_service.py` | live 주문 pending/중복 방지 |
+| `upbit_paper_order_service.py` | paper 모의 체결 서비스 |
+| `upbit_backtester.py` | 전략 레지스트리 기반 백테스트 |
 
 ---
 
-## 핵심 임포트 예시
+## v3.2 핵심 동작
 
-```python
-from upbit_config import Config
-from upbit_strategy import UpbitStrategyManager
-from upbit_order_service import UpbitOrderService
-from upbit_settings_store import load_settings, save_settings
-from upbit_holdings_service import get_account_holdings
-from upbit_entry_filter import should_enter_by_score
-from upbit_trader import UpbitProTrader
-```
+### 1) 전략 엔진
+- 모드
+  - `single`
+  - `ensemble`
+- 전략군
+  - 추세/모멘텀 4
+  - 평균회귀 3
+  - 리스크/메타 3
 
----
+### 2) 페이퍼 트레이딩
+- 실제 주문 API 대신 모의 체결
+- 수수료/슬리피지 파라미터 지원
+- live 체결 루틴과 호환되는 order dict 형식 사용
 
-## v3.1 주요 동작
-
-### 1) API 키 저장
-- `upbit_settings_store.save_settings()`에서 DPAPI 암호화 저장
-- 파일에는 평문 `access_key`, `secret_key`를 남기지 않음
-
-### 2) 진입 점수 필터
-- UI 옵션:
-  - `chk_use_entry_scoring`
-  - `spin_entry_score_threshold`
-- 필터 ON일 때만 임계값 기준 진입 허용
-
-### 3) 긴급 전량 청산 범위
-- `universe` 기준이 아닌 계좌 KRW 마켓 전체 보유 기준
-- universe 밖 종목도 청산 대상
-
-### 4) 주문 안정성
-- `pending_orders` 맵으로 동일 티커 중복 주문 차단
-- 체결 성공/취소/타임아웃/예외 경로 모두 pending 정리
-- 일괄 매수/매도도 `order_service` 경유 + 체결확인 루틴으로 처리
+### 3) 백테스트 확장
+- `STRATEGY_REGISTRY` 기반 전략 선택
+- 전략별 파라미터 주입 실행
 
 ---
 
-## 설정 스키마 (v2)
+## 설정 스키마
 
-```json
-{
-  "settings_version": 2,
-  "api_credentials": {
-    "storage": "dpapi",
-    "access_enc": "<base64>",
-    "secret_enc": "<base64>"
-  }
-}
-```
+`settings_version: 2` 유지 + 신규 키 추가 방식
 
-- 레거시 평문 키는 읽기만 지원(마이그레이션 용도)
+신규 설정 예:
+- `use_strategy_engine`
+- `strategy_mode`
+- `single_strategy`
+- `ensemble_threshold`
+- `active_strategies`
+- `strategy_weights`
+- `paper_trading`
+- `paper_fee_bps`
+- `paper_slippage_bps`
 
 ---
 
 ## 테스트
 
-`tests/test_v31_features.py`
-
-- 설정 마이그레이션/복호화 실패 처리
-- 진입 점수 게이트
-- 주문 중복 방지
-- 보유조회 범위
-- 부분익절 원가배분 정합성
-
 실행:
 
 ```bash
-python -m unittest discover -s tests -p "test_*.py" -v
+python -m pytest -q
 ```
+
+v3.2 신규:
+- `tests/test_strategy_engine_signals.py`
+- `tests/test_strategy_engine_ensemble.py`
+- `tests/test_paper_order_service.py`
 
 ---
 
 ## 주의사항
 
-1. 실거래 자금이 사용되므로 소액 테스트 후 운영
-2. 업비트 API 주문 권한 필요
-3. 프로그램 종료 시 자동매매 중지
-4. Windows 환경 기준(DPAPI/시작프로그램 레지스트리)
+1. 실거래 전 페이퍼 모드로 전략을 검증할 것
+2. 주문/체결 변경 시 pending 정리 경로를 반드시 유지할 것
+3. 설정 변경은 `settings_version`를 유지한 상태에서 키 추가만 권장
+
+---
+
+## 참고 문서
+
+- `README.md`
+- `PROJECT_STRUCTURE_ANALYSIS.md`
+- `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`

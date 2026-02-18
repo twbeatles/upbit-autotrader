@@ -1,6 +1,6 @@
-# Upbit Pro Algo-Trader v3.1
+﻿# Upbit Pro Algo-Trader v3.2
 
-업비트 OpenAPI 기반 24시간 코인 자동매매 프로그램 - AI 어시스턴트 가이드
+업비트 OpenAPI 기반 자동매매 프로그램 - Claude/Codex 작업 가이드
 
 ---
 
@@ -8,156 +8,93 @@
 
 ```txt
 업비트 자동매매/
-├── upbit_trader.py            # 메인 UI + 오케스트레이션
-├── upbit_config.py            # 단일 Config 소스 (설정 상수)
-├── upbit_strategy.py          # 고급 전략/리스크 로직
-├── upbit_dialogs.py           # 긴급청산 포함 UI 다이얼로그
-├── upbit_security.py          # DPAPI 암복호화 유틸
-├── upbit_settings_store.py    # 설정 저장/로드 + 레거시 마이그레이션
-├── upbit_order_service.py     # pending 주문 관리/중복 주문 방지
-├── upbit_holdings_service.py  # 계좌 KRW 보유조회 서비스
-├── upbit_entry_filter.py      # 진입 점수 게이트
-├── upbit_indicators.py        # 고급 지표
-├── upbit_backtester.py        # 백테스팅
-├── upbit_notifiers.py         # 알림
-├── upbit_analytics.py         # 거래 분석
-└── tests/test_v31_features.py # v3.1 단위 테스트
+├── upbit_trader.py                       # 퍼사드/오케스트레이터
+├── upbit_trader_ui_controller.py         # UI/메뉴/프리셋
+├── upbit_trader_settings_controller.py   # 설정 저장/로드/시스템 설정
+├── upbit_trader_trading_controller.py    # 실시간 매매/주문/체결
+├── upbit_trader_batch_controller.py      # 일괄 매수/매도/긴급청산
+├── upbit_trader_history_controller.py    # 거래내역/분석/백테스트
+├── upbit_strategy.py                     # 기존 고급 전략/리스크 상태
+├── upbit_strategy_engine.py              # v3.2 전략 엔진
+├── upbit_strategy_catalog.py             # v3.2 전략 메타/기본값
+├── upbit_order_service.py                # live 주문 추적/중복 방지
+├── upbit_paper_order_service.py          # v3.2 paper 주문 서비스
+├── upbit_settings_store.py               # v2 설정 + DPAPI 키 저장
+├── upbit_security.py                     # DPAPI 유틸
+├── upbit_backtester.py                   # 전략 레지스트리 기반 백테스트
+├── PROJECT_STRUCTURE_ANALYSIS.md         # 구조 분석 문서
+├── STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md
+└── tests/
 ```
 
 ---
 
-## 핵심 클래스/서비스
+## 핵심 포인트
 
-### `UpbitProTrader` (`upbit_trader.py`)
-- UI 생성/시그널 연결/상태 표시 중심 오케스트레이터
-- 주요 상태:
-  - `self.universe`
-  - `self.trade_history`
-  - `self.order_service`
-  - `self.pending_orders` (order_service와 공유)
+### 1) 호환성 정책
+- 진입점: `python upbit_trader.py` 유지
+- 공개 클래스: `UpbitProTrader` 유지
+- 설정 스키마: `settings_version = 2` 유지 (키 추가만 허용)
 
-### `UpbitStrategyManager` (`upbit_strategy.py`)
-- 목표가/지표 계산
-- 쿨다운/시간청산/동적 포지션/MTF/갭/돌파확인
+### 2) 주문 경로
+- Live: `UpbitOrderService`
+- Paper: `UpbitPaperOrderService`
+- 컨트롤러에서는 `_place_buy_order`, `_place_sell_order`로 라우팅
 
-### `UpbitOrderService` (`upbit_order_service.py`)
-- 티커 단위 pending 주문 상태 추적
-- 중복 주문 차단
-- 체결 금액/평단 계산 보조(`get_buy_fill_metrics`, `get_sell_fill_metrics`)
-- 부분익절 원가배분(`apply_partial_sell_accounting`)
+### 3) 전략 실행
+- 엔진 비활성 시 기존 필터 로직 유지
+- 엔진 활성 시
+  - `single`: 단일 전략
+  - `ensemble`: 가중 평균 점수
+- 메타 리스크
+  - `regime_filter`, `drawdown_guard`, `volatility_targeting`
 
-### `upbit_settings_store.py`
-- `load_settings(path)`:
-  - v2 DPAPI 복호화
-  - 레거시 평문키 로딩
-- `save_settings(path, settings)`:
-  - `settings_version = 2`
-  - `api_credentials` DPAPI 저장
-  - 평문 `access_key/secret_key` 제거
+### 4) 백테스트
+- `upbit_backtester.py`의 `STRATEGY_REGISTRY`를 통해 전략 선택/파라미터 주입 실행
 
 ---
 
-## 설정 스키마 (v2)
+## 설정 키(v3.2 추가)
+- `use_strategy_engine`
+- `strategy_mode`
+- `single_strategy`
+- `ensemble_threshold`
+- `active_strategies`
+- `strategy_weights`
+- `use_volatility_targeting`
+- `target_vol_pct`
+- `use_regime_filter`
+- `regime_min_adx`
+- `use_drawdown_guard`
+- `drawdown_guard_pct`
+- `max_consecutive_losses`
+- `paper_trading`
+- `paper_fee_bps`
+- `paper_slippage_bps`
 
-```json
-{
-  "settings_version": 2,
-  "api_credentials": {
-    "storage": "dpapi",
-    "access_enc": "<base64>",
-    "secret_enc": "<base64>"
-  }
-}
+---
+
+## 테스트
+
+```bash
+python -m pytest -q
 ```
 
-- 레거시 평문 키는 마이그레이션 용도로만 읽고, 저장 시 제거
-- 복호화 실패 시 키 입력란 비움 + 경고 로그
+v3.2 신규 테스트:
+- `tests/test_strategy_engine_signals.py`
+- `tests/test_strategy_engine_ensemble.py`
+- `tests/test_paper_order_service.py`
 
 ---
 
-## 매매 로직 핵심 포인트 (v3.1)
-
-### 매수
-1. 목표가/MA 조건
-2. RSI/MACD/거래량 필터
-3. 리스크 체크
-4. 진입 점수 필터(UI 켠 경우만)
-5. `execute_buy()` → pending 검사 후 주문
-
-### 매도
-1. 손절
-2. 시간청산
-3. 분할익절
-4. 트레일링 스톱
-5. `execute_sell()` → pending 검사 후 주문
-
-### 주문 체결 처리
-- 성공/취소/타임아웃/예외 경로 모두 pending 정리
-- 상태 전이:
-  - 감시중 -> 주문중 -> 보유중
-  - 보유중 -> 매도주문중 -> 매도완료(또는 체결확인실패)
-- 일괄 매수/매도도 동일한 서비스 경유 + 체결확인 루틴 사용
+## 작업 시 주의사항
+- 주문/체결 코드 수정 시 pending 정리 경로 누락 금지
+- `paper mode`에서는 live API 주문 함수가 호출되지 않아야 함
+- `upbit_analytics.py`는 기록 키(`timestamp` vs `datetime`) 불일치 위험이 있어 수정 시 주의
 
 ---
 
-## 긴급 전량 청산 (중요 변경)
-
-- v3.1부터 긴급청산 대상은 `universe`가 아니라 `계좌 KRW 마켓 전체 보유`
-- universe 외부 코인도 주문 대상
-- 외부 코인은 전용 체결확인 루틴으로 pending/로그 정리
-
----
-
-## 수정 가이드
-
-### 새 전략/필터 추가
-1. `upbit_strategy.py` 또는 `upbit_entry_filter.py` 확장
-2. `upbit_trader.py` UI 입력 + 저장키 연결
-3. `tests/test_v31_features.py` 케이스 추가
-
-### 설정 키 추가
-1. `upbit_trader.py` `save_settings/load_settings` 연결
-2. 필요 시 `upbit_settings_store.py` 마이그레이션 규칙 갱신
-
-### 주문 관련 변경
-1. `UpbitOrderService` 중심으로 구현
-2. pending 정리 경로 누락 없는지 점검
-
----
-
-## 파일 수정 위험도
-
-| 파일 | 위험도 | 이유 |
-|------|--------|------|
-| `upbit_trader.py` | 높음 | UI/실주문/상태전이 중심 |
-| `upbit_order_service.py` | 높음 | 중복주문/손익정합 핵심 |
-| `upbit_settings_store.py` | 중간 | 보안/호환성 영향 |
-| `upbit_security.py` | 중간 | DPAPI 의존 |
-| `upbit_config.py` | 낮음 | 상수 중심 |
-
----
-
-## 운영 주의사항
-
-> 실거래 자금이 사용됩니다.  
-> API에 주문 권한이 필요합니다.  
-> 소액 테스트 후 운영하세요.  
-> 24시간 자동매매는 프로그램 상시 실행이 필요합니다.
-
----
-
-## Internal Refactor Notes (v3.1+)
-
-- `upbit_trader.py` 역할: 퍼사드/오케스트레이터(초기화 순서, 앱 수명주기, 종료 처리).
-- 기능별 분리 모듈:
-  - `upbit_trader_ui_controller.py`
-  - `upbit_trader_settings_controller.py`
-  - `upbit_trader_history_controller.py`
-  - `upbit_trader_trading_controller.py`
-  - `upbit_trader_batch_controller.py`
-  - `upbit_price_thread.py`
-  - `upbit_dialog_fallbacks.py`
-- 호환성 원칙:
-  - 실행 진입점은 계속 `upbit_trader.py`
-  - 공개 클래스명 `UpbitProTrader` 유지
-  - 설정 저장 포맷(v2 + DPAPI) 유지
+## 참고 문서
+- 구조 분석: `PROJECT_STRUCTURE_ANALYSIS.md`
+- 전략 상세: `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
+- 사용자 문서: `README.md`

@@ -8,6 +8,7 @@ from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -26,9 +27,10 @@ except ImportError:
     ANALYTICS_AVAILABLE = False
 
 try:
-    from upbit_backtester import UpbitBacktestEngine, volatility_breakout_strategy
+    from upbit_backtester import UpbitBacktestEngine, volatility_breakout_strategy, get_strategy_registry
     BACKTESTER_AVAILABLE = True
 except ImportError:
+    get_strategy_registry = None
     BACKTESTER_AVAILABLE = False
 
 
@@ -173,15 +175,45 @@ class TraderHistoryController:
             ticker = coins_text.split(',')[0].strip()
             
             self.log(f"🧪 [{ticker}] 백테스트 시작...")
+
+            strategy_func = volatility_breakout_strategy
+            strategy_params = {}
+            strategy_label = "변동성 돌파"
+            if callable(get_strategy_registry):
+                registry = get_strategy_registry()
+                if registry:
+                    keys = list(registry.keys())
+                    labels = [f"{k} - {registry[k].get('name', k)}" for k in keys]
+                    selected_label, ok = QInputDialog.getItem(
+                        self,
+                        "백테스트 전략 선택",
+                        "전략:",
+                        labels,
+                        0,
+                        False,
+                    )
+                    if not ok:
+                        return
+                    selected_idx = labels.index(selected_label)
+                    selected_key = keys[selected_idx]
+                    strategy_meta = registry[selected_key]
+                    strategy_func = strategy_meta.get("func", volatility_breakout_strategy)
+                    strategy_params = dict(strategy_meta.get("params", {}))
+                    strategy_label = strategy_meta.get("name", selected_key)
             
             engine = UpbitBacktestEngine(initial_capital=10_000_000)
-            result = engine.run_backtest(ticker, volatility_breakout_strategy, 
-                                        interval="day", count=200)
+            result = engine.run_backtest(
+                ticker,
+                strategy_func,
+                interval="day",
+                count=200,
+                strategy_params=strategy_params,
+            )
             
             output_path = "backtest_report.html"
             engine.generate_report(result, output_path)
             
-            self.log(f"🧪 백테스트 완료: 수익률 {result.total_return:.2f}%, 승률 {result.win_rate:.1f}%")
+            self.log(f"🧪 [{strategy_label}] 백테스트 완료: 수익률 {result.total_return:.2f}%, 승률 {result.win_rate:.1f}%")
             os.startfile(output_path)
         except Exception as e:
             self.log(f"[ERROR] 백테스트 실패: {e}")

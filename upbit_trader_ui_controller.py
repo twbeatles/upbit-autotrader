@@ -30,6 +30,7 @@ from PyQt6.QtGui import QAction
 
 from upbit_config import Config
 from upbit_dialog_fallbacks import HelpDialog, PresetManagerDialog, SettingsDialog
+from upbit_strategy_catalog import STRATEGY_CATALOG, get_default_active_strategies, get_default_weights
 
 try:
     from upbit_dialogs import (
@@ -389,6 +390,122 @@ class TraderUIController:
         
         group_risk.setLayout(risk_layout)
         layout.addWidget(group_risk)
+
+        # 전략 엔진 설정 (v3.2)
+        group_strategy_engine = QGroupBox("🧩 전략 엔진 (Single / Ensemble)")
+        se_layout = QGridLayout()
+
+        self.chk_use_strategy_engine = QCheckBox("전략 엔진 사용")
+        self.chk_use_strategy_engine.setChecked(Config.DEFAULT_USE_STRATEGY_ENGINE)
+        self.chk_use_strategy_engine.setToolTip(Config.TOOLTIPS.get("strategy_engine", ""))
+        se_layout.addWidget(self.chk_use_strategy_engine, 0, 0, 1, 2)
+
+        se_layout.addWidget(QLabel("실행 모드:"), 0, 2)
+        self.combo_strategy_mode = QComboBox()
+        self.combo_strategy_mode.addItem("단일 전략", "single")
+        self.combo_strategy_mode.addItem("앙상블", "ensemble")
+        default_mode_idx = self.combo_strategy_mode.findData(Config.DEFAULT_STRATEGY_MODE)
+        if default_mode_idx >= 0:
+            self.combo_strategy_mode.setCurrentIndex(default_mode_idx)
+        se_layout.addWidget(self.combo_strategy_mode, 0, 3)
+
+        se_layout.addWidget(QLabel("단일 전략:"), 1, 0)
+        self.combo_single_strategy = QComboBox()
+        for strategy_id, meta in STRATEGY_CATALOG.items():
+            if not meta.get("tradeable"):
+                continue
+            if meta.get("category") == "risk":
+                continue
+            self.combo_single_strategy.addItem(meta.get("name", strategy_id), strategy_id)
+        idx_single = self.combo_single_strategy.findData(Config.DEFAULT_SINGLE_STRATEGY)
+        if idx_single >= 0:
+            self.combo_single_strategy.setCurrentIndex(idx_single)
+        se_layout.addWidget(self.combo_single_strategy, 1, 1)
+
+        se_layout.addWidget(QLabel("앙상블 임계점수:"), 1, 2)
+        self.spin_ensemble_threshold = QSpinBox()
+        self.spin_ensemble_threshold.setRange(0, 100)
+        self.spin_ensemble_threshold.setValue(Config.DEFAULT_ENSEMBLE_THRESHOLD)
+        self.spin_ensemble_threshold.setSuffix(" 점")
+        se_layout.addWidget(self.spin_ensemble_threshold, 1, 3)
+
+        se_layout.addWidget(QLabel("활성 전략 IDs:"), 2, 0)
+        self.input_active_strategies = QLineEdit(",".join(get_default_active_strategies()))
+        self.input_active_strategies.setPlaceholderText("예: volatility_breakout,ema_cross_trend")
+        se_layout.addWidget(self.input_active_strategies, 2, 1, 1, 3)
+
+        se_layout.addWidget(QLabel("가중치 (id:weight):"), 3, 0)
+        default_weights_text = ",".join(f"{k}:{v}" for k, v in get_default_weights().items())
+        self.input_strategy_weights = QLineEdit(default_weights_text)
+        self.input_strategy_weights.setPlaceholderText("예: ema_cross_trend:1.2,rsi_reversion:0.8")
+        se_layout.addWidget(self.input_strategy_weights, 3, 1, 1, 3)
+
+        self.chk_use_volatility_targeting = QCheckBox("변동성 타게팅 사용")
+        self.chk_use_volatility_targeting.setChecked(Config.DEFAULT_USE_VOLATILITY_TARGETING)
+        se_layout.addWidget(self.chk_use_volatility_targeting, 4, 0, 1, 2)
+
+        se_layout.addWidget(QLabel("목표 변동성(%):"), 4, 2)
+        self.spin_target_vol = QDoubleSpinBox()
+        self.spin_target_vol.setRange(0.5, 10.0)
+        self.spin_target_vol.setSingleStep(0.1)
+        self.spin_target_vol.setValue(Config.DEFAULT_TARGET_VOL_PCT)
+        self.spin_target_vol.setSuffix(" %")
+        se_layout.addWidget(self.spin_target_vol, 4, 3)
+
+        self.chk_use_regime_filter = QCheckBox("레짐 필터 사용")
+        self.chk_use_regime_filter.setChecked(Config.DEFAULT_USE_REGIME_FILTER)
+        se_layout.addWidget(self.chk_use_regime_filter, 5, 0, 1, 2)
+
+        se_layout.addWidget(QLabel("최소 ADX:"), 5, 2)
+        self.spin_regime_min_adx = QDoubleSpinBox()
+        self.spin_regime_min_adx.setRange(5.0, 60.0)
+        self.spin_regime_min_adx.setSingleStep(1.0)
+        self.spin_regime_min_adx.setValue(Config.DEFAULT_REGIME_MIN_ADX)
+        se_layout.addWidget(self.spin_regime_min_adx, 5, 3)
+
+        self.chk_use_drawdown_guard = QCheckBox("드로우다운 가드 사용")
+        self.chk_use_drawdown_guard.setChecked(Config.DEFAULT_USE_DRAWDOWN_GUARD)
+        se_layout.addWidget(self.chk_use_drawdown_guard, 6, 0, 1, 2)
+
+        se_layout.addWidget(QLabel("최대 일손실(%):"), 6, 2)
+        self.spin_drawdown_guard = QDoubleSpinBox()
+        self.spin_drawdown_guard.setRange(1.0, 30.0)
+        self.spin_drawdown_guard.setValue(Config.DEFAULT_DRAWDOWN_GUARD_PCT)
+        self.spin_drawdown_guard.setSuffix(" %")
+        se_layout.addWidget(self.spin_drawdown_guard, 6, 3)
+
+        se_layout.addWidget(QLabel("최대 연속손실:"), 7, 0)
+        self.spin_max_consecutive_losses = QSpinBox()
+        self.spin_max_consecutive_losses.setRange(1, 10)
+        self.spin_max_consecutive_losses.setValue(Config.DEFAULT_MAX_CONSECUTIVE_LOSSES)
+        se_layout.addWidget(self.spin_max_consecutive_losses, 7, 1)
+
+        group_strategy_engine.setLayout(se_layout)
+        layout.addWidget(group_strategy_engine)
+
+        # 페이퍼 트레이딩 설정 (v3.2)
+        group_paper = QGroupBox("🧪 페이퍼 트레이딩")
+        paper_layout = QGridLayout()
+        self.chk_paper_trading = QCheckBox("페이퍼 트레이딩 사용")
+        self.chk_paper_trading.setChecked(Config.DEFAULT_PAPER_TRADING)
+        self.chk_paper_trading.setToolTip(Config.TOOLTIPS.get("paper_trading", ""))
+        paper_layout.addWidget(self.chk_paper_trading, 0, 0, 1, 2)
+
+        paper_layout.addWidget(QLabel("수수료(bps):"), 1, 0)
+        self.spin_paper_fee_bps = QDoubleSpinBox()
+        self.spin_paper_fee_bps.setRange(0.0, 100.0)
+        self.spin_paper_fee_bps.setSingleStep(0.5)
+        self.spin_paper_fee_bps.setValue(Config.DEFAULT_PAPER_FEE_BPS)
+        paper_layout.addWidget(self.spin_paper_fee_bps, 1, 1)
+
+        paper_layout.addWidget(QLabel("슬리피지(bps):"), 1, 2)
+        self.spin_paper_slippage_bps = QDoubleSpinBox()
+        self.spin_paper_slippage_bps.setRange(0.0, 200.0)
+        self.spin_paper_slippage_bps.setSingleStep(0.5)
+        self.spin_paper_slippage_bps.setValue(Config.DEFAULT_PAPER_SLIPPAGE_BPS)
+        paper_layout.addWidget(self.spin_paper_slippage_bps, 1, 3)
+        group_paper.setLayout(paper_layout)
+        layout.addWidget(group_paper)
         
         # v3.0: 고급 리스크 관리
         # In the refactored facade, availability is determined by whether the strategy manager is loaded.
@@ -744,7 +861,16 @@ class TraderUIController:
             'loss': self.spin_loss.value(),
             'betting': self.spin_betting.value(),
             'rsi_upper': self.spin_rsi_upper.value(),
-            'max_holdings': self.spin_max_holdings.value()
+            'max_holdings': self.spin_max_holdings.value(),
+            'use_strategy_engine': self.chk_use_strategy_engine.isChecked() if hasattr(self, "chk_use_strategy_engine") else Config.DEFAULT_USE_STRATEGY_ENGINE,
+            'strategy_mode': self.combo_strategy_mode.currentData() if hasattr(self, "combo_strategy_mode") else Config.DEFAULT_STRATEGY_MODE,
+            'single_strategy': self.combo_single_strategy.currentData() if hasattr(self, "combo_single_strategy") else Config.DEFAULT_SINGLE_STRATEGY,
+            'ensemble_threshold': self.spin_ensemble_threshold.value() if hasattr(self, "spin_ensemble_threshold") else Config.DEFAULT_ENSEMBLE_THRESHOLD,
+            'active_strategies': self.input_active_strategies.text().strip() if hasattr(self, "input_active_strategies") else ",".join(Config.DEFAULT_ACTIVE_STRATEGIES),
+            'strategy_weights': self.input_strategy_weights.text().strip() if hasattr(self, "input_strategy_weights") else "",
+            'paper_trading': self.chk_paper_trading.isChecked() if hasattr(self, "chk_paper_trading") else Config.DEFAULT_PAPER_TRADING,
+            'paper_fee_bps': self.spin_paper_fee_bps.value() if hasattr(self, "spin_paper_fee_bps") else Config.DEFAULT_PAPER_FEE_BPS,
+            'paper_slippage_bps': self.spin_paper_slippage_bps.value() if hasattr(self, "spin_paper_slippage_bps") else Config.DEFAULT_PAPER_SLIPPAGE_BPS,
         }
 
         dialog_cls = PresetManagerDialogV3 if PresetManagerDialogV3 else PresetManagerDialog
@@ -770,6 +896,28 @@ class TraderUIController:
             self.spin_rsi_upper.setValue(preset['rsi_upper'])
         if 'max_holdings' in preset:
             self.spin_max_holdings.setValue(preset['max_holdings'])
+        if hasattr(self, "chk_use_strategy_engine") and 'use_strategy_engine' in preset:
+            self.chk_use_strategy_engine.setChecked(bool(preset['use_strategy_engine']))
+        if hasattr(self, "combo_strategy_mode") and 'strategy_mode' in preset:
+            idx = self.combo_strategy_mode.findData(preset['strategy_mode'])
+            if idx >= 0:
+                self.combo_strategy_mode.setCurrentIndex(idx)
+        if hasattr(self, "combo_single_strategy") and 'single_strategy' in preset:
+            idx = self.combo_single_strategy.findData(preset['single_strategy'])
+            if idx >= 0:
+                self.combo_single_strategy.setCurrentIndex(idx)
+        if hasattr(self, "spin_ensemble_threshold") and 'ensemble_threshold' in preset:
+            self.spin_ensemble_threshold.setValue(int(preset['ensemble_threshold']))
+        if hasattr(self, "input_active_strategies") and 'active_strategies' in preset:
+            self.input_active_strategies.setText(str(preset['active_strategies']))
+        if hasattr(self, "input_strategy_weights") and 'strategy_weights' in preset:
+            self.input_strategy_weights.setText(str(preset['strategy_weights']))
+        if hasattr(self, "chk_paper_trading") and 'paper_trading' in preset:
+            self.chk_paper_trading.setChecked(bool(preset['paper_trading']))
+        if hasattr(self, "spin_paper_fee_bps") and 'paper_fee_bps' in preset:
+            self.spin_paper_fee_bps.setValue(float(preset['paper_fee_bps']))
+        if hasattr(self, "spin_paper_slippage_bps") and 'paper_slippage_bps' in preset:
+            self.spin_paper_slippage_bps.setValue(float(preset['paper_slippage_bps']))
         
         name = preset.get('name', '사용자 정의')
         self.lbl_current_preset.setText(f"✅ 현재 프리셋: {name}")

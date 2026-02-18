@@ -107,6 +107,43 @@ class Config:
         'volume_confirm': 15,
         'bb_position': 10,
     }
+
+    # ========================================================================
+    # 전략 엔진 확장 (v3.2)
+    # ========================================================================
+    DEFAULT_USE_STRATEGY_ENGINE = False
+    DEFAULT_STRATEGY_MODE = "single"  # single | ensemble
+    DEFAULT_SINGLE_STRATEGY = "volatility_breakout"
+    DEFAULT_ENSEMBLE_THRESHOLD = 60
+    DEFAULT_ACTIVE_STRATEGIES = [
+        "volatility_breakout",
+        "donchian_breakout",
+        "ema_cross_trend",
+        "time_series_momentum",
+        "rsi_reversion",
+        "bollinger_reversion",
+        "zscore_reversion",
+    ]
+    DEFAULT_STRATEGY_WEIGHTS = {
+        "volatility_breakout": 1.0,
+        "donchian_breakout": 1.0,
+        "ema_cross_trend": 1.0,
+        "time_series_momentum": 1.0,
+        "rsi_reversion": 1.0,
+        "bollinger_reversion": 1.0,
+        "zscore_reversion": 1.0,
+    }
+    DEFAULT_USE_VOLATILITY_TARGETING = True
+    DEFAULT_TARGET_VOL_PCT = 2.0
+    DEFAULT_USE_REGIME_FILTER = True
+    DEFAULT_REGIME_MIN_ADX = 18.0
+    DEFAULT_USE_DRAWDOWN_GUARD = True
+    DEFAULT_DRAWDOWN_GUARD_PCT = 5.0
+    DEFAULT_MAX_CONSECUTIVE_LOSSES = 3
+
+    DEFAULT_PAPER_TRADING = False
+    DEFAULT_PAPER_FEE_BPS = 5.0
+    DEFAULT_PAPER_SLIPPAGE_BPS = 5.0
     
     # ========================================================================
     # 스토캐스틱 RSI 설정 (v2.5)
@@ -194,19 +231,25 @@ class Config:
             "name": "🔥 공격적",
             "description": "높은 수익을 추구하지만 리스크도 높음",
             "k": 0.5, "ts_start": 3.0, "ts_stop": 1.5, "loss": 5.0,
-            "betting": 15.0, "rsi_upper": 75, "max_holdings": 7
+            "betting": 15.0, "rsi_upper": 75, "max_holdings": 7,
+            "use_strategy_engine": True, "strategy_mode": "ensemble",
+            "single_strategy": "ema_cross_trend", "ensemble_threshold": 55,
         },
         "normal": {
             "name": "⚖️ 표준",
             "description": "균형 잡힌 수익과 리스크 관리",
             "k": 0.4, "ts_start": 5.0, "ts_stop": 2.0, "loss": 3.0,
-            "betting": 10.0, "rsi_upper": 70, "max_holdings": 5
+            "betting": 10.0, "rsi_upper": 70, "max_holdings": 5,
+            "use_strategy_engine": False, "strategy_mode": "single",
+            "single_strategy": "volatility_breakout", "ensemble_threshold": 60,
         },
         "conservative": {
             "name": "🛡️ 보수적",
             "description": "안정적인 수익, 낮은 리스크",
             "k": 0.3, "ts_start": 7.0, "ts_stop": 2.5, "loss": 2.0,
-            "betting": 5.0, "rsi_upper": 65, "max_holdings": 3
+            "betting": 5.0, "rsi_upper": 65, "max_holdings": 3,
+            "use_strategy_engine": True, "strategy_mode": "ensemble",
+            "single_strategy": "rsi_reversion", "ensemble_threshold": 65,
         }
     }
     
@@ -228,6 +271,8 @@ class Config:
         "max_holdings": "동시에 보유할 수 있는 최대 종목 수입니다.\n\n분산 투자로 리스크를 관리합니다.\n권장: 3 ~ 7개",
         "cooldown": "매도 후 재진입까지 대기 시간입니다.\n\n동일 코인 재진입 방지로 휩쏘 피해를 줄입니다.\n권장: 15 ~ 60분",
         "holding_time": "최대 보유 시간입니다.\n\n이 시간이 지나면 수익/손실 관계없이 청산합니다.\n권장: 12 ~ 48시간",
+        "strategy_engine": "전략 엔진을 사용하면 단일/앙상블 전략 기반으로 진입/청산을 판정합니다.",
+        "paper_trading": "페이퍼 트레이딩은 실제 주문 대신 모의 체결로 테스트를 수행합니다.",
     }
     
     # ========================================================================
