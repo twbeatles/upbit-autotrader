@@ -142,6 +142,8 @@ class Config:
     DEFAULT_MAX_CONSECUTIVE_LOSSES = 3
 
     DEFAULT_PAPER_TRADING = False
+    DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN = True
+    DEFAULT_PAPER_SEED_KRW = 10_000_000
     DEFAULT_PAPER_FEE_BPS = 5.0
     DEFAULT_PAPER_SLIPPAGE_BPS = 5.0
     
@@ -273,6 +275,8 @@ class Config:
         "holding_time": "최대 보유 시간입니다.\n\n이 시간이 지나면 수익/손실 관계없이 청산합니다.\n권장: 12 ~ 48시간",
         "strategy_engine": "전략 엔진을 사용하면 단일/앙상블 전략 기반으로 진입/청산을 판정합니다.",
         "paper_trading": "페이퍼 트레이딩은 실제 주문 대신 모의 체결로 테스트를 수행합니다.",
+        "paper_allow_without_login": "페이퍼 모드에서 API 로그인 없이도 매매 시작을 허용합니다.",
+        "paper_seed_krw": "무로그인 페이퍼 시작 시 사용할 초기 모의 KRW 잔고입니다.",
     }
     
     # ========================================================================

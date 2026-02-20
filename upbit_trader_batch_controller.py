@@ -157,12 +157,17 @@ class TraderBatchController:
                             },
                         )
                     if ok and result and 'uuid' in result:
+                        if hasattr(self.order_service, "update_pending"):
+                            self.order_service.update_pending(
+                                ticker,
+                                avg_buy_price=float(holding.get("buy_price", 0.0) or 0.0),
+                            )
                         self.log(f"  ✅ [{ticker}] 매도 주문 접수: {qty:.8f}")
                         sold_count += 1
                         QTimer.singleShot(
                             2000,
-                            lambda t=ticker, u=result['uuid']: self._check_external_sell_execution(
-                                t, u, reason="일괄매도", context_label="일괄 매도", retry_count=0
+                            lambda t=ticker, u=result['uuid'], s=session_id: self._check_external_sell_execution(
+                                t, u, reason="일괄매도", context_label="일괄 매도", retry_count=0, session_id=s
                             ),
                         )
                     else:
@@ -292,15 +297,15 @@ class TraderBatchController:
                             self.set_table_item(info['row'], 4, "⏳ 주문중", "#ffc107")
                             QTimer.singleShot(
                                 2000,
-                                lambda t=coin, u=result['uuid']: self.check_buy_execution(
-                                    t, u, retry_count=0
+                                lambda t=coin, u=result['uuid'], s=session_id: self.check_buy_execution(
+                                    t, u, retry_count=0, session_id=s
                                 ),
                             )
                         else:
                             QTimer.singleShot(
                                 2000,
-                                lambda t=coin, u=result['uuid']: self._check_external_buy_execution(
-                                    t, u, reason="일괄매수", retry_count=0
+                                lambda t=coin, u=result['uuid'], s=session_id: self._check_external_buy_execution(
+                                    t, u, reason="일괄매수", retry_count=0, session_id=s
                                 ),
                             )
                     else:
@@ -399,6 +404,11 @@ class TraderBatchController:
                             },
                         )
                     if ok and result and 'uuid' in result:
+                        if hasattr(self.order_service, "update_pending"):
+                            self.order_service.update_pending(
+                                ticker,
+                                avg_buy_price=float(h.get("buy_price", 0.0) or 0.0),
+                            )
                         sold_count += 1
                         self.log(f"🚨 [{ticker}] 긴급 청산 주문 접수 ({qty:.8f})")
 
@@ -409,16 +419,16 @@ class TraderBatchController:
                             self.set_table_item(info['row'], 4, "⏳ 매도주문중", "#ffc107")
                             QTimer.singleShot(
                                 2000,
-                                lambda t=ticker, u=result['uuid']: self.check_sell_execution(
-                                    t, u, "긴급청산", retry_count=0
+                                lambda t=ticker, u=result['uuid'], s=session_id: self.check_sell_execution(
+                                    t, u, "긴급청산", retry_count=0, session_id=s
                                 ),
                             )
                         else:
                             # Universe 밖 코인은 주문 확인을 최소 로깅/정리 용도로만 수행
                             QTimer.singleShot(
                                 2000,
-                                lambda t=ticker, u=result['uuid']: self._check_external_sell_execution(
-                                    t, u, reason="긴급청산", context_label="긴급 청산", retry_count=0
+                                lambda t=ticker, u=result['uuid'], s=session_id: self._check_external_sell_execution(
+                                    t, u, reason="긴급청산", context_label="긴급 청산", retry_count=0, session_id=s
                                 ),
                             )
                     else:
@@ -540,8 +550,12 @@ class TraderBatchController:
             if state == 'done':
                 executed_volume, _, avg_net_price = self.order_service.get_sell_fill_metrics(order)
                 if executed_volume > 0 and avg_net_price > 0:
-                    self.log(f"✅ [{ticker}] {context_label} 체결 완료")
-                    self.add_trade_record(ticker, 'SELL', avg_net_price, executed_volume, 0, reason)
+                    avg_buy_price = float((pending or {}).get("avg_buy_price", 0.0) or 0.0)
+                    profit = 0.0
+                    if avg_buy_price > 0:
+                        profit = (avg_net_price - avg_buy_price) * executed_volume
+                    self.log(f"✅ [{ticker}] {context_label} 체결 완료 (손익: {profit:+,.0f}원)")
+                    self.add_trade_record(ticker, 'SELL', avg_net_price, executed_volume, profit, reason)
                     self.get_balance()
                 else:
                     self.log(f"⚠️ [{ticker}] {context_label} 체결 정보가 유효하지 않습니다.")
@@ -559,8 +573,8 @@ class TraderBatchController:
                 if retry_count < MAX_RETRIES:
                     QTimer.singleShot(
                         2000,
-                        lambda: self._check_external_sell_execution(
-                            ticker, uuid, reason, context_label, retry_count + 1, session_id
+                        lambda t=ticker, u=uuid, r=reason, c=context_label, rc=retry_count + 1, s=session_id: self._check_external_sell_execution(
+                            t, u, r, c, rc, s
                         ),
                     )
                 else:

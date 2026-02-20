@@ -9,6 +9,7 @@ logs/
 upbit_dist/
 키움증권 자동 매매 프로그램(참조)/
 dist/
+build/
 *.exe
 
 # Local runtime data

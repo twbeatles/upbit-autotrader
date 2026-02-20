@@ -129,7 +129,7 @@ def test_check_sell_execution_clears_pending_done_cancel_timeout():
     trader.order_service.mark_pending(ticker, "SELL", "sell-done")
     TraderTradingController.check_sell_execution(trader, ticker, "sell-done", "테스트매도")
     assert not trader.order_service.has_pending(ticker)
-    assert trader.universe[ticker]["state"] == "매도완료"
+    assert trader.universe[ticker]["state"] == "감시중"
     assert trader.universe[ticker]["qty"] == 0
 
     # cancel
@@ -161,6 +161,7 @@ class _FakeBatchTrader:
         self.upbit = _FakeUpbitSell()
         self.order_service = UpbitOrderService()
         self.universe = {"KRW-BTC": {"qty": 0.2, "state": "보유중", "row": 0}}
+        self._active_session_id = 7
         self.logger = _DummyLogger()
         self.chk_auto_start_after_batch = _FakeCheck()
         self.logs = []
@@ -190,12 +191,12 @@ class _FakeBatchTrader:
         self.internal_sell_calls.append((ticker, reason))
         self.order_service.mark_pending(ticker, "SELL", "internal-uuid")
 
-    def _check_external_sell_execution(self, ticker, uuid, reason="외부매도", context_label="외부 매도", retry_count=0):
-        self.external_sell_checks.append((ticker, uuid, reason, context_label, retry_count))
+    def _check_external_sell_execution(self, ticker, uuid, reason="외부매도", context_label="외부 매도", retry_count=0, session_id=None):
+        self.external_sell_checks.append((ticker, uuid, reason, context_label, retry_count, session_id))
         self.order_service.clear_pending(ticker)
 
-    def check_sell_execution(self, ticker, uuid, reason, retry_count=0):
-        self.internal_sell_checks.append((ticker, uuid, reason, retry_count))
+    def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=None):
+        self.internal_sell_checks.append((ticker, uuid, reason, retry_count, session_id))
         self.order_service.clear_pending(ticker)
 
 
@@ -217,6 +218,7 @@ def test_batch_sell_routes_universe_and_external_paths():
     assert trader.internal_sell_calls == [("KRW-BTC", "일괄매도")]
     assert len(trader.external_sell_checks) == 1
     assert trader.external_sell_checks[0][0] == "KRW-XRP"
+    assert trader.external_sell_checks[0][5] == 7
 
 
 def test_emergency_close_routes_universe_and_external_paths():
@@ -230,5 +232,7 @@ def test_emergency_close_routes_universe_and_external_paths():
 
     assert len(trader.internal_sell_checks) == 1
     assert trader.internal_sell_checks[0][0] == "KRW-BTC"
+    assert trader.internal_sell_checks[0][4] == 7
     assert len(trader.external_sell_checks) == 1
     assert trader.external_sell_checks[0][0] == "KRW-XRP"
+    assert trader.external_sell_checks[0][5] == 7

@@ -72,6 +72,14 @@
 - `paper_fee_bps`
 - `paper_slippage_bps`
 
+## 설정 키(v3.2.1 추가)
+- `paper_allow_without_login`
+- `paper_seed_krw`
+
+## 설정 키(v3.2.1 추가)
+- `paper_allow_without_login`
+- `paper_seed_krw`
+
 ---
 
 ## 테스트
@@ -85,12 +93,30 @@ v3.2 신규 테스트:
 - `tests/test_strategy_engine_ensemble.py`
 - `tests/test_paper_order_service.py`
 
+v3.2.1 안정화 테스트:
+- `tests/test_reported_risk_fixes.py`
+
+v3.2.1 안정화 테스트:
+- `tests/test_reported_risk_fixes.py`
+
 ---
 
 ## 작업 시 주의사항
 - 주문/체결 코드 수정 시 pending 정리 경로 누락 금지
 - `paper mode`에서는 live API 주문 함수가 호출되지 않아야 함
 - `upbit_analytics.py`는 기록 키(`timestamp` vs `datetime`) 불일치 위험이 있어 수정 시 주의
+
+## v3.2.1 반영 요약 (2026-02-20)
+- 배치 체결확인 경로(`execute_batch_buy`, `execute_batch_sell`, `execute_emergency_close`)에서 `session_id` 전달 누락 보완
+- 전량 매도 체결 후 상태를 `매도완료`가 아닌 `감시중`으로 복귀해 재진입 루프 정합성 확보
+- `upbit_analytics.py`는 `timestamp` 우선, `datetime` fallback 방식으로 집계 키 정규화 적용
+- 페이퍼 모드 무로그인 시작 및 초기 시드 정책(기본 10,000,000 KRW) 반영
+
+## v3.2.1 반영 요약 (2026-02-20)
+- 배치 체결확인 경로(`execute_batch_buy`, `execute_batch_sell`, `execute_emergency_close`)에서 `session_id` 전달 누락 보완
+- 전량 매도 체결 후 상태를 `매도완료`가 아닌 `감시중`으로 복귀해 재진입 루프 정합성 확보
+- `upbit_analytics.py`는 `timestamp` 우선, `datetime` fallback 방식으로 집계 키 정규화 적용
+- 페이퍼 모드 무로그인 시작 및 초기 시드 정책(기본 10,000,000 KRW) 반영
 
 ---
 

@@ -46,9 +46,8 @@ class TraderTradingController:
                 self.lbl_balance.setText(f"💰 주문가능금액: {balance:,.0f} 원")
                 self.lbl_connection.setText("● 연결됨")
                 self.lbl_connection.setStyleSheet("color: #00b894; font-weight: bold;")
-                self.btn_start.setEnabled(True)
-                self.btn_batch_sell.setEnabled(True)
-                self.btn_batch_buy.setEnabled(True)
+                if hasattr(self, "refresh_trade_action_buttons"):
+                    self.refresh_trade_action_buttons()
                 
                 self.log(f"✅ 업비트 API 연결 성공 (잔고: {balance:,.0f}원)")
                 self.logger.info(f"API 연결 성공, 잔고: {balance:,.0f}원")
@@ -61,6 +60,8 @@ class TraderTradingController:
             self.lbl_connection.setStyleSheet("color: #e63946; font-weight: bold;")
             self.log(f"❌ API 연결 실패: {e}")
             self.logger.error(f"API 연결 실패: {e}")
+            if hasattr(self, "refresh_trade_action_buttons"):
+                self.refresh_trade_action_buttons()
             QMessageBox.critical(self, "오류", f"API 연결에 실패했습니다.\n{e}")
 
     def get_balance(self):
@@ -91,7 +92,8 @@ class TraderTradingController:
 
     def start_trading(self):
         """매매 시작"""
-        if not self.upbit or not self.is_connected:
+        allow_paper_no_login = self._is_paper_mode() and self._allow_paper_without_login()
+        if (not self.upbit or not self.is_connected) and not allow_paper_no_login:
             QMessageBox.warning(self, "경고", "먼저 업비트 API에 연결해주세요.")
             return
 
@@ -116,6 +118,13 @@ class TraderTradingController:
         self._ensure_order_stability_state()
         self._next_trading_session()
         self._seed_paper_balance_once()
+        if self._is_paper_mode():
+            self.get_balance()
+            if float(getattr(self, "balance", 0.0) or 0.0) <= 0:
+                QMessageBox.warning(self, "경고", "페이퍼 잔고가 0원입니다. 초기 시드를 확인해주세요.")
+                return
+            if float(getattr(self, "initial_balance", 0.0) or 0.0) <= 0:
+                self.initial_balance = float(self.balance)
         self._reconcile_pending_orders(force=False)
         self._ensure_indicator_cache_state()
         self._indicator_cache.clear()
@@ -206,7 +215,8 @@ class TraderTradingController:
         self.price_thread.wait(2000)
         self._reconcile_pending_orders(force=True)
         
-        self.btn_start.setEnabled(True)
+        if hasattr(self, "refresh_trade_action_buttons"):
+            self.refresh_trade_action_buttons()
         self.btn_stop.setEnabled(False)
         self.status_trading.setText("● 중지됨")
         self.status_trading.setStyleSheet("color: #e63946;")
@@ -465,6 +475,14 @@ class TraderTradingController:
                 self._reserved_krw_by_ticker.pop(ticker, None)
     def _is_paper_mode(self):
         return bool(hasattr(self, "chk_paper_trading") and self.chk_paper_trading.isChecked())
+    def _allow_paper_without_login(self):
+        if hasattr(self, "chk_paper_allow_without_login"):
+            return bool(self.chk_paper_allow_without_login.isChecked())
+        return bool(getattr(Config, "DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN", True))
+    def _get_paper_seed_krw(self):
+        if hasattr(self, "spin_paper_seed_krw"):
+            return max(0.0, float(self.spin_paper_seed_krw.value() or 0.0))
+        return float(getattr(Config, "DEFAULT_PAPER_SEED_KRW", 10_000_000) or 0.0)
     def _ensure_paper_service_state(self):
         svc = getattr(self, "paper_order_service", None)
         if svc is None:
@@ -484,12 +502,16 @@ class TraderTradingController:
             if hasattr(self, "_paper_seeded") and self._paper_seeded:
                 return
             seed = float(getattr(self, "balance", 0.0) or 0.0)
-            if seed <= 0 and getattr(self, "upbit", None):
+            if seed <= 0 and getattr(self, "upbit", None) and getattr(self, "is_connected", False):
                 api_balance = self.upbit.get_balance("KRW")
                 if api_balance is not None:
                     seed = float(api_balance)
+            if seed <= 0:
+                seed = self._get_paper_seed_krw()
             if seed > 0:
                 svc.seed_balance(seed)
+                if float(getattr(self, "balance", 0.0) or 0.0) <= 0:
+                    self.balance = float(seed)
             self._paper_seeded = True
         except Exception:
             return
@@ -733,7 +755,11 @@ class TraderTradingController:
         avg_volume = None
         if len(df) >= volume_period:
             current_volume = float(df.iloc[-1]['volume'])
-            avg_volume = float(df['volume'].iloc[:-1].mean())
+            prev_volumes = df['volume'].iloc[-(volume_period + 1):-1]
+            if len(prev_volumes) > 0:
+                avg_volume = float(prev_volumes.mean())
+            else:
+                avg_volume = float(df['volume'].iloc[:-1].mean()) if len(df) > 1 else 0.0
         bb_upper = bb_middle = bb_lower = None
         if len(df) >= bb_period:
             bb_middle = float(close.rolling(window=bb_period).mean().iloc[-1])
@@ -1645,9 +1671,28 @@ class TraderTradingController:
                 self.lbl_total_profit.setText(profit_text)
                 
                 info['qty'] = 0
-                info['state'] = '매도완료'
+                info['state'] = '감시중'
+                info['buy_price'] = 0
+                info['invest_amt'] = 0
+                info['high_since_buy'] = 0
+                info['max_profit_rate'] = 0.0
                 info['partial_sold'] = []
-                self.set_table_item(info['row'], 4, "✅ 청산완료", "#6c757d")
+                self.set_table_item(info['row'], 4, "👀 감시중", "#00b894")
+                qty_item = info.get('ui_items', {}).get('qty')
+                if qty_item is not None:
+                    qty_item.setText("0.00000000")
+                buy_price_item = info.get('ui_items', {}).get('buy_price')
+                if buy_price_item is not None:
+                    buy_price_item.setText("-")
+                invest_item = info.get('ui_items', {}).get('invest')
+                if invest_item is not None:
+                    invest_item.setText("-")
+                profit_item = info.get('ui_items', {}).get('profit')
+                if profit_item is not None:
+                    profit_item.setText("-")
+                max_profit_item = info.get('ui_items', {}).get('max_profit')
+                if max_profit_item is not None:
+                    max_profit_item.setText("-")
 
                 if self.strategy:
                     self.strategy.update_consecutive_results(profit > 0)

@@ -104,6 +104,7 @@ class TraderUIController:
         main_layout.addWidget(scroll_area)
         
         self.create_statusbar()
+        self.refresh_trade_action_buttons()
 
     def create_dashboard(self):
         """대시보드 생성"""
@@ -490,6 +491,13 @@ class TraderUIController:
         self.chk_paper_trading.setChecked(Config.DEFAULT_PAPER_TRADING)
         self.chk_paper_trading.setToolTip(Config.TOOLTIPS.get("paper_trading", ""))
         paper_layout.addWidget(self.chk_paper_trading, 0, 0, 1, 2)
+        self.chk_paper_trading.toggled.connect(lambda _checked: self.refresh_trade_action_buttons())
+
+        self.chk_paper_allow_without_login = QCheckBox("무로그인 시작 허용")
+        self.chk_paper_allow_without_login.setChecked(Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN)
+        self.chk_paper_allow_without_login.setToolTip(Config.TOOLTIPS.get("paper_allow_without_login", ""))
+        paper_layout.addWidget(self.chk_paper_allow_without_login, 0, 2, 1, 2)
+        self.chk_paper_allow_without_login.toggled.connect(lambda _checked: self.refresh_trade_action_buttons())
 
         paper_layout.addWidget(QLabel("수수료(bps):"), 1, 0)
         self.spin_paper_fee_bps = QDoubleSpinBox()
@@ -504,6 +512,15 @@ class TraderUIController:
         self.spin_paper_slippage_bps.setSingleStep(0.5)
         self.spin_paper_slippage_bps.setValue(Config.DEFAULT_PAPER_SLIPPAGE_BPS)
         paper_layout.addWidget(self.spin_paper_slippage_bps, 1, 3)
+
+        paper_layout.addWidget(QLabel("초기 시드(KRW):"), 2, 0)
+        self.spin_paper_seed_krw = QDoubleSpinBox()
+        self.spin_paper_seed_krw.setRange(100000.0, 1000000000.0)
+        self.spin_paper_seed_krw.setSingleStep(100000.0)
+        self.spin_paper_seed_krw.setDecimals(0)
+        self.spin_paper_seed_krw.setValue(float(Config.DEFAULT_PAPER_SEED_KRW))
+        self.spin_paper_seed_krw.setToolTip(Config.TOOLTIPS.get("paper_seed_krw", ""))
+        paper_layout.addWidget(self.spin_paper_seed_krw, 2, 1)
         group_paper.setLayout(paper_layout)
         layout.addWidget(group_paper)
         
@@ -869,6 +886,8 @@ class TraderUIController:
             'active_strategies': self.input_active_strategies.text().strip() if hasattr(self, "input_active_strategies") else ",".join(Config.DEFAULT_ACTIVE_STRATEGIES),
             'strategy_weights': self.input_strategy_weights.text().strip() if hasattr(self, "input_strategy_weights") else "",
             'paper_trading': self.chk_paper_trading.isChecked() if hasattr(self, "chk_paper_trading") else Config.DEFAULT_PAPER_TRADING,
+            'paper_allow_without_login': self.chk_paper_allow_without_login.isChecked() if hasattr(self, "chk_paper_allow_without_login") else Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN,
+            'paper_seed_krw': self.spin_paper_seed_krw.value() if hasattr(self, "spin_paper_seed_krw") else Config.DEFAULT_PAPER_SEED_KRW,
             'paper_fee_bps': self.spin_paper_fee_bps.value() if hasattr(self, "spin_paper_fee_bps") else Config.DEFAULT_PAPER_FEE_BPS,
             'paper_slippage_bps': self.spin_paper_slippage_bps.value() if hasattr(self, "spin_paper_slippage_bps") else Config.DEFAULT_PAPER_SLIPPAGE_BPS,
         }
@@ -914,6 +933,10 @@ class TraderUIController:
             self.input_strategy_weights.setText(str(preset['strategy_weights']))
         if hasattr(self, "chk_paper_trading") and 'paper_trading' in preset:
             self.chk_paper_trading.setChecked(bool(preset['paper_trading']))
+        if hasattr(self, "chk_paper_allow_without_login") and 'paper_allow_without_login' in preset:
+            self.chk_paper_allow_without_login.setChecked(bool(preset['paper_allow_without_login']))
+        if hasattr(self, "spin_paper_seed_krw") and 'paper_seed_krw' in preset:
+            self.spin_paper_seed_krw.setValue(float(preset['paper_seed_krw']))
         if hasattr(self, "spin_paper_fee_bps") and 'paper_fee_bps' in preset:
             self.spin_paper_fee_bps.setValue(float(preset['paper_fee_bps']))
         if hasattr(self, "spin_paper_slippage_bps") and 'paper_slippage_bps' in preset:
@@ -922,6 +945,22 @@ class TraderUIController:
         name = preset.get('name', '사용자 정의')
         self.lbl_current_preset.setText(f"✅ 현재 프리셋: {name}")
         self.log(f"📋 {name} 프리셋 적용됨")
+        self.refresh_trade_action_buttons()
+
+    def _paper_no_login_allowed(self):
+        if not hasattr(self, "chk_paper_trading") or not self.chk_paper_trading.isChecked():
+            return False
+        if hasattr(self, "chk_paper_allow_without_login"):
+            return bool(self.chk_paper_allow_without_login.isChecked())
+        return bool(Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN)
+
+    def refresh_trade_action_buttons(self):
+        connected = bool(getattr(self, "is_connected", False) and getattr(self, "upbit", None))
+        enabled = connected or self._paper_no_login_allowed()
+        for attr in ("btn_start", "btn_batch_buy", "btn_batch_sell"):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                btn.setEnabled(enabled)
 
     def show_help(self):
         """도움말 다이얼로그 표시"""

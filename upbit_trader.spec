@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Upbit Pro Algo-Trader v3.1 PyInstaller spec (onefile).
+Upbit Pro Algo-Trader v3.2.1 PyInstaller spec (onefile).
 
 Build:
   pyinstaller --noconfirm --clean upbit_trader.spec
   # If this repo is on Google Drive (G:) and you see PermissionError writing .exe:
-  # pyinstaller --noconfirm --clean --distpath C:\temp\upbit_dist --workpath C:\temp\upbit_build upbit_trader.spec
+  # pyinstaller --noconfirm --clean --distpath C:\\temp\\upbit_dist --workpath C:\\temp\\upbit_build upbit_trader.spec
 
 Output:
   dist/UpbitTrader.exe
@@ -46,8 +46,13 @@ hiddenimports = [
     "upbit_security",
     "upbit_settings_store",
     "upbit_order_service",
+    "upbit_paper_order_service",
     "upbit_holdings_service",
     "upbit_entry_filter",
+    "upbit_strategy_engine",
+    "upbit_strategy_catalog",
+    "upbit_analytics",
+    "upbit_backtester",
 
     # setuptools/pkg_resources sometimes pulls these in indirectly
     "jaraco.text",
@@ -85,6 +90,13 @@ a = Analysis(
         "PyQt6.QtQuick",
         "PyQt6.Qt3DCore",
         "PyQt6.Qt3DRender",
+        "PyQt5",
+        "PyQt5.QtCore",
+        "PyQt5.QtGui",
+        "PyQt5.QtWidgets",
+        "PySide2",
+        "PySide6",
+        "qtpy",
         "ipython",
         "unittest",
         "test",

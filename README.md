@@ -29,6 +29,15 @@
   - 변동성 타게팅, 레짐 필터, 드로우다운 가드
 - 백테스트 전략 레지스트리/선택 실행 지원
 
+### v3.2.1 안정화 업데이트 (2026-02-20)
+- 배치/긴급청산 체결확인 콜백에 `session_id` 전달 경로를 보강하여 stale callback 오염 가능성 완화
+- 전량 매도 체결 후 상태를 `감시중`으로 복귀시켜 자동 재진입 루프 정상화
+- 분석 모듈에서 거래일시 키를 `timestamp` 우선(`datetime` fallback)으로 정규화
+- 거래량 필터 평균 계산을 `volume_period` 윈도우 기준으로 정합화
+- 히스토리 로딩/표시/오늘기록삭제 경로에 레거시/오염 레코드 방어 처리 추가
+- 페이퍼 모드에 무로그인 시작 옵션 및 초기 시드(`paper_seed_krw`) 설정 추가
+- Universe 외부 자산 배치 청산 시 평균단가 기반 손익 기록 지원
+
 ---
 
 ## 요구사항
@@ -84,6 +93,8 @@ python upbit_trader.py
 ## 페이퍼 트레이딩
 
 - UI에서 `페이퍼 트레이딩 사용` 활성화 시 실주문 대신 모의 체결 수행
+- `무로그인 시작 허용` 활성화 시 API 로그인 없이 페이퍼 모드 시작 가능
+- `초기 시드(KRW)`로 무로그인 시작 시 모의 잔고 초기값 지정 가능 (기본 10,000,000 KRW)
 - 수수료(bps), 슬리피지(bps) 조정 가능
 - 기존 체결확인/거래기록 루틴과 호환되도록 order dict 형식 유지
 
@@ -155,6 +166,7 @@ python -m pytest -q
 - `tests/test_strategy_engine_signals.py` (v3.2)
 - `tests/test_strategy_engine_ensemble.py` (v3.2)
 - `tests/test_paper_order_service.py` (v3.2)
+- `tests/test_reported_risk_fixes.py` (v3.2.1)
 
 ---
 
@@ -168,6 +180,15 @@ python -m pytest -q
 ---
 
 ## 변경 이력
+
+### v3.2.1 (2026-02-20)
+- 세션 안정성: 배치/긴급청산 체결확인 콜백의 `session_id` 전달 누락 보강
+- 상태 전이: 전량 매도 후 `매도완료` 고착 대신 `감시중` 복귀
+- 분석 정확도: `timestamp` 우선 집계로 일/월 리포트 누락 리스크 완화
+- 필터 정합성: 거래량 평균 계산을 `volume_period` 기준으로 수정
+- 히스토리 내구성: malformed/legacy 레코드 방어 로직 추가
+- 페이퍼 UX: 무로그인 시작 허용 + 초기 시드 설정(`paper_allow_without_login`, `paper_seed_krw`)
+- 외부 청산 기록: Universe 외부 자산 청산 손익 기록 개선
 
 ### v3.2 (2026-02-18)
 - 전략 엔진(`single`/`ensemble`) 추가

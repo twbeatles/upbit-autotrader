@@ -35,6 +35,30 @@ except ImportError:
 
 
 class TraderHistoryController:
+    @staticmethod
+    def _safe_float(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    @staticmethod
+    def _extract_record_timestamp(record):
+        if not isinstance(record, dict):
+            return ""
+        raw = record.get("timestamp") or record.get("datetime") or ""
+        return str(raw)
+
+    @staticmethod
+    def _parse_record_datetime(record):
+        raw = TraderHistoryController._extract_record_timestamp(record).strip()
+        if not raw:
+            return None
+        try:
+            return datetime.datetime.fromisoformat(raw)
+        except Exception:
+            return None
+
     def _ensure_history_flush_state(self):
         if not hasattr(self, "_history_dirty"):
             self._history_dirty = False
@@ -117,8 +141,12 @@ class TraderHistoryController:
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         
         if reply == QMessageBox.StandardButton.Yes:
-            self.trade_history = [r for r in self.trade_history 
-                                  if not r['timestamp'].startswith(today)]
+            filtered = []
+            for record in self.trade_history:
+                ts = self._extract_record_timestamp(record)
+                if not ts.startswith(today):
+                    filtered.append(record)
+            self.trade_history = filtered
             self.save_trade_history()
             self.history_table.setRowCount(0)
             self._load_history_to_table()
@@ -288,26 +316,31 @@ class TraderHistoryController:
         row = self.history_table.rowCount()
         self.history_table.insertRow(row)
         
-        # 타임스탬프 파싱
-        ts = datetime.datetime.fromisoformat(record['timestamp'])
+        ts = self._parse_record_datetime(record)
+        ts_text = ts.strftime("%m/%d %H:%M") if ts else "-"
+        ticker = str(record.get('ticker', '-'))
+        trade_type = str(record.get('type', '-'))
+        price = self._safe_float(record.get('price', 0.0), 0.0)
+        amount = self._safe_float(record.get('amount', 0.0), 0.0)
+        profit = self._safe_float(record.get('profit', 0.0), 0.0)
         
-        self.history_table.setItem(row, 0, QTableWidgetItem(ts.strftime("%m/%d %H:%M")))
-        self.history_table.setItem(row, 1, QTableWidgetItem(record['ticker']))
+        self.history_table.setItem(row, 0, QTableWidgetItem(ts_text))
+        self.history_table.setItem(row, 1, QTableWidgetItem(ticker))
         
-        type_item = QTableWidgetItem(record['type'])
-        if record['type'] == 'BUY':
+        type_item = QTableWidgetItem(trade_type)
+        if trade_type == 'BUY':
             type_item.setForeground(QColor("#e63946"))
         else:
             type_item.setForeground(QColor("#4361ee"))
         self.history_table.setItem(row, 2, type_item)
         
-        self.history_table.setItem(row, 3, QTableWidgetItem(f"{record['price']:,.0f}"))
-        self.history_table.setItem(row, 4, QTableWidgetItem(f"{record['amount']:,.0f}"))
+        self.history_table.setItem(row, 3, QTableWidgetItem(f"{price:,.0f}"))
+        self.history_table.setItem(row, 4, QTableWidgetItem(f"{amount:,.0f}"))
         
-        profit_item = QTableWidgetItem(f"{record['profit']:+,.0f}" if record['profit'] else "-")
-        if record['profit'] > 0:
+        profit_item = QTableWidgetItem(f"{profit:+,.0f}" if profit else "-")
+        if profit > 0:
             profit_item.setForeground(QColor("#e63946"))
-        elif record['profit'] < 0:
+        elif profit < 0:
             profit_item.setForeground(QColor("#4361ee"))
         self.history_table.setItem(row, 5, profit_item)
         

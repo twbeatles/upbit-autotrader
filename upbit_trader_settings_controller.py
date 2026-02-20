@@ -44,6 +44,8 @@ class TraderSettingsController:
             "drawdown_guard_pct": self.spin_drawdown_guard.value() if hasattr(self, "spin_drawdown_guard") else Config.DEFAULT_DRAWDOWN_GUARD_PCT,
             "max_consecutive_losses": self.spin_max_consecutive_losses.value() if hasattr(self, "spin_max_consecutive_losses") else Config.DEFAULT_MAX_CONSECUTIVE_LOSSES,
             "paper_trading": self.chk_paper_trading.isChecked() if hasattr(self, "chk_paper_trading") else Config.DEFAULT_PAPER_TRADING,
+            "paper_allow_without_login": self.chk_paper_allow_without_login.isChecked() if hasattr(self, "chk_paper_allow_without_login") else Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN,
+            "paper_seed_krw": self.spin_paper_seed_krw.value() if hasattr(self, "spin_paper_seed_krw") else Config.DEFAULT_PAPER_SEED_KRW,
             "paper_fee_bps": self.spin_paper_fee_bps.value() if hasattr(self, "spin_paper_fee_bps") else Config.DEFAULT_PAPER_FEE_BPS,
             "paper_slippage_bps": self.spin_paper_slippage_bps.value() if hasattr(self, "spin_paper_slippage_bps") else Config.DEFAULT_PAPER_SLIPPAGE_BPS,
             # API 키 저장 (DPAPI 암호화 저장소로 전달)
@@ -129,6 +131,10 @@ class TraderSettingsController:
                 self.spin_max_consecutive_losses.setValue(s.get("max_consecutive_losses", Config.DEFAULT_MAX_CONSECUTIVE_LOSSES))
             if hasattr(self, "chk_paper_trading"):
                 self.chk_paper_trading.setChecked(s.get("paper_trading", Config.DEFAULT_PAPER_TRADING))
+            if hasattr(self, "chk_paper_allow_without_login"):
+                self.chk_paper_allow_without_login.setChecked(s.get("paper_allow_without_login", Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN))
+            if hasattr(self, "spin_paper_seed_krw"):
+                self.spin_paper_seed_krw.setValue(float(s.get("paper_seed_krw", Config.DEFAULT_PAPER_SEED_KRW)))
             if hasattr(self, "spin_paper_fee_bps"):
                 self.spin_paper_fee_bps.setValue(s.get("paper_fee_bps", Config.DEFAULT_PAPER_FEE_BPS))
             if hasattr(self, "spin_paper_slippage_bps"):
@@ -166,6 +172,8 @@ class TraderSettingsController:
                 self.send_notification("Upbit Pro Trader", "저장된 API 키를 복호화하지 못했습니다.")
 
             self.log("📂 저장된 설정을 불러왔습니다")
+            if hasattr(self, "refresh_trade_action_buttons"):
+                self.refresh_trade_action_buttons()
         except Exception as e:
             self.log(f"[WARN] 설정 불러오기 실패: {e}")
 

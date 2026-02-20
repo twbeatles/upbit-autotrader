@@ -58,6 +58,27 @@ class UpbitTradingAnalytics:
     def refresh(self):
         """데이터 새로고침"""
         self.trade_history = self._load_history()
+
+    @staticmethod
+    def _safe_float(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    @staticmethod
+    def _extract_trade_dt(trade: Dict) -> Optional[datetime]:
+        raw = str(trade.get('timestamp') or trade.get('datetime') or '').strip()
+        if not raw:
+            return None
+        try:
+            return datetime.fromisoformat(raw)
+        except Exception:
+            pass
+        try:
+            return datetime.strptime(raw[:19], '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return None
     
     def get_daily_performance(self, days: int = 30) -> List[DailyPerformance]:
         """일별 성과 분석"""
@@ -72,13 +93,15 @@ class UpbitTradingAnalytics:
         
         for trade in self.trade_history:
             try:
-                trade_date = trade.get('datetime', '')[:10]
-                trade_dt = datetime.strptime(trade_date, '%Y-%m-%d')
+                trade_dt = self._extract_trade_dt(trade)
+                if trade_dt is None:
+                    continue
+                trade_date = trade_dt.date().isoformat()
                 
                 if trade_dt < cutoff:
                     continue
                 
-                profit = trade.get('profit', 0)
+                profit = self._safe_float(trade.get('profit', 0), 0.0)
                 
                 daily_data[trade_date]['trades'] += 1
                 daily_data[trade_date]['pnl'] += profit
@@ -156,8 +179,11 @@ class UpbitTradingAnalytics:
         
         for trade in self.trade_history:
             try:
-                month = trade.get('datetime', '')[:7]  # YYYY-MM
-                profit = trade.get('profit', 0)
+                trade_dt = self._extract_trade_dt(trade)
+                if trade_dt is None:
+                    continue
+                month = trade_dt.strftime('%Y-%m')  # YYYY-MM
+                profit = self._safe_float(trade.get('profit', 0), 0.0)
                 
                 monthly[month]['trades'] += 1
                 monthly[month]['pnl'] += profit
