@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Upbit Pro Algo-Trader v3.2.1 PyInstaller spec (onefile).
+Upbit Pro Algo-Trader v3.2.2 PyInstaller spec (onefile).
 
 Build:
   pyinstaller --noconfirm --clean upbit_trader.spec
@@ -12,6 +12,7 @@ Output:
 """
 
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules
 
 block_cipher = None
 
@@ -33,7 +34,7 @@ hiddenimports = [
     "PyQt6.QtGui",
     "PyQt6.sip",
 
-    # Local modules that can be imported dynamically/optionally
+    # Legacy compatibility wrappers (root-level)
     "upbit_strategy",
     "upbit_dialogs",
     "upbit_dialog_fallbacks",
@@ -61,6 +62,9 @@ hiddenimports = [
     "jaraco.functools",
     "platformdirs",
 ]
+
+# Refactored package modules (v3.2.2+)
+hiddenimports += collect_submodules("upbit_autotrader")
 
 # NOTE: Do not bundle local .py files as data; PyInstaller packages them as modules.
 datas = []

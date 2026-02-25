@@ -1,102 +1,65 @@
-﻿# Upbit Pro Algo-Trader v3.2
+﻿# Upbit Pro Algo-Trader v3.2.2
 
-업비트 OpenAPI 기반 자동매매 프로그램 - Gemini AI 가이드
+업비트 OpenAPI 기반 자동매매 프로그램 - Gemini 작업 가이드
 
-## 프로젝트 개요
+## 현재 상태 요약
+- 버전: `v3.2.2` (2026-02-25)
+- 메인 실행: `python upbit_trader.py`
+- 내부 구조: `upbit_autotrader/` 패키지 기반으로 리팩토링 완료
+- 호환성: 루트 `upbit_*.py`는 하위 패키지를 재노출하는 래퍼
 
-| 항목 | 내용 |
-|------|------|
-| 언어 | Python 3.10+ |
-| GUI | PyQt6 |
-| API | pyupbit |
-| 버전 | v3.2 (2026-02-18) |
-| 메인 파일 | `upbit_trader.py` |
+## 패키지 구조
+```txt
+upbit_autotrader/
+  app/trader.py
+  controllers/
+  services/
+  strategies/
+  core/
+  runtime/
+  analytics/
+  backtesting/
+  ui/
+```
 
----
+## 핵심 기능
+- 전략 엔진(`single`, `ensemble`) + 진입 정책(`engine_gate_policy`)
+- 주문 상태머신(`submitted`, `wait`, `done`, `cancel`, `timeout`, `manual_review`, `reconciled`)
+- 타임아웃 복구(cancel/requery/manual review)
+- 세션 불일치 orphan 이벤트 기록 + 계좌 재동기화
+- 계좌 전체 보유 동기화(account-wide)
+- 리스크 계산 확장(실현 + 미실현 + 외부보유)
+- 페이퍼 트레이딩(무로그인 시작/시드/비용모델)
 
-## 모듈 구성 (핵심)
+## 빌드(.spec)
+- 파일: `upbit_trader.spec`
+- 기준: `v3.2.2`
+- 특징:
+  - 레거시 래퍼 hiddenimports 유지
+  - `collect_submodules("upbit_autotrader")`로 패키지 하위 모듈 자동 수집
 
-| 파일 | 역할 |
-|------|------|
-| `upbit_trader.py` | 앱 초기화, 컨트롤러 결합, 라이프사이클 |
-| `upbit_trader_ui_controller.py` | 화면/메뉴/전략 UI |
-| `upbit_trader_settings_controller.py` | 설정 저장/로드 |
-| `upbit_trader_trading_controller.py` | 진입/청산/주문/체결 |
-| `upbit_trader_batch_controller.py` | 일괄 주문/긴급 청산 |
-| `upbit_trader_history_controller.py` | 거래 내역/분석/백테스트 |
-| `upbit_strategy.py` | 기존 고급 리스크 상태 머신 |
-| `upbit_strategy_engine.py` | v3.2 전략 엔진 |
-| `upbit_strategy_catalog.py` | v3.2 전략 메타 |
-| `upbit_order_service.py` | live 주문 pending/중복 방지 |
-| `upbit_paper_order_service.py` | paper 모의 체결 서비스 |
-| `upbit_backtester.py` | 전략 레지스트리 기반 백테스트 |
-
----
-
-## v3.2 핵심 동작
-
-### 1) 전략 엔진
-- 모드
-  - `single`
-  - `ensemble`
-- 전략군
-  - 추세/모멘텀 4
-  - 평균회귀 3
-  - 리스크/메타 3
-
-### 2) 페이퍼 트레이딩
-- 실제 주문 API 대신 모의 체결
-- 수수료/슬리피지 파라미터 지원
-- live 체결 루틴과 호환되는 order dict 형식 사용
-
-### 3) 백테스트 확장
-- `STRATEGY_REGISTRY` 기반 전략 선택
-- 전략별 파라미터 주입 실행
-
----
-
-## 설정 스키마
-
-`settings_version: 2` 유지 + 신규 키 추가 방식
-
-신규 설정 예:
-- `use_strategy_engine`
-- `strategy_mode`
-- `single_strategy`
-- `ensemble_threshold`
-- `active_strategies`
-- `strategy_weights`
-- `paper_trading`
-- `paper_fee_bps`
-- `paper_slippage_bps`
-
----
+빌드 예시:
+```bash
+pyinstaller --noconfirm --clean upbit_trader.spec
+```
 
 ## 테스트
-
 실행:
-
 ```bash
 python -m pytest -q
 ```
 
-v3.2 신규:
-- `tests/test_strategy_engine_signals.py`
-- `tests/test_strategy_engine_ensemble.py`
-- `tests/test_paper_order_service.py`
+현재 기준:
+- 전체 테스트 통과: `60 passed`
 
----
+## 문서
+- 사용자 문서: `README.md`
+- 개발 가이드: `CLAUDE.md`
+- 구조 문서: `PROJECT_STRUCTURE_ANALYSIS.md`
+- 전략 문서: `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
+- 리스크 리뷰: `AUTO_TRADING_RISK_REVIEW_2026-02-25.md`
 
-## 주의사항
-
-1. 실거래 전 페이퍼 모드로 전략을 검증할 것
-2. 주문/체결 변경 시 pending 정리 경로를 반드시 유지할 것
-3. 설정 변경은 `settings_version`를 유지한 상태에서 키 추가만 권장
-
----
-
-## 참고 문서
-
-- `README.md`
-- `PROJECT_STRUCTURE_ANALYSIS.md`
-- `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
+## 작업 시 주의
+1. 컨트롤러/서비스 수정 시 루트 래퍼 import 호환성 유지 여부를 함께 확인
+2. 주문/체결 로직 수정 시 lifecycle 전이와 pending 정리 경로를 동시에 검증
+3. 문서 수정 시 README/CLAUDE/GEMINI/구조문서 간 경로·버전 정합성을 유지
