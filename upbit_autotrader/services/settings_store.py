@@ -1,4 +1,4 @@
-"""
+﻿"""
 Settings store with schema migration and DPAPI credential handling.
 """
 
@@ -6,7 +6,7 @@ import json
 import os
 from typing import Dict, Any
 
-from upbit_security import encrypt_dpapi, decrypt_dpapi, DPAPIError
+from upbit_autotrader.services.security import encrypt_dpapi, decrypt_dpapi, DPAPIError
 
 
 SETTINGS_VERSION = 2
@@ -63,4 +63,5 @@ def save_settings(path: str, settings: Dict[str, Any]) -> None:
 
     with open(path, "w", encoding="utf-8") as fp:
         json.dump(payload, fp, ensure_ascii=False, indent=2)
+
 

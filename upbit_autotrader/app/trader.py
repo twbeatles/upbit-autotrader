@@ -19,21 +19,21 @@ except ImportError:
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 
-from upbit_config import Config
-from upbit_order_service import UpbitOrderService
-from upbit_paper_order_service import UpbitPaperOrderService
-from upbit_price_thread import PriceUpdateThread
-from upbit_strategy_engine import StrategyEngine
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.services.paper_order_service import UpbitPaperOrderService
+from upbit_autotrader.runtime.price_thread import PriceUpdateThread
+from upbit_autotrader.strategies.engine import StrategyEngine
 from upbit_autotrader.execution.reconciliation_store import ReconciliationStore
 from upbit_autotrader.strategies.meta_signal import StrategyPerformanceTracker
-from upbit_trader_batch_controller import TraderBatchController
-from upbit_trader_history_controller import TraderHistoryController
-from upbit_trader_settings_controller import TraderSettingsController
-from upbit_trader_trading_controller import TraderTradingController
-from upbit_trader_ui_controller import TraderUIController
+from upbit_autotrader.controllers.batch_controller import TraderBatchController
+from upbit_autotrader.controllers.history_controller import TraderHistoryController
+from upbit_autotrader.controllers.settings_controller import TraderSettingsController
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
+from upbit_autotrader.controllers.ui_controller import TraderUIController
 
 try:
-    from upbit_strategy import UpbitStrategyManager
+    from upbit_autotrader.strategies.legacy_strategy import UpbitStrategyManager
     STRATEGY_MODULE_AVAILABLE = True
 except ImportError:
     UpbitStrategyManager = None
@@ -318,4 +318,5 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
 

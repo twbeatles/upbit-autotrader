@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Tuple
 
-from upbit_strategy_catalog import get_default_active_strategies, get_default_weights
+from upbit_autotrader.strategies.catalog import get_default_active_strategies, get_default_weights
 
 
 @dataclass
@@ -215,3 +215,4 @@ class StrategyEngine:
             if losses >= max_consecutive:
                 return False
         return True
+

@@ -1,4 +1,4 @@
-import os
+﻿import os
 
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -28,12 +28,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
-from upbit_config import Config
-from upbit_dialog_fallbacks import HelpDialog, PresetManagerDialog, SettingsDialog
-from upbit_strategy_catalog import STRATEGY_CATALOG, get_default_active_strategies, get_default_weights
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.ui.dialog_fallbacks import HelpDialog, PresetManagerDialog, SettingsDialog
+from upbit_autotrader.strategies.catalog import STRATEGY_CATALOG, get_default_active_strategies, get_default_weights
 
 try:
-    from upbit_dialogs import (
+    from upbit_autotrader.ui.dialogs import (
         DARK_STYLESHEET,
         HelpDialog as HelpDialogV3,
         PresetManagerDialog as PresetManagerDialogV3,
@@ -46,13 +46,13 @@ except ImportError:
     SettingsDialogV3 = None
 
 try:
-    from upbit_analytics import UpbitTradingAnalytics  # noqa: F401
+    from upbit_autotrader.analytics.trading_analytics import UpbitTradingAnalytics  # noqa: F401
     ANALYTICS_AVAILABLE = True
 except ImportError:
     ANALYTICS_AVAILABLE = False
 
 try:
-    from upbit_backtester import UpbitBacktestEngine, volatility_breakout_strategy  # noqa: F401
+    from upbit_autotrader.backtesting.backtester import UpbitBacktestEngine, volatility_breakout_strategy  # noqa: F401
     BACKTESTER_AVAILABLE = True
 except ImportError:
     BACKTESTER_AVAILABLE = False
@@ -1246,4 +1246,5 @@ class TraderUIController:
             self.system_settings.update(new_settings)
             self.save_settings()
             self.log("⚙️ 시스템 설정이 저장되었습니다")
+
 

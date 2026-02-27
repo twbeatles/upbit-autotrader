@@ -3,14 +3,14 @@
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox, QInputDialog
 
-from upbit_holdings_service import get_account_holdings as get_account_holdings_v2
+from upbit_autotrader.services.holdings_service import get_account_holdings as get_account_holdings_v2
 try:
     import pyupbit
 except ImportError:
     pyupbit = None
 
 try:
-    from upbit_dialogs import EmergencyCloseDialog
+    from upbit_autotrader.ui.dialogs import EmergencyCloseDialog
     V3_MODULES_AVAILABLE = True
 except ImportError:
     EmergencyCloseDialog = None
@@ -660,6 +660,7 @@ class TraderBatchController:
                 else:
                     self.order_service.clear_pending(ticker)
             self.log(f"[ERROR] [{ticker}] {context_label} 체결 확인 실패: {e}")
+
 
 
 

@@ -1,5 +1,5 @@
-﻿from upbit_order_service import UpbitOrderService
-from upbit_trader_trading_controller import TraderTradingController
+﻿from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _Check:
@@ -98,3 +98,4 @@ def test_risk_limits_uses_account_wide_holdings_count_for_limit():
     snapshot = trader._get_risk_snapshot(force=True)
     assert int(snapshot.get("holdings_count", 0)) == 2
     assert trader.check_risk_limits() is False
+

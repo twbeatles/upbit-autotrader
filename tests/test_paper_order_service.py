@@ -1,4 +1,4 @@
-﻿from upbit_paper_order_service import UpbitPaperOrderService
+﻿from upbit_autotrader.services.paper_order_service import UpbitPaperOrderService
 
 
 def test_paper_buy_and_sell_updates_balances_and_holdings():
@@ -40,3 +40,4 @@ def test_paper_order_can_be_queried():
     order = svc.get_order(result["uuid"])
     assert order is not None
     assert order["state"] == "done"
+

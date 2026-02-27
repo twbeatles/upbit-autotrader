@@ -2,7 +2,7 @@
 
 ## 1. 분석 범위
 - 참조 문서: `README.md`, `CLAUDE.md`, `GEMINI.md`, `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
-- 코드 범위: `upbit_autotrader/` 전체, 루트 `upbit_*.py` 호환 래퍼, `tests/`
+- 코드 범위: `upbit_autotrader/` 전체, 루트 엔트리포인트(`upbit_trader.py`), `legacy_wrappers/`, `tests/`
 - 목표: 현재 자동매매 구조를 면밀히 분석하고, 추가 가능한 기능/거래 계산 로직을 구조 기준으로 제안
 
 ## 2. 현재 아키텍처 요약
@@ -25,9 +25,10 @@ upbit_autotrader/
 
 ### 2.2 실행/호환 구조
 - 실제 실행 엔트리: `upbit_autotrader/app/trader.py`
-- 루트 `upbit_trader.py` 및 `upbit_*.py`는 하위 패키지로 재노출하는 호환 레이어
-- 장점: 기존 import 호환성 유지
-- 리스크: 래퍼 + 실제 모듈의 이중 참조로 구조 이해 난이도 증가
+- 루트 엔트리포인트는 `upbit_trader.py`만 유지
+- 과거 호환 래퍼(`upbit_*.py`)는 `legacy_wrappers/`에 기능별로 정리
+- 장점: 루트 가독성 개선, 내부 import 경로 단일화
+- 리스크: 레거시 루트 import 의존 코드와의 직접 호환성은 축소됨
 
 ### 2.3 컨트롤러 중심 오케스트레이션
 - `UpbitProTrader`가 다중 컨트롤러 믹스인 조합

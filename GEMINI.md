@@ -6,7 +6,7 @@
 - 기준 버전: `v3.3.0` (2026-02-27)
 - 메인 실행: `python upbit_trader.py`
 - 내부 구조: `upbit_autotrader/` 패키지 기반
-- 호환성: 루트 `upbit_*.py`는 하위 패키지를 재노출하는 래퍼
+- 호환성: 루트는 `upbit_trader.py` 엔트리포인트만 유지, 기존 래퍼는 `legacy_wrappers/`로 이동
 - 정책: 신규 기능 기본 `OFF`로 기존 동작 유지
 
 ## 패키지 구조(핵심)
@@ -40,7 +40,6 @@ upbit_autotrader/
 - 파일: `upbit_trader.spec`
 - 기준: `v3.3.0`
 - 특징:
-  - 레거시 래퍼 hiddenimports 유지
   - `collect_submodules("upbit_autotrader")`로 `risk/`, `execution/`, `strategies/meta_signal.py` 자동 수집
 
 빌드 예시:

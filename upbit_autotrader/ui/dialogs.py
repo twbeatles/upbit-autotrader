@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from upbit_config import Config
+from upbit_autotrader.core.config import Config
 
 
 DARK_STYLESHEET = """
@@ -466,3 +466,4 @@ class EmergencyCloseDialog(QDialog):
         self.chk_confirm.stateChanged.connect(
             lambda _state: self.btn_confirm.setEnabled(self.chk_confirm.isChecked())
         )
+

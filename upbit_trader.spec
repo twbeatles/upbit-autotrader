@@ -34,27 +34,6 @@ hiddenimports = [
     "PyQt6.QtGui",
     "PyQt6.sip",
 
-    # Legacy compatibility wrappers (root-level)
-    "upbit_strategy",
-    "upbit_dialogs",
-    "upbit_dialog_fallbacks",
-    "upbit_trader_ui_controller",
-    "upbit_trader_settings_controller",
-    "upbit_trader_history_controller",
-    "upbit_trader_trading_controller",
-    "upbit_trader_batch_controller",
-    "upbit_price_thread",
-    "upbit_security",
-    "upbit_settings_store",
-    "upbit_order_service",
-    "upbit_paper_order_service",
-    "upbit_holdings_service",
-    "upbit_entry_filter",
-    "upbit_strategy_engine",
-    "upbit_strategy_catalog",
-    "upbit_analytics",
-    "upbit_backtester",
-
     # setuptools/pkg_resources sometimes pulls these in indirectly
     "jaraco.text",
     "jaraco.classes",

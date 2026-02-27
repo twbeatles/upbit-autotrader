@@ -16,7 +16,8 @@ upbit_autotrader/
   analytics/, backtesting/, ui/, notifications/
 ```
 
-루트 `upbit_*.py` 파일은 하위 패키지 모듈을 재노출하는 호환 래퍼입니다.
+루트 엔트리포인트는 `upbit_trader.py`만 유지합니다.
+기존 호환 래퍼는 `legacy_wrappers/`로 기능별 정리되었습니다.
 
 ## 호환성 원칙
 - 실행 진입점 유지: `python upbit_trader.py`

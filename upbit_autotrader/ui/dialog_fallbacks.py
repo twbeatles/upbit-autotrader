@@ -26,10 +26,10 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
 )
 
-from upbit_config import Config
+from upbit_autotrader.core.config import Config
 
 try:
-    from upbit_dialogs import DARK_STYLESHEET
+    from upbit_autotrader.ui.dialogs import DARK_STYLESHEET
 except Exception:
     DARK_STYLESHEET = ""
 
@@ -331,3 +331,4 @@ class SettingsDialog(QDialog):
             "auto_connect": self.chk_auto_connect.isChecked(),
             "sound_enabled": self.chk_sound_enabled.isChecked(),
         }
+

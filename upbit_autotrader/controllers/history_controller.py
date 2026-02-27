@@ -18,16 +18,16 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from upbit_config import Config
+from upbit_autotrader.core.config import Config
 
 try:
-    from upbit_analytics import UpbitTradingAnalytics
+    from upbit_autotrader.analytics.trading_analytics import UpbitTradingAnalytics
     ANALYTICS_AVAILABLE = True
 except ImportError:
     ANALYTICS_AVAILABLE = False
 
 try:
-    from upbit_backtester import UpbitBacktestEngine, volatility_breakout_strategy, get_strategy_registry
+    from upbit_autotrader.backtesting.backtester import UpbitBacktestEngine, volatility_breakout_strategy, get_strategy_registry
     BACKTESTER_AVAILABLE = True
 except ImportError:
     get_strategy_registry = None
@@ -372,5 +372,6 @@ class TraderHistoryController:
     # ------------------------------------------------------------------
     # v3.0: 긴급 청산
     # ------------------------------------------------------------------
+
 
 

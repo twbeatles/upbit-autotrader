@@ -1,9 +1,9 @@
-import logging
+﻿import logging
 import threading
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from upbit_config import Config
+from upbit_autotrader.core.config import Config
 
 try:
     import pyupbit
@@ -48,3 +48,4 @@ class PriceUpdateThread(QThread):
     def stop(self):
         self.is_running = False
         self._stop_event.set()
+

@@ -3,11 +3,11 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pandas as pd
 
-from upbit_config import Config
-from upbit_price_thread import PriceUpdateThread
-from upbit_strategy import UpbitStrategyManager
-from upbit_trader_history_controller import TraderHistoryController
-from upbit_trader_trading_controller import TraderTradingController
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.runtime.price_thread import PriceUpdateThread
+from upbit_autotrader.strategies.legacy_strategy import UpbitStrategyManager
+from upbit_autotrader.controllers.history_controller import TraderHistoryController
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _DummyLogger:
@@ -97,7 +97,7 @@ def test_indicator_cache_deduplicates_ohlcv_calls():
     trader = _IndicatorTrader()
     df = _build_ohlcv()
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
         ticker = "KRW-BTC"
         trader.calculate_rsi(ticker, 14)
         trader.calculate_macd(ticker)
@@ -134,7 +134,7 @@ def test_check_buy_condition_reuses_snapshot_with_entry_scoring():
     df = _build_ohlcv()
     info = {"target": 1000, "ma5": 995, "qty": 0, "state": "감시중"}
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
         trader._check_buy_condition("KRW-BTC", 1100, info)
 
     assert trader.buy_calls == 1
@@ -151,7 +151,7 @@ def test_mtf_trend_cache_reduces_repeated_ohlcv():
     strategy = UpbitStrategyManager(_Trader())
     df = _build_ohlcv(20)
 
-    with patch("upbit_strategy.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
+    with patch("upbit_autotrader.strategies.legacy_strategy.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
         strategy.check_mtf_condition("KRW-BTC")
         strategy.check_mtf_condition("KRW-BTC")
 
@@ -190,9 +190,9 @@ def test_history_save_is_debounced():
 
     trader = _HistoryTrader()
 
-    with patch("upbit_trader_history_controller.QTimer", _FakeTimer), patch(
+    with patch("upbit_autotrader.controllers.history_controller.QTimer", _FakeTimer), patch(
         "builtins.open", mock_open()
-    ), patch("upbit_trader_history_controller.json.dump") as mock_dump:
+    ), patch("upbit_autotrader.controllers.history_controller.json.dump") as mock_dump:
         trader.add_trade_record("KRW-BTC", "BUY", 1000, 1)
         trader.add_trade_record("KRW-ETH", "BUY", 2000, 1)
         trader.add_trade_record("KRW-XRP", "SELL", 3000, 1)
@@ -206,7 +206,7 @@ def test_price_thread_stop_returns_quickly():
     thread = PriceUpdateThread()
     thread.set_coins(["KRW-BTC"])
 
-    with patch("upbit_price_thread.pyupbit.get_current_price", return_value={"KRW-BTC": 1000}):
+    with patch("upbit_autotrader.runtime.price_thread.pyupbit.get_current_price", return_value={"KRW-BTC": 1000}):
         thread.start()
         time.sleep(0.05)
         start = time.perf_counter()
@@ -221,7 +221,7 @@ def test_call_reduction_for_multi_ticker_multi_tick():
     trader = _IndicatorTrader()
     df = _build_ohlcv()
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
         for _ in range(30):
             for i in range(10):
                 ticker = f"KRW-T{i}"
@@ -261,7 +261,7 @@ def test_snapshot_expanded_indicators_still_single_api_call():
     df = _build_ohlcv()
     interval = Config.CANDLE_INTERVALS[Config.DEFAULT_CANDLE]
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_ohlcv", return_value=df) as mock_ohlcv:
         snap = trader._get_indicator_snapshot("KRW-BTC", interval)
         assert snap is not None
         assert "ema_fast" in snap
@@ -271,3 +271,5 @@ def test_snapshot_expanded_indicators_still_single_api_call():
         assert "realized_vol_pct" in snap
 
     assert mock_ohlcv.call_count == 1
+
+

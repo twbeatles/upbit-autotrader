@@ -1,5 +1,5 @@
-﻿from upbit_strategy_engine import StrategyConfig
-from upbit_trader_trading_controller import TraderTradingController
+﻿from upbit_autotrader.strategies.engine import StrategyConfig
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _Combo:
@@ -38,3 +38,4 @@ def test_strategy_aware_disables_legacy_hard_gate_for_mixed_ensemble():
     )
 
     assert trader._should_apply_legacy_entry_gate(cfg) is False
+

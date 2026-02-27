@@ -1,16 +1,16 @@
-import os
+﻿import os
 import sys
 import winreg
 
 from PyQt6.QtWidgets import QMessageBox
 
-from upbit_config import Config
+from upbit_autotrader.core.config import Config
 try:
-    from upbit_notifiers import EventType, UpbitNotificationManager
+    from upbit_autotrader.notifications.notifiers import EventType, UpbitNotificationManager
 except ImportError:
     EventType = None
     UpbitNotificationManager = None
-from upbit_settings_store import load_settings as load_settings_v2, save_settings as save_settings_v2
+from upbit_autotrader.services.settings_store import load_settings as load_settings_v2, save_settings as save_settings_v2
 
 
 class TraderSettingsController:
@@ -403,4 +403,5 @@ class TraderSettingsController:
             
             if reply == QMessageBox.StandardButton.Yes:
                 self.show_help()
+
 

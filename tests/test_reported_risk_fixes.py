@@ -1,4 +1,4 @@
-import datetime
+﻿import datetime
 import json
 import tempfile
 from unittest.mock import patch
@@ -6,12 +6,12 @@ from unittest.mock import patch
 import pandas as pd
 from PyQt6.QtWidgets import QMessageBox
 
-from upbit_analytics import UpbitTradingAnalytics
-from upbit_config import Config
-from upbit_order_service import UpbitOrderService
-from upbit_paper_order_service import UpbitPaperOrderService
-from upbit_trader_history_controller import TraderHistoryController
-from upbit_trader_trading_controller import TraderTradingController
+from upbit_autotrader.analytics.trading_analytics import UpbitTradingAnalytics
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.services.paper_order_service import UpbitPaperOrderService
+from upbit_autotrader.controllers.history_controller import TraderHistoryController
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _Spin:
@@ -161,7 +161,7 @@ def test_clear_today_history_handles_legacy_and_malformed_records():
 
     trader = _History()
     with patch(
-        "upbit_trader_history_controller.QMessageBox.question",
+        "upbit_autotrader.controllers.history_controller.QMessageBox.question",
         return_value=QMessageBox.StandardButton.Yes,
     ):
         trader.clear_today_history()
@@ -192,7 +192,7 @@ def test_indicator_snapshot_volume_avg_uses_volume_period_window():
     )
 
     trader = _Trader()
-    with patch("upbit_trader_trading_controller.pyupbit.get_ohlcv", return_value=df):
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_ohlcv", return_value=df):
         snap = trader._get_indicator_snapshot("KRW-BTC", "minute240", volume_period=3)
 
     assert snap is not None
@@ -243,9 +243,11 @@ def test_start_trading_allows_paper_mode_without_login_and_seeds_balance():
             return None
 
     trader = _Trader()
-    with patch("upbit_trader_trading_controller.pyupbit.get_current_price", return_value=1100):
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_current_price", return_value=1100):
         trader.start_trading()
 
     assert trader.is_running
     assert trader.universe
     assert trader.paper_order_service.get_krw_balance() >= 10_000_000.0
+
+

@@ -1,5 +1,5 @@
-﻿from upbit_order_service import UpbitOrderService
-from upbit_trader_trading_controller import TraderTradingController
+﻿from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _Check:
@@ -114,3 +114,4 @@ def test_session_mismatch_done_registers_orphan_and_reconciles_state():
     assert trader._sync_count == 1
     assert len(trader._orphan_events) == 1
     assert trader._orphan_events[0]["uuid"] == "buy-stale"
+

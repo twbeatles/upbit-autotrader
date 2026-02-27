@@ -1,9 +1,9 @@
 ﻿from unittest.mock import patch
 
-from upbit_config import Config
-from upbit_order_service import UpbitOrderService
-from upbit_paper_order_service import UpbitPaperOrderService
-from upbit_trader_trading_controller import TraderTradingController
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.services.paper_order_service import UpbitPaperOrderService
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _Text:
@@ -194,7 +194,7 @@ class _PaperTrader(_BaseTrader):
 def test_startup_sync_merges_watchlist_and_external_live_holdings():
     trader = _LiveTrader()
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_current_price", return_value=1100.0):
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_current_price", return_value=1100.0):
         trader.start_trading()
 
     assert trader.is_running is True
@@ -208,7 +208,7 @@ def test_startup_sync_merges_watchlist_and_external_live_holdings():
 def test_startup_sync_works_in_paper_mode_without_login():
     trader = _PaperTrader()
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_current_price", return_value=1100.0):
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_current_price", return_value=1100.0):
         trader.start_trading()
 
     assert trader.is_running is True
@@ -216,3 +216,5 @@ def test_startup_sync_works_in_paper_mode_without_login():
     assert "KRW-ETH" in trader.universe
     assert trader.universe["KRW-ETH"]["state"] == "보유중"
     assert abs(float(trader.universe["KRW-ETH"]["qty"]) - 1.5) < 1e-9
+
+

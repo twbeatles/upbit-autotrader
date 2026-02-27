@@ -6,17 +6,17 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox
 
-from upbit_config import Config
-from upbit_entry_filter import should_enter_by_score
-from upbit_strategy_catalog import get_default_active_strategies, get_default_weights
-from upbit_strategy_engine import StrategyConfig
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.core.entry_filter import should_enter_by_score
+from upbit_autotrader.strategies.catalog import get_default_active_strategies, get_default_weights
+from upbit_autotrader.strategies.engine import StrategyConfig
 from upbit_autotrader.execution.execution_model import ExecutionConfig, estimate_realized_slippage_bps, plan_execution
 from upbit_autotrader.risk.portfolio_risk import RiskLimitConfig, build_portfolio_risk_snapshot, evaluate_risk_limits
 from upbit_autotrader.risk.position_sizing import PositionSizingInput, compute_position_size
 from upbit_autotrader.strategies.meta_signal import MetaSignalInput, StrategyPerformanceTracker, evaluate_meta_signal
 
 try:
-    from upbit_notifiers import EventType
+    from upbit_autotrader.notifications.notifiers import EventType
 except ImportError:
     EventType = None
 
@@ -3178,5 +3178,6 @@ class TraderTradingController:
     # ------------------------------------------------------------------
     # v2.7: 도구 메뉴 함수
     # ------------------------------------------------------------------
+
 
 

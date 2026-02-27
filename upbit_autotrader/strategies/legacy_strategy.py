@@ -1,4 +1,4 @@
-"""
+﻿"""
 Upbit Pro Algo-Trader - 전략 매니저 모듈
 v3.0 (구조 리팩토링 + 고급 기능)
 
@@ -17,7 +17,7 @@ except ImportError:
     pyupbit = None
     pd = None
 
-from upbit_config import Config
+from upbit_autotrader.core.config import Config
 
 
 class UpbitStrategyManager:
@@ -681,3 +681,4 @@ class UpbitStrategyManager:
     def _get_interval_cache_ttl(self, interval: str) -> float:
         ttl_map = getattr(Config, "INDICATOR_CACHE_TTL_BY_INTERVAL", {})
         return float(ttl_map.get(interval, 5))
+

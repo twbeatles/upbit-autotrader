@@ -1,10 +1,10 @@
-from unittest.mock import patch
+﻿from unittest.mock import patch
 
 from PyQt6.QtWidgets import QMessageBox
 
-from upbit_order_service import UpbitOrderService
-from upbit_trader_batch_controller import TraderBatchController
-from upbit_trader_trading_controller import TraderTradingController
+from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.controllers.batch_controller import TraderBatchController
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _DummyLabel:
@@ -204,13 +204,13 @@ def test_batch_sell_routes_universe_and_external_paths():
     trader = _FakeBatchTrader()
 
     with patch(
-        "upbit_trader_batch_controller.QMessageBox.warning",
+        "upbit_autotrader.controllers.batch_controller.QMessageBox.warning",
         return_value=QMessageBox.StandardButton.Yes,
     ), patch(
-        "upbit_trader_batch_controller.QInputDialog.getText",
+        "upbit_autotrader.controllers.batch_controller.QInputDialog.getText",
         return_value=("2", True),
     ), patch(
-        "upbit_trader_batch_controller.QTimer.singleShot",
+        "upbit_autotrader.controllers.batch_controller.QTimer.singleShot",
         side_effect=lambda _ms, cb: cb(),
     ):
         TraderBatchController.execute_batch_sell(trader)
@@ -225,7 +225,7 @@ def test_emergency_close_routes_universe_and_external_paths():
     trader = _FakeBatchTrader()
 
     with patch(
-        "upbit_trader_batch_controller.QTimer.singleShot",
+        "upbit_autotrader.controllers.batch_controller.QTimer.singleShot",
         side_effect=lambda _ms, cb: cb(),
     ):
         TraderBatchController.execute_emergency_close(trader)
@@ -236,3 +236,5 @@ def test_emergency_close_routes_universe_and_external_paths():
     assert len(trader.external_sell_checks) == 1
     assert trader.external_sell_checks[0][0] == "KRW-XRP"
     assert trader.external_sell_checks[0][5] == 7
+
+

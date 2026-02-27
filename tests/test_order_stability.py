@@ -1,12 +1,12 @@
-from unittest.mock import patch
+﻿from unittest.mock import patch
 
 from PyQt6.QtWidgets import QMessageBox
 
-from upbit_config import Config
-from upbit_order_service import UpbitOrderService
-from upbit_trader_batch_controller import TraderBatchController
-from upbit_trader_settings_controller import TraderSettingsController
-from upbit_trader_trading_controller import TraderTradingController
+from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.controllers.batch_controller import TraderBatchController
+from upbit_autotrader.controllers.settings_controller import TraderSettingsController
+from upbit_autotrader.controllers.trading_controller import TraderTradingController
 
 
 class _DummyLogger:
@@ -166,7 +166,7 @@ def test_start_trading_does_not_clear_existing_pending_orders():
     trader = _StartTrader()
     trader.order_service.mark_pending("KRW-OLD", "BUY", "uuid-old")
 
-    with patch("upbit_trader_trading_controller.pyupbit.get_current_price", return_value=1100):
+    with patch("upbit_autotrader.controllers.trading_controller.pyupbit.get_current_price", return_value=1100):
         trader.start_trading()
 
     assert trader.order_service.has_pending("KRW-OLD")
@@ -193,7 +193,7 @@ def test_execute_buy_uses_available_krw_after_reservation():
             return None
 
     trader = _BuyTrader()
-    with patch("upbit_trader_trading_controller.QTimer.singleShot", side_effect=lambda *_: None):
+    with patch("upbit_autotrader.controllers.trading_controller.QTimer.singleShot", side_effect=lambda *_: None):
         trader.execute_buy("KRW-BTC", 1000)
 
     assert trader.upbit.buy_calls
@@ -252,13 +252,13 @@ def test_batch_buy_respects_reserved_krw_and_skips_overbudget_orders():
 
     trader = _BatchTrader()
     with patch(
-        "upbit_trader_batch_controller.QMessageBox.warning",
+        "upbit_autotrader.controllers.batch_controller.QMessageBox.warning",
         return_value=QMessageBox.StandardButton.Yes,
     ), patch(
-        "upbit_trader_batch_controller.QInputDialog.getText",
+        "upbit_autotrader.controllers.batch_controller.QInputDialog.getText",
         return_value=("2", True),
     ), patch(
-        "upbit_trader_batch_controller.QTimer.singleShot",
+        "upbit_autotrader.controllers.batch_controller.QTimer.singleShot",
         side_effect=lambda *_: None,
     ):
         trader.execute_batch_buy()
@@ -389,7 +389,7 @@ def test_execute_buy_uses_paper_route_without_live_api_calls():
             self.upbit = _FakeLiveApi()
             self.order_service = UpbitOrderService()
             self.pending_orders = self.order_service.pending_orders
-            from upbit_paper_order_service import UpbitPaperOrderService
+            from upbit_autotrader.services.paper_order_service import UpbitPaperOrderService
 
             self.paper_order_service = UpbitPaperOrderService(fee_rate=0.0005, slippage_bps=0)
             self.paper_order_service.seed_balance(100000.0)
@@ -411,8 +411,10 @@ def test_execute_buy_uses_paper_route_without_live_api_calls():
             return None
 
     trader = _Trader()
-    with patch("upbit_trader_trading_controller.QTimer.singleShot", side_effect=lambda *_: None):
+    with patch("upbit_autotrader.controllers.trading_controller.QTimer.singleShot", side_effect=lambda *_: None):
         trader.execute_buy("KRW-BTC", 1000.0)
 
     assert trader.upbit.buy_calls == 0
     assert trader.order_service.has_pending("KRW-BTC")
+
+

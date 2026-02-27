@@ -1,4 +1,4 @@
-﻿from upbit_strategy_engine import StrategyEngine, StrategyConfig
+﻿from upbit_autotrader.strategies.engine import StrategyEngine, StrategyConfig
 
 
 class _DummySpin:
@@ -77,3 +77,4 @@ def test_drawdown_guard_blocks_entry():
 
     assert sig.action == "HOLD"
     assert sig.strategy_id == "drawdown_guard"
+

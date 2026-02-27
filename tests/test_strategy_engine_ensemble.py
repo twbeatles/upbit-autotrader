@@ -1,4 +1,4 @@
-﻿from upbit_strategy_engine import StrategyEngine, StrategyConfig
+﻿from upbit_autotrader.strategies.engine import StrategyEngine, StrategyConfig
 
 
 class _Spin:
@@ -64,3 +64,4 @@ def test_ensemble_weighted_threshold_blocks():
 
     assert sig.action == "HOLD"
     assert sig.score < 80.0
+

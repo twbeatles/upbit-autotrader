@@ -1,13 +1,13 @@
-import json
+﻿import json
 import os
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from upbit_entry_filter import should_enter_by_score
-from upbit_holdings_service import get_account_holdings
-from upbit_order_service import UpbitOrderService
-from upbit_settings_store import load_settings, save_settings
+from upbit_autotrader.core.entry_filter import should_enter_by_score
+from upbit_autotrader.services.holdings_service import get_account_holdings
+from upbit_autotrader.services.order_service import UpbitOrderService
+from upbit_autotrader.services.settings_store import load_settings, save_settings
 
 
 class FakeUpbit:
@@ -141,7 +141,7 @@ class OrderServiceTests(unittest.TestCase):
 
 
 class HoldingsScopeTests(unittest.TestCase):
-    @patch("upbit_holdings_service.pyupbit.get_current_price")
+    @patch("upbit_autotrader.services.holdings_service.pyupbit.get_current_price")
     def test_account_holdings_include_all_krw_assets(self, mock_prices):
         upbit = FakeUpbit()
         upbit._balances = [
@@ -164,3 +164,5 @@ class HoldingsScopeTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+

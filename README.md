@@ -45,7 +45,7 @@ pyinstaller --noconfirm --clean upbit_trader.spec
 ```
 
 - 스펙 파일: `upbit_trader.spec`
-- 엔트리포인트: `upbit_trader.py` (호환 래퍼)
+- 엔트리포인트: `upbit_trader.py`
 - 패키지 수집: `collect_submodules("upbit_autotrader")`
 
 ## 프로젝트 구조
@@ -86,7 +86,8 @@ upbit_autotrader/
   ui/dialog_fallbacks.py
 ```
 
-루트의 기존 `upbit_*.py` 파일은 하위 패키지로 포워딩하는 호환 래퍼입니다.
+루트 래퍼 파일은 정리되어 `upbit_trader.py`만 유지합니다.
+기존 호환 래퍼들은 `legacy_wrappers/` 아래 기능별로 보관됩니다.
 
 ## 설정/호환성
 - 설정 스키마: `settings_version = 2` (DPAPI 암호화 저장)

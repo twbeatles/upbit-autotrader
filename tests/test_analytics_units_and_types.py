@@ -2,7 +2,7 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from upbit_analytics import UpbitTradingAnalytics
+from upbit_autotrader.analytics.trading_analytics import UpbitTradingAnalytics
 
 
 def test_analytics_profit_aggregation_handles_mixed_types_safely():
@@ -42,3 +42,4 @@ def test_analytics_html_marks_pnl_as_krw_units():
     assert "Average PnL (KRW)" in html
     assert "원" in html
     assert "Total PnL (%)" not in html
+
