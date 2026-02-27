@@ -10,6 +10,15 @@ from upbit_config import Config
 from upbit_entry_filter import should_enter_by_score
 from upbit_strategy_catalog import get_default_active_strategies, get_default_weights
 from upbit_strategy_engine import StrategyConfig
+from upbit_autotrader.execution.execution_model import ExecutionConfig, estimate_realized_slippage_bps, plan_execution
+from upbit_autotrader.risk.portfolio_risk import RiskLimitConfig, build_portfolio_risk_snapshot, evaluate_risk_limits
+from upbit_autotrader.risk.position_sizing import PositionSizingInput, compute_position_size
+from upbit_autotrader.strategies.meta_signal import MetaSignalInput, StrategyPerformanceTracker, evaluate_meta_signal
+
+try:
+    from upbit_notifiers import EventType
+except ImportError:
+    EventType = None
 
 try:
     import pandas as pd
@@ -496,6 +505,71 @@ class TraderTradingController:
             self._last_price_update_ts = 0.0
         if not hasattr(self, "_price_feed_recovery_attempted"):
             self._price_feed_recovery_attempted = False
+        if not hasattr(self, "_twap_buy_plans"):
+            self._twap_buy_plans = {}
+        if not hasattr(self, "_reconciliation_dirty"):
+            self._reconciliation_dirty = False
+        if not hasattr(self, "persist_reconciliation_state"):
+            self.persist_reconciliation_state = bool(getattr(Config, "DEFAULT_PERSIST_RECONCILIATION_STATE", False))
+        if not hasattr(self, "strategy_perf_tracker") or self.strategy_perf_tracker is None:
+            self.strategy_perf_tracker = StrategyPerformanceTracker()
+
+    def _mark_reconciliation_dirty(self):
+        self._ensure_order_stability_state()
+        self._reconciliation_dirty = True
+
+    def _build_reconciliation_state(self):
+        self._ensure_order_stability_state()
+        pending = self.order_service.list_pending() if hasattr(self.order_service, "list_pending") else {}
+        return {
+            "pending_orders": pending,
+            "manual_review_queue": dict(getattr(self, "_manual_review_queue", {}) or {}),
+            "orphan_events": list(getattr(self, "_orphan_events", []) or []),
+            "reserved_krw_by_ticker": dict(getattr(self, "_reserved_krw_by_ticker", {}) or {}),
+            "active_session_id": int(getattr(self, "_active_session_id", 0) or 0),
+        }
+
+    def _persist_reconciliation_state(self, force=False):
+        self._ensure_order_stability_state()
+        if not bool(getattr(self, "persist_reconciliation_state", False)):
+            return False
+        if not force and not bool(getattr(self, "_reconciliation_dirty", False)):
+            return False
+        store = getattr(self, "reconciliation_store", None)
+        if store is None or not hasattr(store, "save"):
+            return False
+        state = self._build_reconciliation_state()
+        ok = bool(store.save(state))
+        if ok:
+            self._reconciliation_dirty = False
+        return ok
+
+    def _load_reconciliation_state(self):
+        self._ensure_order_stability_state()
+        if not bool(getattr(self, "persist_reconciliation_state", False)):
+            return
+        store = getattr(self, "reconciliation_store", None)
+        if store is None or not hasattr(store, "load"):
+            return
+        payload = store.load() or {}
+        pending_orders = payload.get("pending_orders", {})
+        if hasattr(self, "order_service") and isinstance(pending_orders, dict):
+            self.order_service.pending_orders = dict(pending_orders)
+            self.pending_orders = self.order_service.pending_orders
+        self._manual_review_queue = dict(payload.get("manual_review_queue", {}) or {})
+        self._orphan_events = list(payload.get("orphan_events", []) or [])
+        self._reserved_krw_by_ticker = {
+            str(k): float(v or 0.0)
+            for k, v in dict(payload.get("reserved_krw_by_ticker", {}) or {}).items()
+        }
+        self._active_session_id = int(payload.get("active_session_id", getattr(self, "_active_session_id", 0)) or 0)
+        self._reconciliation_dirty = False
+
+    def _persist_strategy_performance(self):
+        tracker = getattr(self, "strategy_perf_tracker", None)
+        if tracker is None or not hasattr(tracker, "save"):
+            return False
+        return bool(tracker.save(getattr(Config, "STRATEGY_PERF_FILE", "strategy_performance.json")))
 
     def _get_toggle_value(self, attr_name, default_value):
         widget = getattr(self, attr_name, None)
@@ -550,6 +624,184 @@ class TraderTradingController:
             getattr(Config, "DEFAULT_PRICE_FEED_STALE_SEC", 15),
         )
 
+    def _use_risk_budget_sizing(self):
+        return self._get_toggle_value("chk_use_risk_budget_sizing", getattr(Config, "DEFAULT_USE_RISK_BUDGET_SIZING", False))
+
+    def _use_kelly_adjustment(self):
+        return self._get_toggle_value("chk_use_kelly_adjustment", getattr(Config, "DEFAULT_USE_KELLY_ADJUSTMENT", False))
+
+    def _drawdown_state_enabled(self):
+        return self._get_toggle_value("chk_drawdown_state_enabled", getattr(Config, "DEFAULT_DRAWDOWN_STATE_ENABLED", False))
+
+    def _portfolio_corr_window(self):
+        return int(self._get_spin_value("spin_portfolio_corr_window", getattr(Config, "DEFAULT_PORTFOLIO_CORR_WINDOW", 60)))
+
+    def _max_correlation_exposure_pct(self):
+        return float(
+            self._get_spin_value(
+                "spin_max_correlation_exposure_pct",
+                getattr(Config, "DEFAULT_MAX_CORRELATION_EXPOSURE_PCT", 100.0),
+            )
+        )
+
+    def _use_execution_model(self):
+        return self._get_toggle_value("chk_use_execution_model", getattr(Config, "DEFAULT_USE_EXECUTION_MODEL", False))
+
+    def _execution_mode(self):
+        combo = getattr(self, "combo_execution_mode", None)
+        if combo is not None and hasattr(combo, "currentData"):
+            v = combo.currentData()
+            if v:
+                return str(v)
+        return str(getattr(Config, "DEFAULT_EXECUTION_MODE", "single_market"))
+
+    def _use_meta_signal(self):
+        return self._get_toggle_value("chk_use_meta_signal", getattr(Config, "DEFAULT_USE_META_SIGNAL", False))
+
+    def _meta_min_expectancy(self):
+        return self._get_spin_value("spin_meta_min_expectancy", getattr(Config, "DEFAULT_META_MIN_EXPECTANCY", 0.0))
+
+    def _meta_score_threshold(self):
+        return self._get_spin_value("spin_meta_score_threshold", getattr(Config, "DEFAULT_META_SCORE_THRESHOLD", 60.0))
+
+    def _weight_rebalance_daily(self):
+        return self._get_toggle_value("chk_weight_rebalance_daily", getattr(Config, "DEFAULT_WEIGHT_REBALANCE_DAILY", True))
+
+    def _weight_min(self):
+        return self._get_spin_value("spin_weight_min", getattr(Config, "DEFAULT_WEIGHT_MIN", 0.5))
+
+    def _weight_max(self):
+        return self._get_spin_value("spin_weight_max", getattr(Config, "DEFAULT_WEIGHT_MAX", 1.5))
+
+    def _risk_budget_pct(self):
+        return self._get_spin_value("spin_risk_budget_pct", getattr(Config, "DEFAULT_RISK_BUDGET_PCT", 0.5))
+
+    def _atr_stop_mult(self):
+        return self._get_spin_value("spin_atr_stop_mult", getattr(Config, "DEFAULT_ATR_STOP_MULT", 2.0))
+
+    def _min_stop_pct(self):
+        return self._get_spin_value("spin_min_stop_pct", getattr(Config, "DEFAULT_MIN_STOP_PCT", 0.3))
+
+    def _max_betting_pct(self):
+        return self._get_spin_value("spin_max_betting_pct", getattr(Config, "DEFAULT_MAX_BETTING_PCT", 15.0))
+
+    def _kelly_scale(self):
+        return self._get_spin_value("spin_kelly_scale", getattr(Config, "DEFAULT_KELLY_SCALE", 0.25))
+
+    def _drawdown_thresholds(self):
+        return (
+            self._get_spin_value("spin_dd_caution_pct", getattr(Config, "DEFAULT_DD_CAUTION_PCT", 3.0)),
+            self._get_spin_value("spin_dd_defense_pct", getattr(Config, "DEFAULT_DD_DEFENSE_PCT", 5.0)),
+            self._get_spin_value("spin_dd_halt_pct", getattr(Config, "DEFAULT_DD_HALT_PCT", 8.0)),
+        )
+
+    def _get_execution_config(self):
+        mode = self._execution_mode()
+        return ExecutionConfig(
+            enabled=self._use_execution_model(),
+            expected_slippage_guard_bps=self._get_spin_value(
+                "spin_expected_slippage_guard_bps",
+                getattr(Config, "DEFAULT_EXPECTED_SLIPPAGE_GUARD_BPS", 30.0),
+            ),
+            twap_slices=int(self._get_spin_value("spin_twap_slices", getattr(Config, "DEFAULT_TWAP_SLICES", 3))),
+            twap_interval_sec=int(self._get_spin_value("spin_twap_interval_sec", getattr(Config, "DEFAULT_TWAP_INTERVAL_SEC", 8))),
+            fee_bps=float(getattr(self, "spin_paper_fee_bps", None).value()) if hasattr(self, "spin_paper_fee_bps") else float(getattr(Config, "DEFAULT_PAPER_FEE_BPS", 5.0)),
+            default_mode=str(mode),
+            min_order_krw=5000.0,
+        )
+
+    def _start_twap_buy(self, ticker, curr_price, slices, session_id):
+        self._ensure_order_stability_state()
+        if not slices:
+            return False
+        self._twap_buy_plans[ticker] = {
+            "slices": [float(v) for v in slices if float(v) > 0],
+            "next_idx": 0,
+            "interval_sec": int(self._get_spin_value("spin_twap_interval_sec", getattr(Config, "DEFAULT_TWAP_INTERVAL_SEC", 8))),
+            "session_id": int(session_id or 0),
+            "curr_price": float(curr_price or 0.0),
+        }
+        return self._run_next_twap_buy_slice(ticker)
+
+    def _run_next_twap_buy_slice(self, ticker):
+        self._ensure_order_stability_state()
+        plan = dict(getattr(self, "_twap_buy_plans", {}).get(ticker, {}) or {})
+        if not plan:
+            return False
+        if self.order_service.has_pending(ticker):
+            return False
+
+        slices = list(plan.get("slices", []) or [])
+        idx = int(plan.get("next_idx", 0) or 0)
+        if idx >= len(slices):
+            self._twap_buy_plans.pop(ticker, None)
+            return False
+
+        amount = float(slices[idx] or 0.0)
+        if amount < 5000.0:
+            plan["next_idx"] = idx + 1
+            self._twap_buy_plans[ticker] = plan
+            return self._run_next_twap_buy_slice(ticker)
+
+        session_id = int(plan.get("session_id", 0) or 0)
+        if not self._reserve_krw_for_buy(ticker, amount, session_id=session_id):
+            self.log(f"[{ticker}] TWAP 가용 잔고 부족으로 중단")
+            self._twap_buy_plans.pop(ticker, None)
+            return False
+
+        ok, result, err_msg = self._place_buy_order(
+            ticker,
+            amount,
+            session_id=session_id,
+            source=f"twap_buy_{idx + 1}/{len(slices)}",
+        )
+        if not ok or not result or "uuid" not in result:
+            self._release_reserved_krw(ticker)
+            self.log(f"[ERROR] [{ticker}] TWAP 매수 주문 실패: {err_msg}")
+            self._twap_buy_plans.pop(ticker, None)
+            return False
+
+        if hasattr(self.order_service, "update_pending"):
+            self.order_service.update_pending(
+                ticker,
+                execution_mode="twap_market",
+                twap_slice_index=int(idx + 1),
+                twap_slice_count=int(len(slices)),
+            )
+        self._mark_reconciliation_dirty()
+
+        info = self.universe.get(ticker)
+        if info:
+            info["state"] = "주문중"
+            self.set_table_item(info["row"], 4, "⏳ 주문중", "#ffc107")
+
+        plan["next_idx"] = idx + 1
+        self._twap_buy_plans[ticker] = plan
+        self.log(f"📤 [{ticker}] TWAP 매수 {idx + 1}/{len(slices)}: {amount:,.0f}원")
+        QTimer.singleShot(
+            2000,
+            lambda t=ticker, u=result["uuid"], s=session_id: self.check_buy_execution(
+                t, u, retry_count=0, session_id=s
+            ),
+        )
+        return True
+
+    def _schedule_next_twap_buy_slice(self, ticker):
+        self._ensure_order_stability_state()
+        plan = self._twap_buy_plans.get(ticker)
+        if not plan:
+            return
+        if self.order_service.has_pending(ticker):
+            return
+        idx = int(plan.get("next_idx", 0) or 0)
+        total = len(plan.get("slices", []) or [])
+        if idx >= total:
+            self._twap_buy_plans.pop(ticker, None)
+            self.log(f"✅ [{ticker}] TWAP 매수 시퀀스 완료")
+            return
+        delay_ms = int(max(0, int(plan.get("interval_sec", 8) or 8)) * 1000)
+        QTimer.singleShot(delay_ms, lambda t=ticker: self._run_next_twap_buy_slice(t))
+
     @staticmethod
     def _is_mean_reversion_strategy(strategy_id):
         return str(strategy_id or "") in {"rsi_reversion", "bollinger_reversion", "zscore_reversion"}
@@ -579,7 +831,7 @@ class TraderTradingController:
     def _transition_pending(self, ticker, next_state, reason="", metadata=None):
         if not hasattr(self, "order_service") or not hasattr(self.order_service, "transition_pending"):
             return False
-        return bool(
+        transitioned = bool(
             self.order_service.transition_pending(
                 ticker=ticker,
                 next_state=next_state,
@@ -587,6 +839,9 @@ class TraderTradingController:
                 metadata=metadata or {},
             )
         )
+        if transitioned:
+            self._mark_reconciliation_dirty()
+        return transitioned
 
     def _register_manual_review(self, ticker, uuid, reason, order=None, extra=None):
         self._ensure_order_stability_state()
@@ -607,6 +862,7 @@ class TraderTradingController:
         }
         key = str(uuid or f"{ticker}:{payload['queued_at']}")
         self._manual_review_queue[key] = payload
+        self._mark_reconciliation_dirty()
         self._ops_alert(
             level="warning",
             message=f"⚠️ [{ticker}] 수동검토 큐 적재: {reason}",
@@ -629,6 +885,7 @@ class TraderTradingController:
         self._orphan_events.append(event)
         if len(self._orphan_events) > 500:
             self._orphan_events = self._orphan_events[-500:]
+        self._mark_reconciliation_dirty()
         self._ops_alert(
             level="warning",
             message=f"⚠️ [{ticker}] 세션 불일치 orphan 이벤트 감지 ({state})",
@@ -671,9 +928,22 @@ class TraderTradingController:
                 self.send_notification("Upbit Pro Trader", message)
             except Exception:
                 pass
+        manager = getattr(self, "notification_manager", None)
+        if manager is not None and EventType is not None and hasattr(manager, "notify"):
+            try:
+                level_l = str(level or "info").lower()
+                event_type = EventType.INFO
+                if level_l == "warning":
+                    event_type = EventType.WARNING
+                elif level_l == "error":
+                    event_type = EventType.ERROR
+                manager.notify(event_type, message)
+            except Exception:
+                pass
     def _next_trading_session(self):
         self._ensure_order_stability_state()
         self._active_session_id += 1
+        self._mark_reconciliation_dirty()
         return self._active_session_id
     def _get_reserved_krw_total(self):
         self._ensure_order_stability_state()
@@ -691,10 +961,14 @@ class TraderTradingController:
         if amount > (available + 1e-8):
             return False
         self._reserved_krw_by_ticker[ticker] = amount
+        self._mark_reconciliation_dirty()
         return True
     def _release_reserved_krw(self, ticker):
         self._ensure_order_stability_state()
-        return float(self._reserved_krw_by_ticker.pop(ticker, 0.0) or 0.0)
+        released = float(self._reserved_krw_by_ticker.pop(ticker, 0.0) or 0.0)
+        if released > 0:
+            self._mark_reconciliation_dirty()
+        return released
     def _sync_reserved_with_pending(self):
         self._ensure_order_stability_state()
         if not hasattr(self, "order_service"):
@@ -707,6 +981,7 @@ class TraderTradingController:
         for ticker in list(self._reserved_krw_by_ticker.keys()):
             if ticker not in pending_tickers:
                 self._reserved_krw_by_ticker.pop(ticker, None)
+        self._mark_reconciliation_dirty()
 
     def _fetch_account_holdings(self):
         if hasattr(self, "get_account_holdings"):
@@ -909,6 +1184,25 @@ class TraderTradingController:
             parsed = dict(defaults)
         for sid, w in defaults.items():
             parsed.setdefault(sid, float(w))
+        if self._weight_rebalance_daily():
+            self._ensure_order_stability_state()
+            tracker = getattr(self, "strategy_perf_tracker", None)
+            if tracker is None:
+                tracker = StrategyPerformanceTracker()
+                self.strategy_perf_tracker = tracker
+            if hasattr(tracker, "rebalance_weights_daily"):
+                changed, new_weights = tracker.rebalance_weights_daily(
+                    parsed,
+                    weight_min=self._weight_min(),
+                    weight_max=self._weight_max(),
+                    ema_alpha=0.2,
+                )
+                if changed:
+                    parsed = dict(new_weights)
+                    if hasattr(self, "input_strategy_weights"):
+                        text = ",".join(f"{k}:{v:.4f}" for k, v in parsed.items())
+                        self.input_strategy_weights.setText(text)
+                    self._persist_strategy_performance()
         return parsed
     def _get_strategy_runtime_config(self):
         enabled = self.chk_use_strategy_engine.isChecked() if hasattr(self, "chk_use_strategy_engine") else Config.DEFAULT_USE_STRATEGY_ENGINE
@@ -946,6 +1240,7 @@ class TraderTradingController:
                     reserved_krw=krw_amount,
                 )
                 self._transition_pending(ticker, "wait", reason="buy_order_submitted")
+                self._mark_reconciliation_dirty()
             return ok, result, err_msg
         if self.order_service.has_pending(ticker):
             pending = self.order_service.get_pending(ticker)
@@ -961,6 +1256,7 @@ class TraderTradingController:
                 reserved_krw=krw_amount,
             )
             self._transition_pending(ticker, "wait", reason="buy_order_submitted")
+            self._mark_reconciliation_dirty()
             return True, result, ""
         return False, result, "매수 주문 응답이 비정상입니다."
 
@@ -980,6 +1276,7 @@ class TraderTradingController:
                     source=source,
                 )
                 self._transition_pending(ticker, "wait", reason="sell_order_submitted")
+                self._mark_reconciliation_dirty()
             return ok, result, err_msg
         if self.order_service.has_pending(ticker):
             pending = self.order_service.get_pending(ticker)
@@ -994,6 +1291,7 @@ class TraderTradingController:
                 source=source,
             )
             self._transition_pending(ticker, "wait", reason="sell_order_submitted")
+            self._mark_reconciliation_dirty()
             return True, result, ""
         return False, result, "매도 주문 응답이 비정상입니다."
     def _safe_log_order_error(self, uuid, message):
@@ -1262,6 +1560,7 @@ class TraderTradingController:
             if force and age_sec >= stale_timeout:
                 self._resolve_timeout_pending(ticker, pending, reason="reconcile_unknown_state_timeout")
         self._sync_reserved_with_pending()
+        self._mark_reconciliation_dirty()
     def _get_indicator_cache_ttl(self, interval):
         self._ensure_indicator_cache_state()
         return float(self._indicator_cache_ttl_sec.get(interval, 5))
@@ -1652,6 +1951,7 @@ class TraderTradingController:
 
         # 8. 전략 엔진 체크 (single/ensemble)
         strategy_signal = None
+        strategy_id = "legacy"
         if cfg and cfg.enabled and hasattr(self, "strategy_engine"):
             snapshot = snapshot or self._get_indicator_snapshot(
                 ticker,
@@ -1666,8 +1966,46 @@ class TraderTradingController:
                 self.log(f"[{ticker}] 전략 엔진 보류: {reason_text}")
                 return
             score = strategy_signal.score
+            strategy_id = str(strategy_signal.strategy_id or "engine")
+        elif cfg and cfg.enabled:
+            strategy_id = str(cfg.single_strategy if str(cfg.mode) == "single" else "ensemble")
+        elif score is not None:
+            strategy_id = "entry_scoring"
+
+        # 9. 메타 시그널 게이트 (선택적)
+        meta_signal = None
+        if self._use_meta_signal():
+            self._ensure_order_stability_state()
+            tracker = getattr(self, "strategy_perf_tracker", None)
+            if tracker is None:
+                tracker = StrategyPerformanceTracker()
+                self.strategy_perf_tracker = tracker
+            adx = float((snapshot or {}).get("adx", 20.0) or 20.0)
+            realized_vol = float((snapshot or {}).get("realized_vol_pct", 0.0) or 0.0)
+            regime_score = max(0.0, min(100.0, (adx / 40.0) * 100.0 - max(0.0, realized_vol - 5.0) * 2.0))
+            meta_signal = evaluate_meta_signal(
+                MetaSignalInput(
+                    strategy_id=strategy_id,
+                    engine_score=float(score if score is not None else 50.0),
+                    regime_score=regime_score,
+                    min_expectancy=self._meta_min_expectancy(),
+                    score_threshold=self._meta_score_threshold(),
+                ),
+                tracker=tracker,
+            )
+            if not bool(meta_signal.gate_pass):
+                self.log(
+                    f"[{ticker}] 메타 시그널 보류: meta={meta_signal.meta_score:.1f}, "
+                    f"expectancy={meta_signal.expected_value:.2f}"
+                )
+                return
 
         # 매수 실행
+        info["last_strategy_id"] = strategy_id
+        info["last_strategy_score"] = float(score if score is not None else 0.0)
+        if meta_signal is not None:
+            info["last_meta_score"] = float(meta_signal.meta_score)
+            info["last_expectancy"] = float(meta_signal.expected_value)
         if score is None:
             self.log(f"[{ticker}] 진입 조건 충족")
         else:
@@ -1780,14 +2118,18 @@ class TraderTradingController:
             pending = self.order_service.get_pending(ticker)
             self.log(f"[{ticker}] 중복 주문 방지: {pending['side']} 주문 대기 중")
             return
-        
+
+        info = self.universe.get(ticker, {})
         if self.strategy:
-            ratio = self.strategy.calculate_dynamic_position_size(ticker) / 100
+            base_ratio_pct = float(self.strategy.calculate_dynamic_position_size(ticker))
         else:
-            ratio = self.spin_betting.value() / 100
+            base_ratio_pct = float(self.spin_betting.value())
+        ratio = base_ratio_pct / 100.0
         cfg = self._get_strategy_runtime_config() if hasattr(self, "_get_strategy_runtime_config") else None
+        candle_text = self.combo_candle.currentText() if hasattr(self, "combo_candle") else Config.DEFAULT_CANDLE
+        interval = Config.CANDLE_INTERVALS.get(candle_text, "minute240")
+        snapshot = None
         if cfg and cfg.enabled and hasattr(self, "strategy_engine"):
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
             snapshot = self._get_indicator_snapshot(
                 ticker,
                 interval,
@@ -1799,11 +2141,83 @@ class TraderTradingController:
             ratio = adjusted_pct / 100.0
         available_krw = self._get_available_krw()
         bet_cash = available_krw * ratio
+
+        # 확장 리스크 사이징
+        if self._use_risk_budget_sizing():
+            snapshot = snapshot or self._get_indicator_snapshot(
+                ticker,
+                interval,
+                rsi_period=self.spin_rsi_period.value(),
+                volume_period=Config.DEFAULT_VOLUME_PERIOD,
+                bb_period=Config.DEFAULT_BB_PERIOD,
+            )
+            atr_val = float(self.calculate_atr(ticker, Config.DEFAULT_ATR_PERIOD) or 0.0)
+            risk_state = str(self._get_risk_snapshot(force=False).get("risk_state", "normal"))
+            strategy_id = str(info.get("last_strategy_id", "legacy"))
+            tracker = getattr(self, "strategy_perf_tracker", None)
+            if tracker is None:
+                tracker = StrategyPerformanceTracker()
+                self.strategy_perf_tracker = tracker
+            perf = tracker.get(strategy_id)
+            sizing_out = compute_position_size(
+                PositionSizingInput(
+                    use_risk_budget_sizing=True,
+                    equity_krw=float(getattr(self, "initial_balance", 0.0) or 0.0),
+                    available_krw=available_krw,
+                    current_price=float(curr_price or 0.0),
+                    atr_value=atr_val,
+                    base_betting_pct=float(base_ratio_pct),
+                    risk_budget_pct=self._risk_budget_pct(),
+                    atr_stop_mult=self._atr_stop_mult(),
+                    min_stop_pct=self._min_stop_pct(),
+                    max_betting_pct=self._max_betting_pct(),
+                    use_kelly_adjustment=self._use_kelly_adjustment(),
+                    kelly_scale=self._kelly_scale(),
+                    win_rate=(perf.wins / perf.sample_count) if perf.sample_count > 0 else 0.5,
+                    avg_win_pct=float(perf.avg_win_pct),
+                    avg_loss_pct=float(perf.avg_loss_pct),
+                    drawdown_state=risk_state,
+                )
+            )
+            bet_cash = min(float(sizing_out.order_notional_krw), available_krw)
+            info["last_sizing"] = dict(sizing_out.details)
+            info["last_risk_state"] = risk_state
+            info["last_stop_distance_pct"] = float(sizing_out.stop_distance_pct)
+            ratio = float(sizing_out.position_ratio_pct) / 100.0
+
+        # 실행 계획(single/TWAP)
+        execution_cfg = self._get_execution_config()
+        realized_vol = float((snapshot or {}).get("realized_vol_pct", 0.0) or 0.0)
+        execution_plan = plan_execution(
+            execution_cfg,
+            bet_cash,
+            realized_vol_pct=realized_vol,
+            force_mode=self._execution_mode(),
+        )
+        if execution_plan.blocked:
+            self.log(f"[{ticker}] 실행 모델 차단: {execution_plan.reason}")
+            return
+        bet_cash = float(execution_plan.order_notional_krw or 0.0)
+        info["last_execution_mode"] = execution_plan.mode
+        info["last_expected_slippage_bps"] = float(execution_plan.expected_slippage_bps)
+        info["last_breakeven_pct"] = float(execution_plan.breakeven_pct)
         
         if bet_cash < 5000:  # 업비트 최소 주문금액
             self.log(f"[{ticker}] 매수금액 부족 (최소 5,000원)")
             return
         session_id = getattr(self, "_active_session_id", 0)
+
+        if execution_plan.mode == "twap_market" and len(execution_plan.slice_notionals) > 1:
+            started = self._start_twap_buy(
+                ticker=ticker,
+                curr_price=curr_price,
+                slices=execution_plan.slice_notionals,
+                session_id=session_id,
+            )
+            if started:
+                return
+            self.log(f"[{ticker}] TWAP 시작 실패, 단일 시장가로 fallback")
+
         if not self._reserve_krw_for_buy(ticker, bet_cash, session_id=session_id):
             self.log(f"[{ticker}] 사용 가능 잔고 부족 (가용: {self._get_available_krw():,.0f}원)")
             return
@@ -1818,12 +2232,21 @@ class TraderTradingController:
             )
             
             if ok and result and 'uuid' in result:
-                info = self.universe.get(ticker)
+                if hasattr(self.order_service, "update_pending"):
+                    self.order_service.update_pending(
+                        ticker,
+                        execution_mode=str(execution_plan.mode),
+                        expected_slippage_bps=float(execution_plan.expected_slippage_bps),
+                        breakeven_pct=float(execution_plan.breakeven_pct),
+                        strategy_score=float(info.get("last_strategy_score", 0.0) or 0.0),
+                        meta_score=float(info.get("last_meta_score", 0.0) or 0.0),
+                        risk_state=str(info.get("last_risk_state", "normal")),
+                    )
                 if info:
                     info['state'] = '주문중'
                     self.set_table_item(info['row'], 4, "⏳ 주문중", "#ffc107")
                 
-                self.log(f"📤 [{ticker}] 매수 주문: {bet_cash:,.0f}원")
+                self.log(f"📤 [{ticker}] 매수 주문: {bet_cash:,.0f}원 ({execution_plan.mode})")
                 self.logger.info(f"매수 주문: {ticker} {bet_cash:,.0f}원")
                 
                 # 체결 확인
@@ -1854,12 +2277,16 @@ class TraderTradingController:
         if pending and str(pending.get("uuid")) != str(uuid):
             return
         clear_pending_if_uuid = getattr(self.order_service, "clear_pending_if_uuid", None)
+        mark_reconciliation = getattr(self, "_mark_reconciliation_dirty", None)
         release_reserved = getattr(self, "_release_reserved_krw", None)
         transition_pending = getattr(self, "_transition_pending", None)
         handle_session_mismatch = getattr(self, "_handle_session_mismatch_terminal", None)
         resolve_timeout_pending = getattr(self, "_resolve_timeout_pending", None)
         ops_alert = getattr(self, "_ops_alert", None)
         register_manual_review = getattr(self, "_register_manual_review", None)
+        mark_reconciliation = getattr(self, "_mark_reconciliation_dirty", None)
+        persist_strategy_performance = getattr(self, "_persist_strategy_performance", None)
+        mark_reconciliation = getattr(self, "_mark_reconciliation_dirty", None)
 
         try:
             if hasattr(self, "_safe_get_order"):
@@ -1893,18 +2320,33 @@ class TraderTradingController:
                 if callable(transition_pending):
                     transition_pending(ticker, "done", reason="buy_execution_done")
                 info = self.universe.get(ticker)
+                execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
+                expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
+                strategy_score = float((pending or {}).get("strategy_score", 0.0) or 0.0)
+                meta_score = float((pending or {}).get("meta_score", 0.0) or 0.0)
+                risk_state = str((pending or {}).get("risk_state", "normal") or "normal")
 
                 # 체결 정보
                 executed_volume, total_price, avg_price = self.order_service.get_buy_fill_metrics(order)
 
                 if executed_volume > 0 and total_price > 0:
                     if info:
-                        info['qty'] = executed_volume
-                        info['buy_price'] = avg_price
-                        info['invest_amt'] = total_price
-                        info['high_since_buy'] = avg_price
+                        prev_qty = float(info.get('qty', 0.0) or 0.0)
+                        prev_invest = float(info.get('invest_amt', 0.0) or 0.0)
+                        if prev_qty > 0 and prev_invest > 0:
+                            merged_qty = prev_qty + executed_volume
+                            merged_invest = prev_invest + total_price
+                            merged_avg = (merged_invest / merged_qty) if merged_qty > 0 else avg_price
+                        else:
+                            merged_qty = executed_volume
+                            merged_invest = total_price
+                            merged_avg = avg_price
+                        info['qty'] = merged_qty
+                        info['buy_price'] = merged_avg
+                        info['invest_amt'] = merged_invest
+                        info['high_since_buy'] = max(float(info.get('high_since_buy', 0.0) or 0.0), merged_avg)
                         info['max_profit_rate'] = 0.0
-                        info['partial_sold'] = []
+                        info.setdefault('partial_sold', [])
                         info['state'] = '보유중'
 
                         if self.strategy:
@@ -1918,25 +2360,49 @@ class TraderTradingController:
                             qty_item = QTableWidgetItem("-")
                             self.table.setItem(row, 5, qty_item)
                             info.setdefault('ui_items', {})['qty'] = qty_item
-                        qty_item.setText(f"{executed_volume:.8f}")
+                        qty_item.setText(f"{merged_qty:.8f}")
 
                         buy_price_item = info.get('ui_items', {}).get('buy_price')
                         if buy_price_item is None:
                             buy_price_item = QTableWidgetItem("-")
                             self.table.setItem(row, 6, buy_price_item)
                             info.setdefault('ui_items', {})['buy_price'] = buy_price_item
-                        buy_price_item.setText(f"{avg_price:,.0f}")
+                        buy_price_item.setText(f"{merged_avg:,.0f}")
 
                         invest_item = info.get('ui_items', {}).get('invest')
                         if invest_item is None:
                             invest_item = QTableWidgetItem("-")
                             self.table.setItem(row, 9, invest_item)
                             info.setdefault('ui_items', {})['invest'] = invest_item
-                        invest_item.setText(f"{total_price:,.0f}")
+                        invest_item.setText(f"{merged_invest:,.0f}")
                         self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
 
+                    fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
+                    ref_price = float((info or {}).get("current", avg_price) or avg_price)
+                    realized_slippage_bps = estimate_realized_slippage_bps(ref_price, avg_price, side="buy")
                     self.log(f"✅ [{ticker}] 매수 체결: {executed_volume:.8f} @ {avg_price:,.0f}원")
-                    self.add_trade_record(ticker, 'BUY', avg_price, executed_volume, 0, '매수 체결')
+                    self.add_trade_record(
+                        ticker,
+                        'BUY',
+                        avg_price,
+                        executed_volume,
+                        0,
+                        '매수 체결',
+                        fee_krw=fee_krw,
+                        expected_slippage_bps=expected_slippage_bps,
+                        realized_slippage_bps=realized_slippage_bps,
+                        execution_mode=execution_mode,
+                        session_id=session_id,
+                        risk_state=risk_state,
+                        strategy_score=strategy_score,
+                        meta_score=meta_score,
+                    )
+                    manager = getattr(self, "notification_manager", None)
+                    if manager is not None and EventType is not None and hasattr(manager, "notify_buy"):
+                        try:
+                            manager.notify_buy(ticker, avg_price, executed_volume)
+                        except Exception:
+                            pass
                     self.get_balance()
                     self._risk_snapshot_cache = {"ts": 0.0, "value": None}
                 else:
@@ -1950,6 +2416,11 @@ class TraderTradingController:
                     self.order_service.clear_pending(ticker)
                 if callable(release_reserved):
                     release_reserved(ticker)
+                if callable(mark_reconciliation):
+                    mark_reconciliation()
+                schedule_twap = getattr(self, "_schedule_next_twap_buy_slice", None)
+                if execution_mode == "twap_market" and callable(schedule_twap):
+                    schedule_twap(ticker)
             elif state == 'cancel':
                 if callable(transition_pending):
                     transition_pending(ticker, "cancel", reason="buy_execution_cancel")
@@ -1965,6 +2436,11 @@ class TraderTradingController:
                     self.order_service.clear_pending(ticker)
                 if callable(release_reserved):
                     release_reserved(ticker)
+                if callable(mark_reconciliation):
+                    mark_reconciliation()
+                schedule_twap = getattr(self, "_schedule_next_twap_buy_slice", None)
+                if str((pending or {}).get("execution_mode", "")) == "twap_market" and callable(schedule_twap):
+                    schedule_twap(ticker)
             else:
                 # 아직 체결 안됨, 재시도 횟수 확인
                 if retry_count < MAX_RETRIES:
@@ -2040,6 +2516,18 @@ class TraderTradingController:
         if qty == 0:
             return
         session_id = getattr(self, "_active_session_id", 0)
+
+        curr_price = float(info.get("current", 0.0) or 0.0)
+        notional = float(qty) * curr_price if curr_price > 0 else float(info.get("invest_amt", 0.0) or 0.0)
+        exec_cfg = self._get_execution_config()
+        execution_plan = plan_execution(
+            exec_cfg,
+            notional,
+            realized_vol_pct=0.0,
+            force_mode=self._execution_mode(),
+        )
+        if execution_plan.mode == "twap_market":
+            self.log(f"[{ticker}] 매도 TWAP는 현재 단일 시장가로 실행합니다.")
         
         try:
             ok, result, err_msg = self._place_sell_order(
@@ -2057,6 +2545,11 @@ class TraderTradingController:
                         requested_qty=float(qty or 0.0),
                         sell_reason=str(reason or "매도"),
                         context_label="매도",
+                        execution_mode="single_market" if execution_plan.mode == "twap_market" else str(execution_plan.mode),
+                        expected_slippage_bps=float(execution_plan.expected_slippage_bps),
+                        strategy_score=float(info.get("last_strategy_score", 0.0) or 0.0),
+                        meta_score=float(info.get("last_meta_score", 0.0) or 0.0),
+                        risk_state=str(info.get("last_risk_state", "normal")),
                     )
                 info['state'] = '매도주문중'
                 self.set_table_item(info['row'], 4, "⏳ 매도주문중", "#ffc107")
@@ -2091,6 +2584,18 @@ class TraderTradingController:
             self.log(f"[{ticker}] 중복 주문 방지: {pending['side']} 주문 대기 중")
             return False
 
+        curr_price = float(info.get("current", 0.0) or 0.0)
+        notional = float(qty) * curr_price if curr_price > 0 else float(qty * info.get("buy_price", 0.0))
+        exec_cfg = self._get_execution_config()
+        execution_plan = plan_execution(
+            exec_cfg,
+            notional,
+            realized_vol_pct=0.0,
+            force_mode=self._execution_mode(),
+        )
+        if execution_plan.mode == "twap_market":
+            self.log(f"[{ticker}] 분할익절 TWAP는 현재 단일 시장가로 실행합니다.")
+
         session_id = getattr(self, "_active_session_id", 0)
         try:
             ok, result, err_msg = self._place_sell_order(
@@ -2109,6 +2614,11 @@ class TraderTradingController:
                         sell_reason=str(reason or "분할익절"),
                         partial_level=level,
                         context_label="분할 매도",
+                        execution_mode="single_market" if execution_plan.mode == "twap_market" else str(execution_plan.mode),
+                        expected_slippage_bps=float(execution_plan.expected_slippage_bps),
+                        strategy_score=float(info.get("last_strategy_score", 0.0) or 0.0),
+                        meta_score=float(info.get("last_meta_score", 0.0) or 0.0),
+                        risk_state=str(info.get("last_risk_state", "normal")),
                     )
                 self.log(f"📤 [{ticker}] 분할 매도: {qty:.8f} ({reason})")
                 self.logger.info(f"분할 매도: {ticker} {qty:.8f} ({reason})")
@@ -2178,6 +2688,11 @@ class TraderTradingController:
                     return
 
                 executed_volume, _, trades_price = self.order_service.get_sell_fill_metrics(order)
+                execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
+                expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
+                strategy_score = float((pending or {}).get("strategy_score", 0.0) or 0.0)
+                meta_score = float((pending or {}).get("meta_score", 0.0) or 0.0)
+                risk_state = str((pending or {}).get("risk_state", "normal") or "normal")
 
                 if executed_volume <= 0 or trades_price <= 0:
                     self.log(f"⚠️ [{ticker}] 분할 매도 체결 정보가 유효하지 않습니다.")
@@ -2212,7 +2727,25 @@ class TraderTradingController:
                 qty_item.setText(f"{info['qty']:.8f}")
                 
                 self.log(f"✅ [{ticker}] 분할 매도 체결 (손익: {profit:+,.0f}원)")
-                self.add_trade_record(ticker, 'PARTIAL_SELL', trades_price, executed_volume, profit, reason)
+                ref_price = float(info.get("current", trades_price) or trades_price)
+                fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
+                realized_slippage_bps = estimate_realized_slippage_bps(ref_price, trades_price, side="sell")
+                self.add_trade_record(
+                    ticker,
+                    'PARTIAL_SELL',
+                    trades_price,
+                    executed_volume,
+                    profit,
+                    reason,
+                    fee_krw=fee_krw,
+                    expected_slippage_bps=expected_slippage_bps,
+                    realized_slippage_bps=realized_slippage_bps,
+                    execution_mode=execution_mode,
+                    session_id=session_id,
+                    risk_state=risk_state,
+                    strategy_score=strategy_score,
+                    meta_score=meta_score,
+                )
                 if level is not None and level not in info.setdefault('partial_sold', []):
                     info['partial_sold'].append(level)
                 self._update_statistics()
@@ -2223,6 +2756,8 @@ class TraderTradingController:
                     clear_pending_if_uuid(ticker, uuid)
                 else:
                     self.order_service.clear_pending(ticker)
+                if callable(mark_reconciliation):
+                    mark_reconciliation()
             elif state == 'cancel':
                 self._transition_pending(ticker, "cancel", reason="partial_sell_execution_cancel")
                 if callable(clear_pending_if_uuid):
@@ -2230,6 +2765,8 @@ class TraderTradingController:
                 else:
                     self.order_service.clear_pending(ticker)
                 self.log(f"⚠️ [{ticker}] 분할 매도 주문 취소됨")
+                if callable(mark_reconciliation):
+                    mark_reconciliation()
             else:
                 if retry_count < MAX_RETRIES:
                     QTimer.singleShot(
@@ -2316,6 +2853,11 @@ class TraderTradingController:
                     return
 
                 executed_volume, sell_amount, trades_price = self.order_service.get_sell_fill_metrics(order)
+                execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
+                expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
+                strategy_score = float((pending or {}).get("strategy_score", 0.0) or 0.0)
+                meta_score = float((pending or {}).get("meta_score", 0.0) or 0.0)
+                risk_state = str((pending or {}).get("risk_state", "normal") or "normal")
 
                 if executed_volume <= 0 or sell_amount <= 0:
                     info['state'] = '보유중'
@@ -2372,8 +2914,43 @@ class TraderTradingController:
                         cooldown_minutes = self.spin_cooldown.value() if hasattr(self, 'spin_cooldown') else None
                         self.strategy.set_cooldown(ticker, cooldown_minutes)
                 
+                fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
+                realized_slippage_bps = estimate_realized_slippage_bps(float(info.get("current", trades_price) or trades_price), trades_price, side="sell")
                 self.log(f"✅ [{ticker}] 매도 체결 (손익: {profit:+,.0f}원)")
-                self.add_trade_record(ticker, 'SELL', trades_price, executed_volume, profit, reason)
+                self.add_trade_record(
+                    ticker,
+                    'SELL',
+                    trades_price,
+                    executed_volume,
+                    profit,
+                    reason,
+                    fee_krw=fee_krw,
+                    expected_slippage_bps=expected_slippage_bps,
+                    realized_slippage_bps=realized_slippage_bps,
+                    execution_mode=execution_mode,
+                    session_id=session_id,
+                    risk_state=risk_state,
+                    strategy_score=strategy_score,
+                    meta_score=meta_score,
+                )
+                manager = getattr(self, "notification_manager", None)
+                if manager is not None and EventType is not None and hasattr(manager, "notify_sell"):
+                    try:
+                        pnl_pct = (profit / buy_amount * 100.0) if buy_amount > 0 else 0.0
+                        manager.notify_sell(ticker, trades_price, executed_volume, pnl_pct, reason=reason)
+                    except Exception:
+                        pass
+
+                # 전략 성과 업데이트 (메타 시그널 용)
+                strategy_id = str(info.get("last_strategy_id", "legacy") or "legacy")
+                pnl_pct = (profit / buy_amount * 100.0) if buy_amount > 0 else 0.0
+                tracker = getattr(self, "strategy_perf_tracker", None)
+                if tracker is None:
+                    tracker = StrategyPerformanceTracker()
+                    self.strategy_perf_tracker = tracker
+                tracker.update(strategy_id, pnl_pct)
+                if callable(persist_strategy_performance):
+                    persist_strategy_performance()
                 
                 self._update_statistics()
                 self._risk_snapshot_cache = {"ts": 0.0, "value": None}
@@ -2382,6 +2959,8 @@ class TraderTradingController:
                     clear_pending_if_uuid(ticker, uuid)
                 else:
                     self.order_service.clear_pending(ticker)
+                if callable(mark_reconciliation):
+                    mark_reconciliation()
             elif state == 'cancel':
                 if callable(transition_pending):
                     transition_pending(ticker, "cancel", reason="sell_execution_cancel")
@@ -2394,6 +2973,8 @@ class TraderTradingController:
                     clear_pending_if_uuid(ticker, uuid)
                 else:
                     self.order_service.clear_pending(ticker)
+                if callable(mark_reconciliation):
+                    mark_reconciliation()
             else:
                 if retry_count < MAX_RETRIES:
                     QTimer.singleShot(
@@ -2469,7 +3050,6 @@ class TraderTradingController:
             }
 
         account_wide_positions = dict(universe_positions)
-        external_positions = {}
         account_holdings = self._fetch_account_holdings()
         for ticker, h in self._build_holdings_map(account_holdings).items():
             qty = float(h.get("qty", 0.0) or 0.0)
@@ -2481,35 +3061,36 @@ class TraderTradingController:
                 "current_price": float(h.get("current_price", 0.0) or 0.0),
             }
             account_wide_positions.setdefault(ticker, payload)
-            if ticker not in universe_positions:
-                external_positions[ticker] = payload
 
-        include_unrealized = self._risk_include_unrealized()
-        include_external_pnl = self._risk_include_external_holdings()
-        if include_unrealized:
-            source_positions = account_wide_positions if include_external_pnl else universe_positions
-            unrealized_pnl = 0.0
-            for pos in source_positions.values():
-                qty = float(pos.get("qty", 0.0) or 0.0)
-                buy = float(pos.get("buy_price", 0.0) or 0.0)
-                cur = float(pos.get("current_price", 0.0) or 0.0)
-                if qty <= 0 or buy <= 0 or cur <= 0:
+        price_history = {}
+        corr_limit = self._max_correlation_exposure_pct()
+        if corr_limit < 100.0 and pyupbit is not None and account_wide_positions:
+            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()] if hasattr(self, "combo_candle") else "minute240"
+            corr_window = max(20, self._portfolio_corr_window())
+            for ticker in list(account_wide_positions.keys())[:10]:
+                try:
+                    df = pyupbit.get_ohlcv(ticker, interval=interval, count=corr_window + 1)
+                    if df is None or len(df) < corr_window:
+                        continue
+                    price_history[ticker] = [float(v) for v in df["close"].tolist() if float(v) > 0]
+                except Exception:
                     continue
-                unrealized_pnl += (cur - buy) * qty
-        else:
-            unrealized_pnl = 0.0
 
-        portfolio_pnl = realized_pnl + unrealized_pnl
-        initial = float(getattr(self, "initial_balance", 0.0) or 0.0)
-        loss_rate = (portfolio_pnl / initial * 100.0) if initial > 0 else 0.0
-        snapshot = {
-            "realized_pnl": realized_pnl,
-            "unrealized_pnl": unrealized_pnl,
-            "portfolio_pnl": portfolio_pnl,
-            "loss_rate": loss_rate,
-            "holdings_count": sum(1 for pos in account_wide_positions.values() if float(pos.get("qty", 0.0) or 0.0) > 0),
-            "external_holdings_count": sum(1 for pos in external_positions.values() if float(pos.get("qty", 0.0) or 0.0) > 0),
-        }
+        dd_caution, dd_defense, dd_halt = self._drawdown_thresholds()
+        snapshot = build_portfolio_risk_snapshot(
+            initial_balance=float(getattr(self, "initial_balance", 0.0) or 0.0),
+            realized_pnl=realized_pnl,
+            universe_positions=universe_positions,
+            account_wide_positions=account_wide_positions,
+            include_unrealized=self._risk_include_unrealized(),
+            include_external_holdings=self._risk_include_external_holdings(),
+            drawdown_state_enabled=self._drawdown_state_enabled(),
+            dd_caution_pct=float(dd_caution),
+            dd_defense_pct=float(dd_defense),
+            dd_halt_pct=float(dd_halt),
+            corr_window=self._portfolio_corr_window(),
+            price_history=price_history,
+        )
         self._risk_snapshot_cache = {"ts": now_ts, "value": snapshot}
         return dict(snapshot)
 
@@ -2519,24 +3100,32 @@ class TraderTradingController:
             return True
 
         snapshot = self._get_risk_snapshot(force=False)
-        max_loss = -self.spin_max_loss.value()
-        loss_rate = float(snapshot.get("loss_rate", 0.0) or 0.0)
-        if loss_rate <= max_loss:
-            if not self.daily_loss_triggered:
-                self.daily_loss_triggered = True
-                self._ops_alert(
-                    level="warning",
-                    message=f"🛑 일일 손실 한도 도달! ({loss_rate:.2f}%)",
-                    key="risk_limit:daily_loss",
-                    cooldown=20,
-                )
-            return False
-
-        holdings = int(snapshot.get("holdings_count", 0) or 0)
-        if holdings >= self.spin_max_holdings.value():
-            return False
-
-        return True
+        allowed, triggered, reasons = evaluate_risk_limits(
+            snapshot=snapshot,
+            config=RiskLimitConfig(
+                max_daily_loss_pct=float(self.spin_max_loss.value()),
+                max_holdings=int(self.spin_max_holdings.value()),
+                max_correlation_exposure_pct=float(self._max_correlation_exposure_pct()),
+            ),
+            daily_loss_triggered=bool(getattr(self, "daily_loss_triggered", False)),
+        )
+        if triggered and not self.daily_loss_triggered:
+            self.daily_loss_triggered = True
+            loss_rate = float(snapshot.get("loss_rate", 0.0) or 0.0)
+            self._ops_alert(
+                level="warning",
+                message=f"🛑 일일 손실 한도 도달! ({loss_rate:.2f}%)",
+                key="risk_limit:daily_loss",
+                cooldown=20,
+            )
+        if not allowed and reasons:
+            self._ops_alert(
+                level="warning",
+                message=f"⚠️ 리스크 제한으로 진입 보류 ({', '.join(reasons[:2])})",
+                key=f"risk_limit:{'|'.join(reasons)}",
+                cooldown=10,
+            )
+        return bool(allowed)
 
     def apply_preset(self, preset_type):
         """프리셋 적용"""

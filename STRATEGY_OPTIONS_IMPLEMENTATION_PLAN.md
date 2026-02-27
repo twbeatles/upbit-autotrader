@@ -65,3 +65,54 @@ v3.2 전략 엔진 옵션(`single`, `ensemble`)과 진입 정책(`engine_gate_po
 - 혼합 ensemble에서 하드게이트 완화 검증.
 - timeout unresolved 시 manual review queue 적재 검증.
 - account-wide 동기화/리스크 계산 범위 검증.
+
+## 8. v3.3 확장 옵션 (구현 반영)
+
+### 8.1 리스크 사이징
+- `use_risk_budget_sizing` (기본 `False`)
+- `risk_budget_pct` (기본 `0.5`)
+- `atr_stop_mult` (기본 `2.0`)
+- `min_stop_pct` (기본 `0.3`)
+- `max_betting_pct` (기본 `15.0`)
+- `use_kelly_adjustment` (기본 `False`)
+- `kelly_scale` (기본 `0.25`)
+
+### 8.2 드로우다운 상태
+- `drawdown_state_enabled` (기본 `False`)
+- `dd_caution_pct` (기본 `3.0`)
+- `dd_defense_pct` (기본 `5.0`)
+- `dd_halt_pct` (기본 `8.0`)
+
+### 8.3 실행 모델/TWAP
+- `use_execution_model` (기본 `False`)
+- `execution_mode`: `single_market` / `twap_market`
+- `expected_slippage_guard_bps` (기본 `30.0`)
+- `twap_slices` (기본 `3`)
+- `twap_interval_sec` (기본 `8`)
+
+### 8.4 메타 시그널/가중치
+- `use_meta_signal` (기본 `False`)
+- `meta_min_expectancy` (기본 `0.0`)
+- `meta_score_threshold` (기본 `60.0`)
+- `weight_rebalance_daily` (기본 `True`)
+- `weight_min` (기본 `0.5`)
+- `weight_max` (기본 `1.5`)
+
+### 8.5 운영 알림/복구
+- `enable_discord_alerts` (기본 `False`)
+- `discord_webhook`
+- `persist_reconciliation_state` (기본 `False`)
+- 이벤트: `BUY`, `SELL`, `WARNING`, `ERROR`, `EMERGENCY`
+
+## 9. 운영 권장 프로파일
+- 보수형(기본 권장):
+  - `risk_budget_pct=0.5`, `atr_stop_mult=2.0`, `kelly_scale=0.25`, `max_betting_pct=15.0`
+- 안정성 검증 단계:
+  - 실거래 전 `use_execution_model=True` + `use_meta_signal=True`를 페이퍼 모드에서 먼저 검증
+- 롤아웃 원칙:
+  - 신규 옵션은 순차적으로 `ON`하고, 회귀 테스트 및 페이퍼 검증 후 실거래 반영
+
+## 10. 구현 상태 (2026-02-27)
+- 계획 문서의 핵심 옵션은 코드에 반영 완료
+- 신규 옵션은 모두 고급 탭 UI 및 설정 저장/복원 경로와 연결됨
+- 전체 테스트 통과: `74 passed`

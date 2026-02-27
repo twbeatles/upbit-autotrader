@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-Upbit Pro Algo-Trader v3.2.2 PyInstaller spec (onefile).
+Upbit Pro Algo-Trader v3.3.0 PyInstaller spec (onefile).
 
 Build:
   pyinstaller --noconfirm --clean upbit_trader.spec
@@ -63,7 +63,8 @@ hiddenimports = [
     "platformdirs",
 ]
 
-# Refactored package modules (v3.2.2+)
+# Refactored package modules (v3.3.0+)
+# Includes risk/, execution/, strategies/meta_signal.py and related controllers.
 hiddenimports += collect_submodules("upbit_autotrader")
 
 # NOTE: Do not bundle local .py files as data; PyInstaller packages them as modules.

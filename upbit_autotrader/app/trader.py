@@ -24,6 +24,8 @@ from upbit_order_service import UpbitOrderService
 from upbit_paper_order_service import UpbitPaperOrderService
 from upbit_price_thread import PriceUpdateThread
 from upbit_strategy_engine import StrategyEngine
+from upbit_autotrader.execution.reconciliation_store import ReconciliationStore
+from upbit_autotrader.strategies.meta_signal import StrategyPerformanceTracker
 from upbit_trader_batch_controller import TraderBatchController
 from upbit_trader_history_controller import TraderHistoryController
 from upbit_trader_settings_controller import TraderSettingsController
@@ -77,6 +79,12 @@ class UpbitProTrader(
         self._risk_snapshot_cache = {"ts": 0.0, "value": None}
         self._last_price_update_ts = 0.0
         self._price_feed_recovery_attempted = False
+        self.persist_reconciliation_state = bool(getattr(Config, "DEFAULT_PERSIST_RECONCILIATION_STATE", False))
+        self.reconciliation_store = ReconciliationStore(getattr(Config, "RECONCILIATION_STATE_FILE", "reconciliation_state.json"))
+        self._reconciliation_dirty = False
+        self.strategy_perf_tracker = StrategyPerformanceTracker.load(
+            getattr(Config, "STRATEGY_PERF_FILE", "strategy_performance.json")
+        )
         
         # 시스템 설정 초기화
         self.system_settings = {
@@ -133,6 +141,8 @@ class UpbitProTrader(
         
         # 설정 불러오기
         self.load_settings()
+        if hasattr(self, "_load_reconciliation_state"):
+            self._load_reconciliation_state()
         
         # 처음 실행 확인
         self.check_first_run()
@@ -183,6 +193,15 @@ class UpbitProTrader(
         self.timer_pending_reconcile = QTimer(self)
         self.timer_pending_reconcile.start(Config.PENDING_RECONCILE_INTERVAL_MS)
         self.timer_pending_reconcile.timeout.connect(lambda: self._reconcile_pending_orders(force=False))
+        self.timer_reconciliation_persist = QTimer(self)
+        self.timer_reconciliation_persist.start(
+            int(getattr(Config, "RECONCILIATION_PERSIST_INTERVAL_MS", 5000))
+        )
+        self.timer_reconciliation_persist.timeout.connect(
+            lambda: self._persist_reconciliation_state(force=False)
+            if hasattr(self, "_persist_reconciliation_state")
+            else None
+        )
 
     def on_timer_tick(self):
         """1초마다 실행"""
@@ -269,6 +288,13 @@ class UpbitProTrader(
         self.save_trade_history()
         if hasattr(self, "_reconcile_pending_orders"):
             self._reconcile_pending_orders(force=True)
+        if hasattr(self, "_persist_reconciliation_state"):
+            self._persist_reconciliation_state(force=True)
+        try:
+            if hasattr(self, "strategy_perf_tracker"):
+                self.strategy_perf_tracker.save(getattr(Config, "STRATEGY_PERF_FILE", "strategy_performance.json"))
+        except Exception:
+            pass
         
         self.price_thread.stop()
         self.price_thread.wait(2000)

@@ -161,8 +161,17 @@ class TraderHistoryController:
         filename = f"trade_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         try:
             import csv
+            base_fields = ['timestamp', 'ticker', 'type', 'price', 'quantity', 'amount', 'profit', 'reason']
+            extra_fields = []
+            for row in self.trade_history:
+                if not isinstance(row, dict):
+                    continue
+                for key in row.keys():
+                    if key not in base_fields and key not in extra_fields:
+                        extra_fields.append(key)
+            fieldnames = base_fields + extra_fields
             with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.DictWriter(f, fieldnames=['timestamp', 'ticker', 'type', 'price', 'quantity', 'amount', 'profit', 'reason'])
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(self.trade_history)
             QMessageBox.information(self, "완료", f"거래 기록이 {filename}에 저장되었습니다.")
@@ -257,8 +266,17 @@ class TraderHistoryController:
             filename = f"trade_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             
             import csv
+            base_fields = ['timestamp', 'ticker', 'type', 'price', 'quantity', 'amount', 'profit', 'reason']
+            extra_fields = []
+            for row in self.trade_history:
+                if not isinstance(row, dict):
+                    continue
+                for key in row.keys():
+                    if key not in base_fields and key not in extra_fields:
+                        extra_fields.append(key)
+            fieldnames = base_fields + extra_fields
             with open(filename, 'w', newline='', encoding='utf-8-sig') as f:
-                writer = csv.DictWriter(f, fieldnames=['timestamp', 'ticker', 'type', 'price', 'quantity', 'amount', 'profit', 'reason'])
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(self.trade_history)
             
@@ -290,7 +308,7 @@ class TraderHistoryController:
         except Exception as e:
             self.logger.error(f"거래 히스토리 저장 실패: {e}")
 
-    def add_trade_record(self, ticker, trade_type, price, quantity, profit=0, reason=""):
+    def add_trade_record(self, ticker, trade_type, price, quantity, profit=0, reason="", **extra_fields):
         """거래 기록 추가 (v2.5 신규)"""
         record = {
             'timestamp': datetime.datetime.now().isoformat(),
@@ -302,6 +320,11 @@ class TraderHistoryController:
             'profit': profit,
             'reason': reason
         }
+        if extra_fields:
+            for key, value in extra_fields.items():
+                if value is None:
+                    continue
+                record[str(key)] = value
         self.trade_history.append(record)
         
         # 히스토리 테이블 업데이트

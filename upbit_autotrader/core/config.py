@@ -122,6 +122,43 @@ class Config:
     DEFAULT_MANUAL_REVIEW_ON_TIMEOUT = True
 
     # ---------------------------------------------------------------------
+    # Extended risk sizing / execution / meta (v3.3)
+    # ---------------------------------------------------------------------
+    DEFAULT_USE_RISK_BUDGET_SIZING = False
+    DEFAULT_RISK_BUDGET_PCT = 0.5
+    DEFAULT_ATR_STOP_MULT = 2.0
+    DEFAULT_MIN_STOP_PCT = 0.3
+    DEFAULT_MAX_BETTING_PCT = 15.0
+
+    DEFAULT_USE_KELLY_ADJUSTMENT = False
+    DEFAULT_KELLY_SCALE = 0.25
+
+    DEFAULT_DRAWDOWN_STATE_ENABLED = False
+    DEFAULT_DD_CAUTION_PCT = 3.0
+    DEFAULT_DD_DEFENSE_PCT = 5.0
+    DEFAULT_DD_HALT_PCT = 8.0
+
+    DEFAULT_PORTFOLIO_CORR_WINDOW = 60
+    DEFAULT_MAX_CORRELATION_EXPOSURE_PCT = 100.0
+
+    DEFAULT_USE_EXECUTION_MODEL = False
+    DEFAULT_EXECUTION_MODE = "single_market"  # single_market | twap_market
+    DEFAULT_EXPECTED_SLIPPAGE_GUARD_BPS = 30.0
+    DEFAULT_TWAP_SLICES = 3
+    DEFAULT_TWAP_INTERVAL_SEC = 8
+
+    DEFAULT_USE_META_SIGNAL = False
+    DEFAULT_META_MIN_EXPECTANCY = 0.0
+    DEFAULT_META_SCORE_THRESHOLD = 60.0
+    DEFAULT_WEIGHT_REBALANCE_DAILY = True
+    DEFAULT_WEIGHT_MIN = 0.5
+    DEFAULT_WEIGHT_MAX = 1.5
+
+    DEFAULT_ENABLE_DISCORD_ALERTS = False
+    DEFAULT_DISCORD_WEBHOOK = ""
+    DEFAULT_PERSIST_RECONCILIATION_STATE = False
+
+    # ---------------------------------------------------------------------
     # Paper trading
     # ---------------------------------------------------------------------
     DEFAULT_PAPER_TRADING = False
@@ -164,6 +201,8 @@ class Config:
     SETTINGS_FILE = "upbit_settings.json"
     PRESETS_FILE = "upbit_presets.json"
     TRADE_HISTORY_FILE = "trade_history.json"
+    RECONCILIATION_STATE_FILE = "reconciliation_state.json"
+    STRATEGY_PERF_FILE = "strategy_performance.json"
     LOG_DIR = "logs"
 
     # ---------------------------------------------------------------------
@@ -189,6 +228,7 @@ class Config:
 
     HISTORY_FLUSH_DEBOUNCE_MS = 1000
     PENDING_RECONCILE_INTERVAL_MS = 10000
+    RECONCILIATION_PERSIST_INTERVAL_MS = 5000
     PENDING_STALE_TIMEOUT_SEC = 90
     ORDER_STATUS_RETRY_DELAYS_SEC = (0.3, 0.6, 1.2)
     RISK_SNAPSHOT_TTL_SEC = 5
@@ -269,6 +309,24 @@ class Config:
         "risk_include_external_holdings": "리스크 계산에 워치리스트 외 보유 포함",
         "price_feed_stale_sec": "가격 업데이트가 이 시간(초) 이상 멈추면 stale 경고",
         "manual_review_on_timeout": "주문 타임아웃 해소 실패 시 수동검토 큐 적재",
+        "risk_budget_sizing": "손절거리/계좌리스크를 기준으로 주문 비중을 계산합니다.",
+        "risk_budget_pct": "1회 거래당 허용 리스크 비율(계좌대비 %)입니다.",
+        "atr_stop_mult": "ATR 기반 손절거리 배수입니다.",
+        "min_stop_pct": "손절거리 최소값(%)입니다.",
+        "max_betting_pct": "신규 리스크 사이징 적용 시 종목당 최대 비중(%)입니다.",
+        "kelly_adjustment": "전략 성과 기반 Kelly 보정으로 진입 비중을 추가 제한합니다.",
+        "drawdown_state": "드로우다운 상태(normal/caution/defense/halt) 기반 비중 축소를 적용합니다.",
+        "portfolio_corr_window": "상관집중도 계산에 사용할 캔들 개수입니다.",
+        "max_correlation_exposure_pct": "상관집중 익스포저 허용 한도(%)입니다.",
+        "execution_model": "슬리피지 추정 기반 주문 계획(single/TWAP)을 적용합니다.",
+        "expected_slippage_guard_bps": "예상 슬리피지 상한(bps) 초과 시 주문 금액을 축소/차단합니다.",
+        "twap": "시장가 분할주문 횟수/간격을 설정합니다.",
+        "meta_signal": "엔진 점수 + 전략 성과를 결합한 메타 진입 게이트를 사용합니다.",
+        "meta_min_expectancy": "기대값 최소 기준(%)입니다.",
+        "meta_score_threshold": "메타 점수 임계값입니다.",
+        "weight_rebalance_daily": "전략 가중치를 일 1회 자동 리밸런싱합니다.",
+        "discord_alerts": "운영 이벤트를 Discord 웹훅으로 전송합니다.",
+        "persist_reconciliation": "pending/manual/orphan 상태를 디스크에 주기적으로 저장합니다.",
         "paper_trading": "실주문 대신 모의 체결로 테스트합니다.",
         "paper_allow_without_login": "페이퍼 모드에서 API 로그인 없이 시작 허용",
         "paper_seed_krw": "무로그인 페이퍼 시작 시 초기 KRW 시드",
