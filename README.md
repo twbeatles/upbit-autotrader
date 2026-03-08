@@ -101,18 +101,28 @@ python -m pytest -q
 ```
 
 현재 기준:
-- `74 passed`
+- `90 passed`
 
 추가된 핵심 테스트:
 - `tests/test_position_sizing.py`
 - `tests/test_portfolio_risk_engine.py`
 - `tests/test_execution_model.py`
 - `tests/test_meta_signal.py`
+- `tests/test_structure_guards.py`
+- `tests/test_refactor_split_compatibility.py`
+- `tests/test_plan_implementation_fixes.py`
 
 ## 프로젝트 문서
-- 구조 분석/구현 상태: `PROJECT_STRUCTURE_ANALYSIS.md`
-- 전략 옵션/운영 계획: `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
+- 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
 - 개발 가이드: `CLAUDE.md`, `GEMINI.md`
+
+## 로컬 품질 가드 (pre-commit)
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+- 커밋 시 문서 참조 무결성 테스트(`tests/test_docs_references.py`)가 자동 실행됩니다.
 
 ## 주의사항
 1. 실거래 자금이 사용됩니다.

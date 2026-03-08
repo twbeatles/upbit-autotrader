@@ -202,6 +202,13 @@ class UpbitProTrader(
             if hasattr(self, "_persist_reconciliation_state")
             else None
         )
+        self.timer_manual_review_refresh = QTimer(self)
+        self.timer_manual_review_refresh.start(5000)
+        self.timer_manual_review_refresh.timeout.connect(
+            lambda: self.refresh_manual_review_table()
+            if hasattr(self, "refresh_manual_review_table")
+            else None
+        )
 
     def on_timer_tick(self):
         """1초마다 실행"""

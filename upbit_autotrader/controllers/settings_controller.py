@@ -1,10 +1,11 @@
-﻿import os
+import os
 import sys
 import winreg
 
 from PyQt6.QtWidgets import QMessageBox
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.controllers.settings_field_specs import apply_settings_to_widgets, collect_settings_from_specs
 try:
     from upbit_autotrader.notifications.notifiers import EventType, UpbitNotificationManager
 except ImportError:
@@ -15,85 +16,13 @@ from upbit_autotrader.services.settings_store import load_settings as load_setti
 
 class TraderSettingsController:
     def save_settings(self):
-        """설정 저장"""
-        settings = {
-            "coins": self.input_coins.text(),
-            "candle": self.combo_candle.currentText(),
-            "betting_ratio": self.spin_betting.value(),
-            "k_value": self.spin_k.value(),
-            "ts_start": self.spin_ts_start.value(),
-            "ts_stop": self.spin_ts_stop.value(),
-            "loss_cut": self.spin_loss.value(),
-            "use_rsi": self.chk_use_rsi.isChecked(),
-            "rsi_upper": self.spin_rsi_upper.value(),
-            "rsi_period": self.spin_rsi_period.value(),
-            "use_volume": self.chk_use_volume.isChecked(),
-            "volume_mult": self.spin_volume_mult.value(),
-            "use_risk": self.chk_use_risk.isChecked(),
-            "max_daily_loss": self.spin_max_loss.value(),
-            "max_holdings": self.spin_max_holdings.value(),
-            "use_partial_tp": self.chk_use_partial_tp.isChecked(),
-            "use_entry_scoring": self.chk_use_entry_scoring.isChecked(),
-            "entry_score_threshold": self.spin_entry_score_threshold.value(),
-            "use_strategy_engine": self.chk_use_strategy_engine.isChecked() if hasattr(self, "chk_use_strategy_engine") else Config.DEFAULT_USE_STRATEGY_ENGINE,
-            "strategy_mode": self.combo_strategy_mode.currentData() if hasattr(self, "combo_strategy_mode") else Config.DEFAULT_STRATEGY_MODE,
-            "single_strategy": self.combo_single_strategy.currentData() if hasattr(self, "combo_single_strategy") else Config.DEFAULT_SINGLE_STRATEGY,
-            "engine_gate_policy": self.combo_engine_gate_policy.currentData() if hasattr(self, "combo_engine_gate_policy") else Config.DEFAULT_ENGINE_GATE_POLICY,
-            "ensemble_threshold": self.spin_ensemble_threshold.value() if hasattr(self, "spin_ensemble_threshold") else Config.DEFAULT_ENSEMBLE_THRESHOLD,
-            "active_strategies": self.input_active_strategies.text().strip() if hasattr(self, "input_active_strategies") else ",".join(Config.DEFAULT_ACTIVE_STRATEGIES),
-            "strategy_weights": self.input_strategy_weights.text().strip() if hasattr(self, "input_strategy_weights") else "",
-            "use_volatility_targeting": self.chk_use_volatility_targeting.isChecked() if hasattr(self, "chk_use_volatility_targeting") else Config.DEFAULT_USE_VOLATILITY_TARGETING,
-            "target_vol_pct": self.spin_target_vol.value() if hasattr(self, "spin_target_vol") else Config.DEFAULT_TARGET_VOL_PCT,
-            "use_regime_filter": self.chk_use_regime_filter.isChecked() if hasattr(self, "chk_use_regime_filter") else Config.DEFAULT_USE_REGIME_FILTER,
-            "regime_min_adx": self.spin_regime_min_adx.value() if hasattr(self, "spin_regime_min_adx") else Config.DEFAULT_REGIME_MIN_ADX,
-            "use_drawdown_guard": self.chk_use_drawdown_guard.isChecked() if hasattr(self, "chk_use_drawdown_guard") else Config.DEFAULT_USE_DRAWDOWN_GUARD,
-            "drawdown_guard_pct": self.spin_drawdown_guard.value() if hasattr(self, "spin_drawdown_guard") else Config.DEFAULT_DRAWDOWN_GUARD_PCT,
-            "max_consecutive_losses": self.spin_max_consecutive_losses.value() if hasattr(self, "spin_max_consecutive_losses") else Config.DEFAULT_MAX_CONSECUTIVE_LOSSES,
-            "enable_account_wide_sync": self.chk_enable_account_wide_sync.isChecked() if hasattr(self, "chk_enable_account_wide_sync") else Config.DEFAULT_ENABLE_ACCOUNT_WIDE_SYNC,
-            "risk_include_unrealized": self.chk_risk_include_unrealized.isChecked() if hasattr(self, "chk_risk_include_unrealized") else Config.DEFAULT_RISK_INCLUDE_UNREALIZED,
-            "risk_include_external_holdings": self.chk_risk_include_external_holdings.isChecked() if hasattr(self, "chk_risk_include_external_holdings") else Config.DEFAULT_RISK_INCLUDE_EXTERNAL_HOLDINGS,
-            "price_feed_stale_sec": self.spin_price_feed_stale_sec.value() if hasattr(self, "spin_price_feed_stale_sec") else Config.DEFAULT_PRICE_FEED_STALE_SEC,
-            "manual_review_on_timeout": self.chk_manual_review_on_timeout.isChecked() if hasattr(self, "chk_manual_review_on_timeout") else Config.DEFAULT_MANUAL_REVIEW_ON_TIMEOUT,
-            "use_risk_budget_sizing": self.chk_use_risk_budget_sizing.isChecked() if hasattr(self, "chk_use_risk_budget_sizing") else Config.DEFAULT_USE_RISK_BUDGET_SIZING,
-            "risk_budget_pct": self.spin_risk_budget_pct.value() if hasattr(self, "spin_risk_budget_pct") else Config.DEFAULT_RISK_BUDGET_PCT,
-            "atr_stop_mult": self.spin_atr_stop_mult.value() if hasattr(self, "spin_atr_stop_mult") else Config.DEFAULT_ATR_STOP_MULT,
-            "min_stop_pct": self.spin_min_stop_pct.value() if hasattr(self, "spin_min_stop_pct") else Config.DEFAULT_MIN_STOP_PCT,
-            "max_betting_pct": self.spin_max_betting_pct.value() if hasattr(self, "spin_max_betting_pct") else Config.DEFAULT_MAX_BETTING_PCT,
-            "use_kelly_adjustment": self.chk_use_kelly_adjustment.isChecked() if hasattr(self, "chk_use_kelly_adjustment") else Config.DEFAULT_USE_KELLY_ADJUSTMENT,
-            "kelly_scale": self.spin_kelly_scale.value() if hasattr(self, "spin_kelly_scale") else Config.DEFAULT_KELLY_SCALE,
-            "drawdown_state_enabled": self.chk_drawdown_state_enabled.isChecked() if hasattr(self, "chk_drawdown_state_enabled") else Config.DEFAULT_DRAWDOWN_STATE_ENABLED,
-            "dd_caution_pct": self.spin_dd_caution_pct.value() if hasattr(self, "spin_dd_caution_pct") else Config.DEFAULT_DD_CAUTION_PCT,
-            "dd_defense_pct": self.spin_dd_defense_pct.value() if hasattr(self, "spin_dd_defense_pct") else Config.DEFAULT_DD_DEFENSE_PCT,
-            "dd_halt_pct": self.spin_dd_halt_pct.value() if hasattr(self, "spin_dd_halt_pct") else Config.DEFAULT_DD_HALT_PCT,
-            "portfolio_corr_window": self.spin_portfolio_corr_window.value() if hasattr(self, "spin_portfolio_corr_window") else Config.DEFAULT_PORTFOLIO_CORR_WINDOW,
-            "max_correlation_exposure_pct": self.spin_max_correlation_exposure_pct.value() if hasattr(self, "spin_max_correlation_exposure_pct") else Config.DEFAULT_MAX_CORRELATION_EXPOSURE_PCT,
-            "use_execution_model": self.chk_use_execution_model.isChecked() if hasattr(self, "chk_use_execution_model") else Config.DEFAULT_USE_EXECUTION_MODEL,
-            "execution_mode": self.combo_execution_mode.currentData() if hasattr(self, "combo_execution_mode") else Config.DEFAULT_EXECUTION_MODE,
-            "expected_slippage_guard_bps": self.spin_expected_slippage_guard_bps.value() if hasattr(self, "spin_expected_slippage_guard_bps") else Config.DEFAULT_EXPECTED_SLIPPAGE_GUARD_BPS,
-            "twap_slices": self.spin_twap_slices.value() if hasattr(self, "spin_twap_slices") else Config.DEFAULT_TWAP_SLICES,
-            "twap_interval_sec": self.spin_twap_interval_sec.value() if hasattr(self, "spin_twap_interval_sec") else Config.DEFAULT_TWAP_INTERVAL_SEC,
-            "use_meta_signal": self.chk_use_meta_signal.isChecked() if hasattr(self, "chk_use_meta_signal") else Config.DEFAULT_USE_META_SIGNAL,
-            "meta_min_expectancy": self.spin_meta_min_expectancy.value() if hasattr(self, "spin_meta_min_expectancy") else Config.DEFAULT_META_MIN_EXPECTANCY,
-            "meta_score_threshold": self.spin_meta_score_threshold.value() if hasattr(self, "spin_meta_score_threshold") else Config.DEFAULT_META_SCORE_THRESHOLD,
-            "weight_rebalance_daily": self.chk_weight_rebalance_daily.isChecked() if hasattr(self, "chk_weight_rebalance_daily") else Config.DEFAULT_WEIGHT_REBALANCE_DAILY,
-            "weight_min": self.spin_weight_min.value() if hasattr(self, "spin_weight_min") else Config.DEFAULT_WEIGHT_MIN,
-            "weight_max": self.spin_weight_max.value() if hasattr(self, "spin_weight_max") else Config.DEFAULT_WEIGHT_MAX,
-            "enable_discord_alerts": self.chk_enable_discord_alerts.isChecked() if hasattr(self, "chk_enable_discord_alerts") else Config.DEFAULT_ENABLE_DISCORD_ALERTS,
-            "discord_webhook": self.input_discord_webhook.text().strip() if hasattr(self, "input_discord_webhook") else Config.DEFAULT_DISCORD_WEBHOOK,
-            "persist_reconciliation_state": self.chk_persist_reconciliation_state.isChecked() if hasattr(self, "chk_persist_reconciliation_state") else Config.DEFAULT_PERSIST_RECONCILIATION_STATE,
-            "paper_trading": self.chk_paper_trading.isChecked() if hasattr(self, "chk_paper_trading") else Config.DEFAULT_PAPER_TRADING,
-            "paper_allow_without_login": self.chk_paper_allow_without_login.isChecked() if hasattr(self, "chk_paper_allow_without_login") else Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN,
-            "paper_seed_krw": self.spin_paper_seed_krw.value() if hasattr(self, "spin_paper_seed_krw") else Config.DEFAULT_PAPER_SEED_KRW,
-            "paper_fee_bps": self.spin_paper_fee_bps.value() if hasattr(self, "spin_paper_fee_bps") else Config.DEFAULT_PAPER_FEE_BPS,
-            "paper_slippage_bps": self.spin_paper_slippage_bps.value() if hasattr(self, "spin_paper_slippage_bps") else Config.DEFAULT_PAPER_SLIPPAGE_BPS,
-            # API 키 저장 (DPAPI 암호화 저장소로 전달)
-            "access_key": self.input_access.text().strip(),
-            "secret_key": self.input_secret.text().strip(),
-            # 시스템 설정
-            "system": self.system_settings
-        }
+        """?? ??"""
+        settings = collect_settings_from_specs(self, Config)
+        settings["access_key"] = self.input_access.text().strip()
+        settings["secret_key"] = self.input_secret.text().strip()
+        settings["system"] = self.system_settings
 
-        if hasattr(self, 'chk_use_cooldown'):
+        if hasattr(self, "chk_use_cooldown"):
             settings["use_cooldown"] = self.chk_use_cooldown.isChecked()
             settings["cooldown_minutes"] = self.spin_cooldown.value()
             settings["use_time_exit"] = self.chk_use_time_exit.isChecked()
@@ -103,178 +32,54 @@ class TraderSettingsController:
             settings["use_gap_analysis"] = self.chk_use_gap.isChecked()
             settings["use_breakout_confirm"] = self.chk_use_breakout_confirm.isChecked()
             settings["breakout_confirm_ticks"] = self.spin_breakout_ticks.value()
-        
+
         try:
             save_settings_v2(Config.SETTINGS_FILE, settings)
             self.configure_runtime_integrations()
-            self.log("✅ 설정이 저장되었습니다")
+            self.log("? ??? ???????")
         except Exception as e:
-            self.log(f"[ERROR] 설정 저장 실패: {e}")
+            self.log(f"[ERROR] ?? ?? ??: {e}")
 
     def load_settings(self):
-        """설정 불러오기"""
+        """?? ????"""
         try:
             s = load_settings_v2(Config.SETTINGS_FILE)
             if not s:
                 return
 
-            self.input_coins.setText(s.get("coins", Config.DEFAULT_COINS))
-            self.combo_candle.setCurrentText(s.get("candle", Config.DEFAULT_CANDLE))
-            self.spin_betting.setValue(s.get("betting_ratio", Config.DEFAULT_BETTING_RATIO))
-            self.spin_k.setValue(s.get("k_value", Config.DEFAULT_K_VALUE))
-            self.spin_ts_start.setValue(s.get("ts_start", Config.DEFAULT_TS_START))
-            self.spin_ts_stop.setValue(s.get("ts_stop", Config.DEFAULT_TS_STOP))
-            self.spin_loss.setValue(s.get("loss_cut", Config.DEFAULT_LOSS_CUT))
-            self.chk_use_rsi.setChecked(s.get("use_rsi", Config.DEFAULT_USE_RSI))
-            self.spin_rsi_upper.setValue(s.get("rsi_upper", Config.DEFAULT_RSI_UPPER))
-            self.spin_rsi_period.setValue(s.get("rsi_period", Config.DEFAULT_RSI_PERIOD))
-            self.chk_use_volume.setChecked(s.get("use_volume", Config.DEFAULT_USE_VOLUME))
-            self.spin_volume_mult.setValue(s.get("volume_mult", Config.DEFAULT_VOLUME_MULTIPLIER))
-            self.chk_use_risk.setChecked(s.get("use_risk", Config.DEFAULT_USE_RISK_MGMT))
-            self.spin_max_loss.setValue(s.get("max_daily_loss", Config.DEFAULT_MAX_DAILY_LOSS))
-            self.spin_max_holdings.setValue(s.get("max_holdings", Config.DEFAULT_MAX_HOLDINGS))
-            self.chk_use_partial_tp.setChecked(s.get("use_partial_tp", False))
-            self.chk_use_entry_scoring.setChecked(s.get("use_entry_scoring", False))
-            self.spin_entry_score_threshold.setValue(s.get("entry_score_threshold", Config.ENTRY_SCORE_THRESHOLD))
-            if hasattr(self, "chk_use_strategy_engine"):
-                self.chk_use_strategy_engine.setChecked(s.get("use_strategy_engine", Config.DEFAULT_USE_STRATEGY_ENGINE))
-            if hasattr(self, "combo_strategy_mode"):
-                mode = s.get("strategy_mode", Config.DEFAULT_STRATEGY_MODE)
-                idx = self.combo_strategy_mode.findData(mode)
-                if idx >= 0:
-                    self.combo_strategy_mode.setCurrentIndex(idx)
-            if hasattr(self, "combo_single_strategy"):
-                sid = s.get("single_strategy", Config.DEFAULT_SINGLE_STRATEGY)
-                idx = self.combo_single_strategy.findData(sid)
-                if idx >= 0:
-                    self.combo_single_strategy.setCurrentIndex(idx)
-            if hasattr(self, "combo_engine_gate_policy"):
-                gate = s.get("engine_gate_policy", Config.DEFAULT_ENGINE_GATE_POLICY)
-                idx = self.combo_engine_gate_policy.findData(gate)
-                if idx >= 0:
-                    self.combo_engine_gate_policy.setCurrentIndex(idx)
-            if hasattr(self, "spin_ensemble_threshold"):
-                self.spin_ensemble_threshold.setValue(s.get("ensemble_threshold", Config.DEFAULT_ENSEMBLE_THRESHOLD))
-            if hasattr(self, "input_active_strategies"):
-                self.input_active_strategies.setText(s.get("active_strategies", ",".join(Config.DEFAULT_ACTIVE_STRATEGIES)))
-            if hasattr(self, "input_strategy_weights"):
-                self.input_strategy_weights.setText(s.get("strategy_weights", ""))
-            if hasattr(self, "chk_use_volatility_targeting"):
-                self.chk_use_volatility_targeting.setChecked(s.get("use_volatility_targeting", Config.DEFAULT_USE_VOLATILITY_TARGETING))
-            if hasattr(self, "spin_target_vol"):
-                self.spin_target_vol.setValue(s.get("target_vol_pct", Config.DEFAULT_TARGET_VOL_PCT))
-            if hasattr(self, "chk_use_regime_filter"):
-                self.chk_use_regime_filter.setChecked(s.get("use_regime_filter", Config.DEFAULT_USE_REGIME_FILTER))
-            if hasattr(self, "spin_regime_min_adx"):
-                self.spin_regime_min_adx.setValue(s.get("regime_min_adx", Config.DEFAULT_REGIME_MIN_ADX))
-            if hasattr(self, "chk_use_drawdown_guard"):
-                self.chk_use_drawdown_guard.setChecked(s.get("use_drawdown_guard", Config.DEFAULT_USE_DRAWDOWN_GUARD))
-            if hasattr(self, "spin_drawdown_guard"):
-                self.spin_drawdown_guard.setValue(s.get("drawdown_guard_pct", Config.DEFAULT_DRAWDOWN_GUARD_PCT))
-            if hasattr(self, "spin_max_consecutive_losses"):
-                self.spin_max_consecutive_losses.setValue(s.get("max_consecutive_losses", Config.DEFAULT_MAX_CONSECUTIVE_LOSSES))
-            if hasattr(self, "chk_enable_account_wide_sync"):
-                self.chk_enable_account_wide_sync.setChecked(s.get("enable_account_wide_sync", Config.DEFAULT_ENABLE_ACCOUNT_WIDE_SYNC))
-            if hasattr(self, "chk_risk_include_unrealized"):
-                self.chk_risk_include_unrealized.setChecked(s.get("risk_include_unrealized", Config.DEFAULT_RISK_INCLUDE_UNREALIZED))
-            if hasattr(self, "chk_risk_include_external_holdings"):
-                self.chk_risk_include_external_holdings.setChecked(
-                    s.get("risk_include_external_holdings", Config.DEFAULT_RISK_INCLUDE_EXTERNAL_HOLDINGS)
-                )
+            apply_settings_to_widgets(self, s, Config)
             if hasattr(self, "spin_price_feed_stale_sec"):
                 self.spin_price_feed_stale_sec.setValue(int(s.get("price_feed_stale_sec", Config.DEFAULT_PRICE_FEED_STALE_SEC)))
-            if hasattr(self, "chk_manual_review_on_timeout"):
-                self.chk_manual_review_on_timeout.setChecked(
-                    s.get("manual_review_on_timeout", Config.DEFAULT_MANUAL_REVIEW_ON_TIMEOUT)
-                )
-            if hasattr(self, "chk_use_risk_budget_sizing"):
-                self.chk_use_risk_budget_sizing.setChecked(s.get("use_risk_budget_sizing", Config.DEFAULT_USE_RISK_BUDGET_SIZING))
-            if hasattr(self, "spin_risk_budget_pct"):
-                self.spin_risk_budget_pct.setValue(s.get("risk_budget_pct", Config.DEFAULT_RISK_BUDGET_PCT))
-            if hasattr(self, "spin_atr_stop_mult"):
-                self.spin_atr_stop_mult.setValue(s.get("atr_stop_mult", Config.DEFAULT_ATR_STOP_MULT))
-            if hasattr(self, "spin_min_stop_pct"):
-                self.spin_min_stop_pct.setValue(s.get("min_stop_pct", Config.DEFAULT_MIN_STOP_PCT))
-            if hasattr(self, "spin_max_betting_pct"):
-                self.spin_max_betting_pct.setValue(s.get("max_betting_pct", Config.DEFAULT_MAX_BETTING_PCT))
-            if hasattr(self, "chk_use_kelly_adjustment"):
-                self.chk_use_kelly_adjustment.setChecked(s.get("use_kelly_adjustment", Config.DEFAULT_USE_KELLY_ADJUSTMENT))
-            if hasattr(self, "spin_kelly_scale"):
-                self.spin_kelly_scale.setValue(s.get("kelly_scale", Config.DEFAULT_KELLY_SCALE))
-            if hasattr(self, "chk_drawdown_state_enabled"):
-                self.chk_drawdown_state_enabled.setChecked(s.get("drawdown_state_enabled", Config.DEFAULT_DRAWDOWN_STATE_ENABLED))
-            if hasattr(self, "spin_dd_caution_pct"):
-                self.spin_dd_caution_pct.setValue(s.get("dd_caution_pct", Config.DEFAULT_DD_CAUTION_PCT))
-            if hasattr(self, "spin_dd_defense_pct"):
-                self.spin_dd_defense_pct.setValue(s.get("dd_defense_pct", Config.DEFAULT_DD_DEFENSE_PCT))
-            if hasattr(self, "spin_dd_halt_pct"):
-                self.spin_dd_halt_pct.setValue(s.get("dd_halt_pct", Config.DEFAULT_DD_HALT_PCT))
             if hasattr(self, "spin_portfolio_corr_window"):
                 self.spin_portfolio_corr_window.setValue(int(s.get("portfolio_corr_window", Config.DEFAULT_PORTFOLIO_CORR_WINDOW)))
-            if hasattr(self, "spin_max_correlation_exposure_pct"):
-                self.spin_max_correlation_exposure_pct.setValue(float(s.get("max_correlation_exposure_pct", Config.DEFAULT_MAX_CORRELATION_EXPOSURE_PCT)))
-            if hasattr(self, "chk_use_execution_model"):
-                self.chk_use_execution_model.setChecked(s.get("use_execution_model", Config.DEFAULT_USE_EXECUTION_MODEL))
-            if hasattr(self, "combo_execution_mode"):
-                ex_mode = s.get("execution_mode", Config.DEFAULT_EXECUTION_MODE)
-                idx = self.combo_execution_mode.findData(ex_mode)
-                if idx >= 0:
-                    self.combo_execution_mode.setCurrentIndex(idx)
-            if hasattr(self, "spin_expected_slippage_guard_bps"):
-                self.spin_expected_slippage_guard_bps.setValue(s.get("expected_slippage_guard_bps", Config.DEFAULT_EXPECTED_SLIPPAGE_GUARD_BPS))
             if hasattr(self, "spin_twap_slices"):
                 self.spin_twap_slices.setValue(int(s.get("twap_slices", Config.DEFAULT_TWAP_SLICES)))
             if hasattr(self, "spin_twap_interval_sec"):
                 self.spin_twap_interval_sec.setValue(int(s.get("twap_interval_sec", Config.DEFAULT_TWAP_INTERVAL_SEC)))
-            if hasattr(self, "chk_use_meta_signal"):
-                self.chk_use_meta_signal.setChecked(s.get("use_meta_signal", Config.DEFAULT_USE_META_SIGNAL))
-            if hasattr(self, "spin_meta_min_expectancy"):
-                self.spin_meta_min_expectancy.setValue(s.get("meta_min_expectancy", Config.DEFAULT_META_MIN_EXPECTANCY))
             if hasattr(self, "spin_meta_score_threshold"):
-                self.spin_meta_score_threshold.setValue(int(s.get("meta_score_threshold", Config.DEFAULT_META_SCORE_THRESHOLD)))
-            if hasattr(self, "chk_weight_rebalance_daily"):
-                self.chk_weight_rebalance_daily.setChecked(s.get("weight_rebalance_daily", Config.DEFAULT_WEIGHT_REBALANCE_DAILY))
-            if hasattr(self, "spin_weight_min"):
-                self.spin_weight_min.setValue(s.get("weight_min", Config.DEFAULT_WEIGHT_MIN))
-            if hasattr(self, "spin_weight_max"):
-                self.spin_weight_max.setValue(s.get("weight_max", Config.DEFAULT_WEIGHT_MAX))
-            if hasattr(self, "chk_enable_discord_alerts"):
-                self.chk_enable_discord_alerts.setChecked(s.get("enable_discord_alerts", Config.DEFAULT_ENABLE_DISCORD_ALERTS))
-            if hasattr(self, "input_discord_webhook"):
-                self.input_discord_webhook.setText(s.get("discord_webhook", Config.DEFAULT_DISCORD_WEBHOOK))
-            if hasattr(self, "chk_persist_reconciliation_state"):
-                self.chk_persist_reconciliation_state.setChecked(s.get("persist_reconciliation_state", Config.DEFAULT_PERSIST_RECONCILIATION_STATE))
-            if hasattr(self, "chk_paper_trading"):
-                self.chk_paper_trading.setChecked(s.get("paper_trading", Config.DEFAULT_PAPER_TRADING))
-            if hasattr(self, "chk_paper_allow_without_login"):
-                self.chk_paper_allow_without_login.setChecked(s.get("paper_allow_without_login", Config.DEFAULT_PAPER_ALLOW_WITHOUT_LOGIN))
+                self.spin_meta_score_threshold.setValue(float(s.get("meta_score_threshold", Config.DEFAULT_META_SCORE_THRESHOLD)))
             if hasattr(self, "spin_paper_seed_krw"):
                 self.spin_paper_seed_krw.setValue(float(s.get("paper_seed_krw", Config.DEFAULT_PAPER_SEED_KRW)))
-            if hasattr(self, "spin_paper_fee_bps"):
-                self.spin_paper_fee_bps.setValue(s.get("paper_fee_bps", Config.DEFAULT_PAPER_FEE_BPS))
-            if hasattr(self, "spin_paper_slippage_bps"):
-                self.spin_paper_slippage_bps.setValue(s.get("paper_slippage_bps", Config.DEFAULT_PAPER_SLIPPAGE_BPS))
 
-            if hasattr(self, 'chk_use_cooldown'):
-                self.chk_use_cooldown.setChecked(s.get("use_cooldown", self.advanced_settings['use_cooldown']))
-                self.spin_cooldown.setValue(s.get("cooldown_minutes", self.advanced_settings['cooldown_minutes']))
-                self.chk_use_time_exit.setChecked(s.get("use_time_exit", self.advanced_settings['use_time_exit']))
+            if hasattr(self, "chk_use_cooldown"):
+                self.chk_use_cooldown.setChecked(s.get("use_cooldown", self.advanced_settings["use_cooldown"]))
+                self.spin_cooldown.setValue(s.get("cooldown_minutes", self.advanced_settings["cooldown_minutes"]))
+                self.chk_use_time_exit.setChecked(s.get("use_time_exit", self.advanced_settings["use_time_exit"]))
                 self.spin_max_holding_hours.setValue(
-                    s.get("max_holding_hours", self.advanced_settings['max_holding_hours'])
+                    s.get("max_holding_hours", self.advanced_settings["max_holding_hours"])
                 )
                 self.chk_use_dynamic_position.setChecked(
-                    s.get("use_dynamic_position", self.advanced_settings['use_dynamic_position'])
+                    s.get("use_dynamic_position", self.advanced_settings["use_dynamic_position"])
                 )
-                self.chk_use_mtf.setChecked(s.get("use_mtf", self.advanced_settings['use_mtf']))
-                self.chk_use_gap.setChecked(s.get("use_gap_analysis", self.advanced_settings['use_gap_analysis']))
+                self.chk_use_mtf.setChecked(s.get("use_mtf", self.advanced_settings["use_mtf"]))
+                self.chk_use_gap.setChecked(s.get("use_gap_analysis", self.advanced_settings["use_gap_analysis"]))
                 self.chk_use_breakout_confirm.setChecked(
-                    s.get("use_breakout_confirm", self.advanced_settings['use_breakout_confirm'])
+                    s.get("use_breakout_confirm", self.advanced_settings["use_breakout_confirm"])
                 )
                 self.spin_breakout_ticks.setValue(
-                    s.get("breakout_confirm_ticks", self.advanced_settings['breakout_confirm_ticks'])
+                    s.get("breakout_confirm_ticks", self.advanced_settings["breakout_confirm_ticks"])
                 )
 
-            # 시스템 설정 불러오기
             if "system" in s:
                 self.system_settings.update(s["system"])
 
@@ -283,15 +88,15 @@ class TraderSettingsController:
 
             credential_error = s.get("_credential_error")
             if credential_error:
-                self.log(f"[WARN] API 키 복호화 실패: {credential_error}")
-                self.send_notification("Upbit Pro Trader", "저장된 API 키를 복호화하지 못했습니다.")
+                self.log(f"[WARN] API ? ??? ??: {credential_error}")
+                self.send_notification("Upbit Pro Trader", "??? API ?? ????? ?????.")
 
             self.configure_runtime_integrations()
-            self.log("📂 저장된 설정을 불러왔습니다")
+            self.log("?? ??? ??? ??????")
             if hasattr(self, "refresh_trade_action_buttons"):
                 self.refresh_trade_action_buttons()
         except Exception as e:
-            self.log(f"[WARN] 설정 불러오기 실패: {e}")
+            self.log(f"[WARN] ?? ???? ??: {e}")
 
     def configure_runtime_integrations(self):
         """알림/복구 관련 런타임 통합 설정 적용."""

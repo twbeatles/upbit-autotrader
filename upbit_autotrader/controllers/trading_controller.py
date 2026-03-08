@@ -1,4 +1,6 @@
-﻿import datetime
+import datetime
+import json
+import os
 import random
 import time
 
@@ -14,6 +16,7 @@ from upbit_autotrader.execution.execution_model import ExecutionConfig, estimate
 from upbit_autotrader.risk.portfolio_risk import RiskLimitConfig, build_portfolio_risk_snapshot, evaluate_risk_limits
 from upbit_autotrader.risk.position_sizing import PositionSizingInput, compute_position_size
 from upbit_autotrader.strategies.meta_signal import MetaSignalInput, StrategyPerformanceTracker, evaluate_meta_signal
+from upbit_autotrader.controllers.trading_parts import indicator_ops as _indicator_ops, manual_review_ops as _manual_review_ops, risk_ops as _risk_ops, session_ops as _session_ops
 
 try:
     from upbit_autotrader.notifications.notifiers import EventType
@@ -102,182 +105,25 @@ class TraderTradingController:
 
     def start_trading(self):
         """매매 시작"""
-        allow_paper_no_login = self._is_paper_mode() and self._allow_paper_without_login()
-        if (not self.upbit or not self.is_connected) and not allow_paper_no_login:
-            QMessageBox.warning(self, "경고", "먼저 업비트 API에 연결해주세요.")
-            return
-
-        coins_text = self.input_coins.text().replace(" ", "")
-        coins = [c for c in coins_text.split(',') if c]
-        invalid_coins = [c for c in coins if not c.startswith("KRW-")]
-        if invalid_coins:
-            QMessageBox.warning(
-                self,
-                "경고",
-                f"잘못된 코인 코드: {', '.join(invalid_coins)}\n코인 코드는 'KRW-' 형식이어야 합니다.",
-            )
-            return
-
-        account_holdings = []
-        if self._enable_account_wide_sync():
-            account_holdings = self._fetch_account_holdings()
-        holding_tickers = [
-            str(h.get("ticker") or "").strip()
-            for h in account_holdings
-            if str(h.get("ticker") or "").strip().startswith("KRW-")
-        ]
-        target_universe = list(dict.fromkeys(coins + holding_tickers))
-        if not target_universe:
-            QMessageBox.warning(self, "경고", "감시할 코인을 입력하거나 계좌 보유 종목이 있어야 합니다.")
-            return
-
-        self.universe = {}
-        self.table.setRowCount(0)
-        self.is_running = True
-        self.daily_loss_triggered = False
-        self._ensure_order_stability_state()
-        self._price_feed_recovery_attempted = False
-        self._last_price_update_ts = time.time()
-        self._risk_snapshot_cache = {"ts": 0.0, "value": None}
-        self._next_trading_session()
-        self._seed_paper_balance_once()
-        if self._is_paper_mode():
-            self.get_balance()
-            if float(getattr(self, "balance", 0.0) or 0.0) <= 0:
-                QMessageBox.warning(self, "경고", "페이퍼 잔고가 0원입니다. 초기 시드를 확인해주세요.")
-                return
-            if float(getattr(self, "initial_balance", 0.0) or 0.0) <= 0:
-                self.initial_balance = float(self.balance)
-        self._reconcile_pending_orders(force=False)
-        self._ensure_indicator_cache_state()
-        self._indicator_cache.clear()
-        
-        self.btn_start.setEnabled(False)
-        self.btn_stop.setEnabled(True)
-        self.status_trading.setText("● 분석 중")
-        self.status_trading.setStyleSheet("color: #00b4d8;")
-        
-        candle_interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-        holdings_map = self._build_holdings_map(account_holdings)
-        self.table.setUpdatesEnabled(False)
-        try:
-            for coin in target_universe:
-                try:
-                    # 목표가 및 MA 계산
-                    if self.strategy:
-                        target_price = self.strategy.calculate_target_price(coin, candle_interval)
-                    else:
-                        target_price = self.calculate_target_price(coin, candle_interval)
-                    ma5 = self.calculate_ma(coin, candle_interval, 5)
-                    holding = holdings_map.get(coin, {})
-                    holding_qty = float(holding.get("qty", 0.0) or 0.0)
-                    current_price = float(holding.get("current_price", 0.0) or 0.0)
-                    if current_price <= 0:
-                        current_price = pyupbit.get_current_price(coin) if pyupbit is not None else 0.0
-
-                    if target_price is None or ma5 is None:
-                        if holding_qty > 0:
-                            target_price = float(target_price or 0.0)
-                            ma5 = float(ma5 or 0.0)
-                        else:
-                            self.log(f"[WARN] {coin} 데이터 조회 실패")
-                            continue
-
-                    buy_price = float(holding.get("buy_price", 0.0) or 0.0)
-                    invest_amt = float(holding_qty * buy_price) if buy_price > 0 else float(holding.get("value", 0.0) or 0.0)
-                    state = "보유중" if holding_qty > 0 else "감시중"
-
-                    if target_price is None or ma5 is None:
-                        self.log(f"[WARN] {coin} 데이터 조회 실패")
-                        continue
-
-                    self.universe[coin] = {
-                        'name': coin,
-                        'state': state,
-                        'row': len(self.universe),
-                        'target': target_price,
-                        'ma5': ma5,
-                        'current': current_price or 0.0,
-                        'qty': holding_qty,
-                        'buy_price': buy_price,
-                        'invest_amt': invest_amt,
-                        'high_since_buy': max(float(current_price or 0.0), buy_price) if holding_qty > 0 else 0.0,
-                        'max_profit_rate': 0.0
-                    }
-
-                    row = self.universe[coin]['row']
-                    self.table.insertRow(row)
-                    self.table.setItem(row, 0, QTableWidgetItem(coin))
-                    self.table.setItem(row, 1, QTableWidgetItem(f"{current_price:,.0f}" if current_price else "-"))
-                    self.table.setItem(row, 2, QTableWidgetItem(f"{target_price:,.0f}"))
-                    self.table.setItem(row, 3, QTableWidgetItem(f"{ma5:,.0f}"))
-                    self.table.setItem(row, 5, QTableWidgetItem(f"{holding_qty:.8f}" if holding_qty > 0 else "0.00000000"))
-                    self.table.setItem(row, 6, QTableWidgetItem(f"{buy_price:,.0f}" if buy_price > 0 else "-"))
-                    self.table.setItem(row, 7, QTableWidgetItem("-"))
-                    self.table.setItem(row, 8, QTableWidgetItem("-"))
-                    self.table.setItem(row, 9, QTableWidgetItem(f"{invest_amt:,.0f}" if invest_amt > 0 else "-"))
-                    if holding_qty > 0:
-                        self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
-                    else:
-                        self.set_table_item(row, 4, "👀 감시중", "#00b894")
-                    self.universe[coin]['ui_items'] = {
-                        'price': self.table.item(row, 1),
-                        'state': self.table.item(row, 4),
-                        'qty': self.table.item(row, 5),
-                        'buy_price': self.table.item(row, 6),
-                        'profit': self.table.item(row, 7),
-                        'max_profit': self.table.item(row, 8),
-                        'invest': self.table.item(row, 9),
-                    }
-
-                    if holding_qty > 0 and self.strategy:
-                        self.strategy.set_holding_start(coin)
-                        self.strategy.clear_partial_profit(coin)
-
-                    self.log(f"[{coin}] 목표가:{target_price:,.0f}, MA5:{ma5:,.0f}")
-
-                except Exception as e:
-                    self.log(f"[ERROR] {coin} 초기화 실패: {e}")
-                    self.logger.error(f"{coin} 초기화 실패: {e}")
-        finally:
-            self.table.setUpdatesEnabled(True)
-        if self.universe and self._enable_account_wide_sync():
-            self._sync_account_holdings_to_universe(account_holdings=account_holdings, include_external=True)
-        if self.universe:
-            # 가격 모니터링 시작
-            if hasattr(self, "_restart_price_thread"):
-                self._restart_price_thread(list(self.universe.keys()))
-            else:
-                self.price_thread.set_coins(list(self.universe.keys()))
-                if not self.price_thread.isRunning():
-                    self.price_thread.start()
-            
-            self.status_trading.setText("● 매매 중")
-            self.status_trading.setStyleSheet("color: #00b894;")
-            self.status_realtime.setText(f"실시간: {len(self.universe)}종목 감시")
-            
-            self.log(f"🚀 자동매매 시작 (총 {len(self.universe)} 코인)")
-            self.logger.info(f"매매 시작: {len(self.universe)} 코인")
-        else:
-            self.stop_trading()
-            QMessageBox.warning(self, "경고", "유효한 코인이 없습니다.")
+        _session_ops.bind_runtime(
+            Config=Config,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _session_ops.start_trading(self)
 
     def stop_trading(self):
         """매매 중지"""
-        self.is_running = False
-        self.price_thread.stop()
-        self.price_thread.wait(2000)
-        self._reconcile_pending_orders(force=True)
-        
-        if hasattr(self, "refresh_trade_action_buttons"):
-            self.refresh_trade_action_buttons()
-        self.btn_stop.setEnabled(False)
-        self.status_trading.setText("● 중지됨")
-        self.status_trading.setStyleSheet("color: #e63946;")
-        self.status_realtime.setText("실시간: 비활성")
-        
-        self.log("⏹️ 매매가 중지되었습니다")
-        self.logger.info("매매 중지")
+        _session_ops.bind_runtime(
+            Config=Config,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _session_ops.stop_trading(self)
 
     # ------------------------------------------------------------------
     # 전략 계산
@@ -285,199 +131,89 @@ class TraderTradingController:
 
     def calculate_target_price(self, ticker, interval):
         """변동성 돌파 목표가 계산"""
-        try:
-            df = pyupbit.get_ohlcv(ticker, interval=interval, count=2)
-            if df is None or len(df) < 2:
-                return None
-            
-            prev_high = df.iloc[-2]['high']
-            prev_low = df.iloc[-2]['low']
-            volatility = prev_high - prev_low
-            
-            current_open = df.iloc[-1]['open']
-            k = self.spin_k.value()
-            
-            return current_open + (volatility * k)
-        except Exception as e:
-            self.logger.error(f"목표가 계산 실패 ({ticker}): {e}")
-            return None
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_target_price(self, ticker, interval)
 
     def calculate_ma(self, ticker, interval, period=5):
         """이동평균 계산"""
-        try:
-            df = pyupbit.get_ohlcv(ticker, interval=interval, count=period+1)
-            if df is None or len(df) < period:
-                return None
-            return df['close'].rolling(window=period).mean().iloc[-1]
-        except Exception as e:
-            self.logger.error(f"MA 계산 실패 ({ticker}): {e}")
-            return None
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_ma(self, ticker, interval, period)
 
     def calculate_rsi(self, ticker, period=14):
         """RSI ??"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            snapshot = self._get_indicator_snapshot(ticker, interval, rsi_period=period)
-            if not snapshot:
-                return 50
-            return snapshot.get('rsi', 50)
-        except Exception:
-            return 50
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_rsi(self, ticker, period)
     def calculate_macd(self, ticker):
         """MACD ?? (MACD, Signal, Histogram ??)"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            snapshot = self._get_indicator_snapshot(ticker, interval)
-            if not snapshot:
-                return 0, 0, 0
-            return (
-                snapshot.get('macd', 0),
-                snapshot.get('signal', 0),
-                snapshot.get('histogram', 0),
-            )
-        except Exception as e:
-            self.logger.error(f"MACD ?? ?? ({ticker}): {e}")
-            return 0, 0, 0
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_macd(self, ticker)
     def calculate_bollinger_bands(self, ticker):
         """??? ?? ?? (??, ??, ?? ??)"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            snapshot = self._get_indicator_snapshot(ticker, interval)
-            if not snapshot:
-                return None, None, None
-            return (
-                snapshot.get('bb_upper'),
-                snapshot.get('bb_middle'),
-                snapshot.get('bb_lower'),
-            )
-        except Exception as e:
-            self.logger.error(f"??? ?? ?? ?? ({ticker}): {e}")
-            return None, None, None
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_bollinger_bands(self, ticker)
     def calculate_atr(self, ticker, period=14):
         """ATR (Average True Range) 계산"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            df = pyupbit.get_ohlcv(ticker, interval=interval, count=period + 5)
-            if df is None or len(df) < period:
-                return None
-            
-            high = df['high']
-            low = df['low']
-            close = df['close']
-            
-            # True Range 계산 (DataFrame 내장 연산 사용)
-            tr1 = high - low
-            tr2 = (high - close.shift()).abs()
-            tr3 = (low - close.shift()).abs()
-            
-            # 각 행에서 최대값 선택
-            df['tr'] = tr1
-            df.loc[tr2 > df['tr'], 'tr'] = tr2
-            df.loc[tr3 > df['tr'], 'tr'] = tr3
-            
-            # ATR = True Range의 이동평균
-            atr = df['tr'].rolling(window=period).mean().iloc[-1]
-            return atr
-        except Exception as e:
-            self.logger.error(f"ATR 계산 실패 ({ticker}): {e}")
-            return None
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_atr(self, ticker, period)
 
     def calculate_volume_avg(self, ticker, period=20):
         """?? ??? ??"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            snapshot = self._get_indicator_snapshot(ticker, interval, volume_period=period)
-            if not snapshot:
-                return None, None
-            return snapshot.get('current_volume'), snapshot.get('avg_volume')
-        except Exception:
-            return None, None
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_volume_avg(self, ticker, period)
     def calculate_stoch_rsi(self, ticker, rsi_period=14, stoch_period=14, k_period=3, d_period=3):
         """스토캐스틱 RSI 계산 (v2.5 신규)"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            df = pyupbit.get_ohlcv(ticker, interval=interval, count=rsi_period + stoch_period + 10)
-            if df is None or len(df) < rsi_period + stoch_period:
-                return 50, 50  # 기본값
-            
-            # RSI 계산
-            delta = df['close'].diff()
-            gain = delta.where(delta > 0, 0)
-            loss = (-delta).where(delta < 0, 0)
-            avg_gain = gain.rolling(window=rsi_period).mean()
-            avg_loss = loss.rolling(window=rsi_period).mean()
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-            
-            # 스토캐스틱 RSI 계산
-            rsi_min = rsi.rolling(window=stoch_period).min()
-            rsi_max = rsi.rolling(window=stoch_period).max()
-            stoch_rsi = (rsi - rsi_min) / (rsi_max - rsi_min) * 100
-            
-            # %K, %D
-            k = stoch_rsi.rolling(window=k_period).mean().iloc[-1]
-            d = stoch_rsi.rolling(window=d_period).mean().iloc[-1]
-            
-            return k if not pd.isna(k) else 50, d if not pd.isna(d) else 50
-        except Exception as e:
-            self.logger.error(f"스토캐스틱 RSI 계산 실패 ({ticker}): {e}")
-            return 50, 50
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_stoch_rsi(self, ticker, rsi_period, stoch_period, k_period, d_period)
 
     def calculate_dmi_adx(self, ticker, period=14):
         """DMI와 ADX 계산 (v2.7) - 추세 강도 측정"""
-        try:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-            df = pyupbit.get_ohlcv(ticker, interval=interval, count=period * 3)
-            if df is None or len(df) < period * 2:
-                return 0, 0, 0  # +DI, -DI, ADX
-            
-            high = df['high']
-            low = df['low']
-            close = df['close']
-            
-            # +DM, -DM 계산
-            plus_dm = high.diff()
-            minus_dm = -low.diff()
-            plus_dm[plus_dm < 0] = 0
-            minus_dm[minus_dm < 0] = 0
-            
-            # 조건: +DM > -DM일 때만 +DM 유효
-            plus_dm[(plus_dm < minus_dm) | (plus_dm < 0)] = 0
-            minus_dm[(minus_dm < plus_dm) | (minus_dm < 0)] = 0
-            
-            # True Range
-            tr1 = high - low
-            tr2 = (high - close.shift()).abs()
-            tr3 = (low - close.shift()).abs()
-            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-            
-            # 평활화 (Wilder 스무딩)
-            atr = tr.rolling(window=period).mean()
-            
-            # ZeroDivision 방지: ATR이 0인 경우 처리
-            atr_safe = atr.replace(0, float('nan'))
-            plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr_safe)
-            minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr_safe)
-            
-            # DX와 ADX - ZeroDivision 방지
-            di_sum = plus_di + minus_di
-            di_sum_safe = di_sum.replace(0, float('nan'))
-            dx = 100 * (abs(plus_di - minus_di) / di_sum_safe)
-            adx = dx.rolling(window=period).mean()
-            
-            # NaN 처리
-            plus_di_val = plus_di.iloc[-1]
-            minus_di_val = minus_di.iloc[-1]
-            adx_val = adx.iloc[-1]
-            
-            return (
-                0 if pd.isna(plus_di_val) else plus_di_val,
-                0 if pd.isna(minus_di_val) else minus_di_val,
-                0 if pd.isna(adx_val) else adx_val
-            )
-        except Exception as e:
-            self.logger.error(f"DMI/ADX 계산 실패 ({ticker}): {e}")
-            return 0, 0, 0
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops.calculate_dmi_adx(self, ticker, period)
 
     def _ensure_indicator_cache_state(self):
         if not hasattr(self, '_indicator_cache'):
@@ -509,6 +245,8 @@ class TraderTradingController:
             self._twap_buy_plans = {}
         if not hasattr(self, "_reconciliation_dirty"):
             self._reconciliation_dirty = False
+        if not hasattr(self, "_manual_review_row_keys"):
+            self._manual_review_row_keys = []
         if not hasattr(self, "persist_reconciliation_state"):
             self.persist_reconciliation_state = bool(getattr(Config, "DEFAULT_PERSIST_RECONCILIATION_STATE", False))
         if not hasattr(self, "strategy_perf_tracker") or self.strategy_perf_tracker is None:
@@ -517,6 +255,51 @@ class TraderTradingController:
     def _mark_reconciliation_dirty(self):
         self._ensure_order_stability_state()
         self._reconciliation_dirty = True
+
+    @staticmethod
+    def _safe_parse_iso_datetime(raw):
+        try:
+            return datetime.datetime.fromisoformat(str(raw or "").strip())
+        except Exception:
+            return None
+
+    def _emit_order_lifecycle_event(
+        self,
+        event_type,
+        *,
+        ticker="",
+        uuid="",
+        session_id=0,
+        state_from="",
+        state_to="",
+        reason="",
+        source="",
+        metadata=None,
+    ):
+        logger = getattr(self, "logger", None)
+        try:
+            path = str(getattr(Config, "ORDER_LIFECYCLE_LOG_FILE", "logs/order_lifecycle.jsonl") or "logs/order_lifecycle.jsonl")
+            parent = os.path.dirname(path)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            payload = {
+                "timestamp": datetime.datetime.now().isoformat(),
+                "event_type": str(event_type or ""),
+                "ticker": str(ticker or ""),
+                "uuid": str(uuid or ""),
+                "session_id": int(session_id or 0),
+                "state_from": str(state_from or ""),
+                "state_to": str(state_to or ""),
+                "reason": str(reason or ""),
+                "source": str(source or ""),
+                "metadata": dict(metadata or {}),
+            }
+            with open(path, "a", encoding="utf-8") as fp:
+                fp.write(json.dumps(payload, ensure_ascii=False))
+                fp.write("\n")
+        except Exception as exc:
+            if logger is not None:
+                logger.warning(f"order lifecycle 로그 저장 실패: {exc}")
 
     def _build_reconciliation_state(self):
         self._ensure_order_stability_state()
@@ -564,6 +347,8 @@ class TraderTradingController:
         }
         self._active_session_id = int(payload.get("active_session_id", getattr(self, "_active_session_id", 0)) or 0)
         self._reconciliation_dirty = False
+        if hasattr(self, "refresh_manual_review_table"):
+            self.refresh_manual_review_table()
 
     def _persist_strategy_performance(self):
         tracker = getattr(self, "strategy_perf_tracker", None)
@@ -831,6 +616,8 @@ class TraderTradingController:
     def _transition_pending(self, ticker, next_state, reason="", metadata=None):
         if not hasattr(self, "order_service") or not hasattr(self.order_service, "transition_pending"):
             return False
+        pending_before = self.order_service.get_pending(ticker) if hasattr(self.order_service, "get_pending") else None
+        state_from = str((pending_before or {}).get("lifecycle_state", ""))
         transitioned = bool(
             self.order_service.transition_pending(
                 ticker=ticker,
@@ -840,7 +627,19 @@ class TraderTradingController:
             )
         )
         if transitioned:
+            pending_after = self.order_service.get_pending(ticker) if hasattr(self.order_service, "get_pending") else None
             self._mark_reconciliation_dirty()
+            self._emit_order_lifecycle_event(
+                "pending_transition",
+                ticker=ticker,
+                uuid=(pending_after or pending_before or {}).get("uuid", ""),
+                session_id=(pending_after or pending_before or {}).get("session_id", 0),
+                state_from=state_from,
+                state_to=str(next_state or ""),
+                reason=reason,
+                source=(pending_after or pending_before or {}).get("source", ""),
+                metadata=metadata or {},
+            )
         return transitioned
 
     def _register_manual_review(self, ticker, uuid, reason, order=None, extra=None):
@@ -863,12 +662,25 @@ class TraderTradingController:
         key = str(uuid or f"{ticker}:{payload['queued_at']}")
         self._manual_review_queue[key] = payload
         self._mark_reconciliation_dirty()
+        self._emit_order_lifecycle_event(
+            "manual_review_registered",
+            ticker=ticker,
+            uuid=uuid,
+            session_id=(pending or {}).get("session_id", 0),
+            state_from=str((pending or {}).get("lifecycle_state", "")),
+            state_to="manual_review",
+            reason=reason,
+            source=(pending or {}).get("source", ""),
+            metadata={"queue_key": key, "extra": dict(extra or {})},
+        )
         self._ops_alert(
             level="warning",
             message=f"⚠️ [{ticker}] 수동검토 큐 적재: {reason}",
             key=f"manual_review:{ticker}:{key}",
             cooldown=30,
         )
+        if hasattr(self, "refresh_manual_review_table"):
+            self.refresh_manual_review_table()
 
     def _register_orphan_event(self, ticker, uuid, side, state, session_id, source):
         self._ensure_order_stability_state()
@@ -886,6 +698,17 @@ class TraderTradingController:
         if len(self._orphan_events) > 500:
             self._orphan_events = self._orphan_events[-500:]
         self._mark_reconciliation_dirty()
+        self._emit_order_lifecycle_event(
+            "orphan_registered",
+            ticker=ticker,
+            uuid=uuid,
+            session_id=session_id,
+            state_from="",
+            state_to=str(state or ""),
+            reason="session_mismatch_orphan",
+            source=source,
+            metadata={"active_session_id": int(getattr(self, "_active_session_id", 0) or 0), "side": str(side or "")},
+        )
         self._ops_alert(
             level="warning",
             message=f"⚠️ [{ticker}] 세션 불일치 orphan 이벤트 감지 ({state})",
@@ -1040,6 +863,11 @@ class TraderTradingController:
                 self.table.setItem(row, 2, QTableWidgetItem("-"))
                 self.table.setItem(row, 3, QTableWidgetItem("-"))
                 self.set_table_item(row, 4, "👀 감시중", "#00b894")
+                self.table.setItem(row, 5, QTableWidgetItem("0.00000000"))
+                self.table.setItem(row, 6, QTableWidgetItem("-"))
+                self.table.setItem(row, 7, QTableWidgetItem("-"))
+                self.table.setItem(row, 8, QTableWidgetItem("-"))
+                self.table.setItem(row, 9, QTableWidgetItem("-"))
                 info["ui_items"] = {
                     "price": self.table.item(row, 1),
                     "state": self.table.item(row, 4),
@@ -1077,12 +905,24 @@ class TraderTradingController:
                 self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
             ui_items = info.get("ui_items", {})
             qty_item = ui_items.get("qty")
+            if qty_item is None and hasattr(self, "table"):
+                qty_item = QTableWidgetItem("0.00000000")
+                self.table.setItem(info["row"], 5, qty_item)
+                info.setdefault("ui_items", {})["qty"] = qty_item
             if qty_item is not None:
                 qty_item.setText(f"{qty:.8f}" if qty > 0 else "0.00000000")
             buy_price_item = ui_items.get("buy_price")
+            if buy_price_item is None and hasattr(self, "table"):
+                buy_price_item = QTableWidgetItem("-")
+                self.table.setItem(info["row"], 6, buy_price_item)
+                info.setdefault("ui_items", {})["buy_price"] = buy_price_item
             if buy_price_item is not None:
                 buy_price_item.setText(f"{buy_price:,.0f}" if buy_price > 0 else "-")
             invest_item = ui_items.get("invest")
+            if invest_item is None and hasattr(self, "table"):
+                invest_item = QTableWidgetItem("-")
+                self.table.setItem(info["row"], 9, invest_item)
+                info.setdefault("ui_items", {})["invest"] = invest_item
             if invest_item is not None:
                 invest_item.setText(f"{info['invest_amt']:,.0f}" if info["invest_amt"] > 0 else "-")
 
@@ -1538,15 +1378,22 @@ class TraderTradingController:
                 retry_count=prev_retry + 1,
             )
             if not order:
-                if force and age_sec >= stale_timeout:
-                    self._register_manual_review(
-                        ticker,
-                        uuid,
-                        reason="force_reconcile_without_exchange_state",
-                        order=None,
-                        extra={"age_sec": age_sec},
+                missing_order_count = int((pending or {}).get("missing_order_count", 0) or 0) + 1
+                self.order_service.update_pending(
+                    ticker,
+                    missing_order_count=missing_order_count,
+                )
+                min_retry_threshold = max(3, int(getattr(Config, "API_MAX_RETRIES", 3)))
+                should_escalate = age_sec >= stale_timeout and (force or missing_order_count >= min_retry_threshold)
+                if should_escalate:
+                    latest_pending = self.order_service.get_pending(ticker) or pending
+                    self._resolve_timeout_pending(
+                        ticker=ticker,
+                        pending=latest_pending,
+                        reason="reconcile_missing_exchange_state",
                     )
                 continue
+            self.order_service.update_pending(ticker, missing_order_count=0)
             state = str(order.get("state", "")).lower()
             if state in ("wait",):
                 self._transition_pending(ticker, "wait", reason="reconcile_wait", metadata={"age_sec": age_sec})
@@ -1562,142 +1409,29 @@ class TraderTradingController:
         self._sync_reserved_with_pending()
         self._mark_reconciliation_dirty()
     def _get_indicator_cache_ttl(self, interval):
-        self._ensure_indicator_cache_state()
-        return float(self._indicator_cache_ttl_sec.get(interval, 5))
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops._get_indicator_cache_ttl(self, interval)
     def _compute_rsi_from_close(self, close, period):
-        if close is None or len(close) < period + 1:
-            return 50
-        delta = close.diff()
-        gain = delta.where(delta > 0, 0)
-        loss = (-delta).where(delta < 0, 0)
-        avg_gain = gain.rolling(window=period).mean().iloc[-1]
-        avg_loss = loss.rolling(window=period).mean().iloc[-1]
-        if pd is not None and pd.isna(avg_gain):
-            return 50
-        if avg_loss == 0:
-            return 100
-        rs = avg_gain / avg_loss
-        rsi = 100 - (100 / (1 + rs))
-        return float(rsi)
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops._compute_rsi_from_close(self, close, period)
     def _get_indicator_snapshot(self, ticker, interval, rsi_period=None, volume_period=None, bb_period=None):
-        if pyupbit is None or pd is None:
-            return None
-        self._ensure_indicator_cache_state()
-        if rsi_period is None:
-            rsi_period = self.spin_rsi_period.value() if hasattr(self, "spin_rsi_period") else Config.DEFAULT_RSI_PERIOD
-        rsi_period = int(rsi_period)
-        volume_period = int(volume_period or Config.DEFAULT_VOLUME_PERIOD)
-        bb_period = int(bb_period or Config.DEFAULT_BB_PERIOD)
-        cache_key = (ticker, interval, rsi_period, volume_period, bb_period)
-        now_ts = time.time()
-        ttl = self._get_indicator_cache_ttl(interval)
-        cached = self._indicator_cache.get(cache_key)
-        if cached and (now_ts - cached.get('ts', 0)) < ttl:
-            return cached.get('data')
-        count = max(50, rsi_period + 2, volume_period + 1, bb_period + 5)
-        df = pyupbit.get_ohlcv(ticker, interval=interval, count=count)
-        if df is None or len(df) == 0:
-            return None
-        close = df['close']
-        rsi = self._compute_rsi_from_close(close, rsi_period)
-        macd = signal = histogram = 0.0
-        if len(close) >= 30:
-            ema_fast = close.ewm(span=Config.DEFAULT_MACD_FAST, adjust=False).mean()
-            ema_slow = close.ewm(span=Config.DEFAULT_MACD_SLOW, adjust=False).mean()
-            macd_series = ema_fast - ema_slow
-            signal_series = macd_series.ewm(span=Config.DEFAULT_MACD_SIGNAL, adjust=False).mean()
-            hist_series = macd_series - signal_series
-            macd = float(macd_series.iloc[-1])
-            signal = float(signal_series.iloc[-1])
-            histogram = float(hist_series.iloc[-1])
-        current_volume = None
-        avg_volume = None
-        if len(df) >= volume_period:
-            current_volume = float(df.iloc[-1]['volume'])
-            prev_volumes = df['volume'].iloc[-(volume_period + 1):-1]
-            if len(prev_volumes) > 0:
-                avg_volume = float(prev_volumes.mean())
-            else:
-                avg_volume = float(df['volume'].iloc[:-1].mean()) if len(df) > 1 else 0.0
-        bb_upper = bb_middle = bb_lower = None
-        if len(df) >= bb_period:
-            bb_middle = float(close.rolling(window=bb_period).mean().iloc[-1])
-            bb_std = float(close.rolling(window=bb_period).std().iloc[-1])
-            bb_upper = bb_middle + (bb_std * Config.DEFAULT_BB_STD)
-            bb_lower = bb_middle - (bb_std * Config.DEFAULT_BB_STD)
-        ema_fast = ema_slow = ema_fast_prev = 0.0
-        if len(close) >= 30:
-            ema_fast_series = close.ewm(span=12, adjust=False).mean()
-            ema_slow_series = close.ewm(span=26, adjust=False).mean()
-            ema_fast = float(ema_fast_series.iloc[-1])
-            ema_slow = float(ema_slow_series.iloc[-1])
-            ema_fast_prev = float(ema_fast_series.iloc[-2]) if len(ema_fast_series) >= 2 else ema_fast
-        donchian_upper = donchian_lower = None
-        if len(df) >= 21:
-            donchian_upper = float(df["high"].iloc[-21:-1].max())
-            donchian_lower = float(df["low"].iloc[-21:-1].min())
-        zscore = 0.0
-        if len(close) >= 21:
-            rolling_mean = close.rolling(window=20).mean().iloc[-1]
-            rolling_std = close.rolling(window=20).std().iloc[-1]
-            if rolling_std and rolling_std > 0:
-                zscore = float((close.iloc[-1] - rolling_mean) / rolling_std)
-        ts_momentum_pct = 0.0
-        if len(close) >= 21:
-            base = float(close.iloc[-21])
-            if base > 0:
-                ts_momentum_pct = float((close.iloc[-1] - base) / base * 100.0)
-        realized_vol_pct = 0.0
-        if len(close) >= 21:
-            ret = close.pct_change().dropna()
-            if len(ret) >= 20:
-                realized_vol_pct = float(ret.iloc[-20:].std() * (20 ** 0.5) * 100.0)
-        adx = 0.0
-        if len(df) >= 30:
-            high = df["high"]
-            low = df["low"]
-            tr1 = high - low
-            tr2 = (high - close.shift()).abs()
-            tr3 = (low - close.shift()).abs()
-            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-            plus_dm = high.diff()
-            minus_dm = -low.diff()
-            plus_dm[(plus_dm < 0) | (plus_dm < minus_dm)] = 0
-            minus_dm[(minus_dm < 0) | (minus_dm < plus_dm)] = 0
-            period = 14
-            atr = tr.rolling(window=period).mean().replace(0, float("nan"))
-            plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
-            minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
-            di_sum = (plus_di + minus_di).replace(0, float("nan"))
-            dx = 100 * (plus_di - minus_di).abs() / di_sum
-            adx_val = dx.rolling(window=period).mean().iloc[-1]
-            if not pd.isna(adx_val):
-                adx = float(adx_val)
-        snapshot = {
-            'rsi': rsi,
-            'macd': macd,
-            'signal': signal,
-            'histogram': histogram,
-            'current_volume': current_volume,
-            'avg_volume': avg_volume,
-            'bb_upper': bb_upper,
-            'bb_middle': bb_middle,
-            'bb_lower': bb_lower,
-            'ema_fast': ema_fast,
-            'ema_slow': ema_slow,
-            'ema_fast_prev': ema_fast_prev,
-            'donchian_upper': donchian_upper,
-            'donchian_lower': donchian_lower,
-            'zscore': zscore,
-            'adx': adx,
-            'realized_vol_pct': realized_vol_pct,
-            'ts_momentum_pct': ts_momentum_pct,
-        }
-        self._indicator_cache[cache_key] = {'ts': now_ts, 'data': snapshot}
-        if len(self._indicator_cache) > 1024:
-            oldest_key = min(self._indicator_cache, key=lambda k: self._indicator_cache[k].get('ts', 0))
-            self._indicator_cache.pop(oldest_key, None)
-        return snapshot
+        _indicator_ops.bind_runtime(
+            Config=Config,
+            pd=pd,
+            pyupbit=pyupbit,
+            time=time,
+        )
+        return _indicator_ops._get_indicator_snapshot(self, ticker, interval, rsi_period, volume_period, bb_period)
     def api_call_with_retry(self, func, *args, max_retries=None, delay=None, operation_name="", **kwargs):
         """중앙 API 재시도/백오프/레이트리밋 래퍼."""
         self._ensure_order_stability_state()
@@ -2650,6 +2384,7 @@ class TraderTradingController:
         if pending and str(pending.get("uuid")) != str(uuid):
             return
         clear_pending_if_uuid = getattr(self.order_service, "clear_pending_if_uuid", None)
+        mark_reconciliation = getattr(self, "_mark_reconciliation_dirty", None)
 
         try:
             if hasattr(self, "_safe_get_order"):
@@ -2807,11 +2542,13 @@ class TraderTradingController:
         if pending and str(pending.get("uuid")) != str(uuid):
             return
         clear_pending_if_uuid = getattr(self.order_service, "clear_pending_if_uuid", None)
+        mark_reconciliation = getattr(self, "_mark_reconciliation_dirty", None)
         transition_pending = getattr(self, "_transition_pending", None)
         handle_session_mismatch = getattr(self, "_handle_session_mismatch_terminal", None)
         resolve_timeout_pending = getattr(self, "_resolve_timeout_pending", None)
         ops_alert = getattr(self, "_ops_alert", None)
         register_manual_review = getattr(self, "_register_manual_review", None)
+        persist_strategy_performance = getattr(self, "_persist_strategy_performance", None)
 
         try:
             if hasattr(self, "_safe_get_order"):
@@ -3029,103 +2766,91 @@ class TraderTradingController:
     # ------------------------------------------------------------------
 
     def _get_risk_snapshot(self, force=False):
-        self._ensure_order_stability_state()
-        now_ts = time.time()
-        ttl = float(getattr(Config, "RISK_SNAPSHOT_TTL_SEC", 5))
-        cached = self._risk_snapshot_cache.get("value")
-        cached_ts = float(self._risk_snapshot_cache.get("ts", 0.0) or 0.0)
-        if not force and cached is not None and (now_ts - cached_ts) < ttl:
-            return dict(cached)
-
-        realized_pnl = float(getattr(self, "total_realized_profit", 0.0) or 0.0)
-        universe_positions = {}
-        for ticker, info in getattr(self, "universe", {}).items():
-            qty = float(info.get("qty", 0.0) or 0.0)
-            if qty <= 0:
-                continue
-            universe_positions[ticker] = {
-                "qty": qty,
-                "buy_price": float(info.get("buy_price", 0.0) or 0.0),
-                "current_price": float(info.get("current", 0.0) or 0.0),
-            }
-
-        account_wide_positions = dict(universe_positions)
-        account_holdings = self._fetch_account_holdings()
-        for ticker, h in self._build_holdings_map(account_holdings).items():
-            qty = float(h.get("qty", 0.0) or 0.0)
-            if qty <= 0:
-                continue
-            payload = {
-                "qty": qty,
-                "buy_price": float(h.get("buy_price", 0.0) or 0.0),
-                "current_price": float(h.get("current_price", 0.0) or 0.0),
-            }
-            account_wide_positions.setdefault(ticker, payload)
-
-        price_history = {}
-        corr_limit = self._max_correlation_exposure_pct()
-        if corr_limit < 100.0 and pyupbit is not None and account_wide_positions:
-            interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()] if hasattr(self, "combo_candle") else "minute240"
-            corr_window = max(20, self._portfolio_corr_window())
-            for ticker in list(account_wide_positions.keys())[:10]:
-                try:
-                    df = pyupbit.get_ohlcv(ticker, interval=interval, count=corr_window + 1)
-                    if df is None or len(df) < corr_window:
-                        continue
-                    price_history[ticker] = [float(v) for v in df["close"].tolist() if float(v) > 0]
-                except Exception:
-                    continue
-
-        dd_caution, dd_defense, dd_halt = self._drawdown_thresholds()
-        snapshot = build_portfolio_risk_snapshot(
-            initial_balance=float(getattr(self, "initial_balance", 0.0) or 0.0),
-            realized_pnl=realized_pnl,
-            universe_positions=universe_positions,
-            account_wide_positions=account_wide_positions,
-            include_unrealized=self._risk_include_unrealized(),
-            include_external_holdings=self._risk_include_external_holdings(),
-            drawdown_state_enabled=self._drawdown_state_enabled(),
-            dd_caution_pct=float(dd_caution),
-            dd_defense_pct=float(dd_defense),
-            dd_halt_pct=float(dd_halt),
-            corr_window=self._portfolio_corr_window(),
-            price_history=price_history,
+        _risk_ops.bind_runtime(
+            Config=Config,
+            RiskLimitConfig=RiskLimitConfig,
+            build_portfolio_risk_snapshot=build_portfolio_risk_snapshot,
+            evaluate_risk_limits=evaluate_risk_limits,
+            pyupbit=pyupbit,
+            time=time,
         )
-        self._risk_snapshot_cache = {"ts": now_ts, "value": snapshot}
-        return dict(snapshot)
+        return _risk_ops._get_risk_snapshot(self, force)
 
     def check_risk_limits(self):
         """리스크 한도 체크"""
-        if not self.chk_use_risk.isChecked():
-            return True
-
-        snapshot = self._get_risk_snapshot(force=False)
-        allowed, triggered, reasons = evaluate_risk_limits(
-            snapshot=snapshot,
-            config=RiskLimitConfig(
-                max_daily_loss_pct=float(self.spin_max_loss.value()),
-                max_holdings=int(self.spin_max_holdings.value()),
-                max_correlation_exposure_pct=float(self._max_correlation_exposure_pct()),
-            ),
-            daily_loss_triggered=bool(getattr(self, "daily_loss_triggered", False)),
+        _risk_ops.bind_runtime(
+            Config=Config,
+            RiskLimitConfig=RiskLimitConfig,
+            build_portfolio_risk_snapshot=build_portfolio_risk_snapshot,
+            evaluate_risk_limits=evaluate_risk_limits,
+            pyupbit=pyupbit,
+            time=time,
         )
-        if triggered and not self.daily_loss_triggered:
-            self.daily_loss_triggered = True
-            loss_rate = float(snapshot.get("loss_rate", 0.0) or 0.0)
-            self._ops_alert(
-                level="warning",
-                message=f"🛑 일일 손실 한도 도달! ({loss_rate:.2f}%)",
-                key="risk_limit:daily_loss",
-                cooldown=20,
-            )
-        if not allowed and reasons:
-            self._ops_alert(
-                level="warning",
-                message=f"⚠️ 리스크 제한으로 진입 보류 ({', '.join(reasons[:2])})",
-                key=f"risk_limit:{'|'.join(reasons)}",
-                cooldown=10,
-            )
-        return bool(allowed)
+        return _risk_ops.check_risk_limits(self)
+
+    # ------------------------------------------------------------------
+    # 운영/수동검토 큐
+    # ------------------------------------------------------------------
+
+    def _manual_review_age_text(self, age_sec):
+        _manual_review_ops.bind_runtime(
+            Config=Config,
+            QColor=QColor,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            datetime=datetime,
+        )
+        return _manual_review_ops._manual_review_age_text(self, age_sec)
+
+    def _manual_review_pending_state(self, payload):
+        _manual_review_ops.bind_runtime(
+            Config=Config,
+            QColor=QColor,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            datetime=datetime,
+        )
+        return _manual_review_ops._manual_review_pending_state(self, payload)
+
+    def _selected_manual_review_key(self):
+        _manual_review_ops.bind_runtime(
+            Config=Config,
+            QColor=QColor,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            datetime=datetime,
+        )
+        return _manual_review_ops._selected_manual_review_key(self)
+
+    def refresh_manual_review_table(self):
+        _manual_review_ops.bind_runtime(
+            Config=Config,
+            QColor=QColor,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            datetime=datetime,
+        )
+        return _manual_review_ops.refresh_manual_review_table(self)
+
+    def requery_selected_manual_review(self):
+        _manual_review_ops.bind_runtime(
+            Config=Config,
+            QColor=QColor,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            datetime=datetime,
+        )
+        return _manual_review_ops.requery_selected_manual_review(self)
+
+    def resolve_selected_manual_review(self):
+        _manual_review_ops.bind_runtime(
+            Config=Config,
+            QColor=QColor,
+            QMessageBox=QMessageBox,
+            QTableWidgetItem=QTableWidgetItem,
+            datetime=datetime,
+        )
+        return _manual_review_ops.resolve_selected_manual_review(self)
 
     def apply_preset(self, preset_type):
         """프리셋 적용"""

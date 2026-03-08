@@ -204,6 +204,7 @@ class Config:
     RECONCILIATION_STATE_FILE = "reconciliation_state.json"
     STRATEGY_PERF_FILE = "strategy_performance.json"
     LOG_DIR = "logs"
+    ORDER_LIFECYCLE_LOG_FILE = "logs/order_lifecycle.jsonl"
 
     # ---------------------------------------------------------------------
     # Runtime/system
@@ -232,6 +233,8 @@ class Config:
     PENDING_STALE_TIMEOUT_SEC = 90
     ORDER_STATUS_RETRY_DELAYS_SEC = (0.3, 0.6, 1.2)
     RISK_SNAPSHOT_TTL_SEC = 5
+    DEFAULT_CORRELATION_MAX_TICKERS = 20
+    DEFAULT_MANUAL_REVIEW_AGE_ALERT_SEC = 600
 
     # ---------------------------------------------------------------------
     # Built-in presets

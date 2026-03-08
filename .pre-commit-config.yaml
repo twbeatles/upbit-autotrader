@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: docs-reference-guard
+        name: Docs Reference Guard
+        entry: python -m pytest -q tests/test_docs_references.py
+        language: system
+        pass_filenames: false

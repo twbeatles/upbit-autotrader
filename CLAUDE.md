@@ -76,13 +76,16 @@ python -m pytest -q
 ```
 
 현재 기준:
-- `74 passed`
+- `90 passed`
 
 신규 검증 파일:
 - `tests/test_position_sizing.py`
 - `tests/test_portfolio_risk_engine.py`
 - `tests/test_execution_model.py`
 - `tests/test_meta_signal.py`
+- `tests/test_structure_guards.py`
+- `tests/test_refactor_split_compatibility.py`
+- `tests/test_plan_implementation_fixes.py`
 
 ## 작업 주의사항
 - 주문/체결 로직 수정 시 pending 정리와 lifecycle 전이를 함께 검토
@@ -91,6 +94,5 @@ python -m pytest -q
 - Discord 실패는 비치명 경로 유지(매매 차단 금지)
 
 ## 참고 문서
-- 구조 분석/구현 상태: `PROJECT_STRUCTURE_ANALYSIS.md`
-- 전략 옵션 계획: `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
+- 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
 - 사용자 문서: `README.md`
