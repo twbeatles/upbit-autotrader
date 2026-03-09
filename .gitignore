@@ -5,8 +5,15 @@ __pycache__/
 
 # Test/build artifacts
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
 logs/
 upbit_dist/
+upbit_build/
 키움증권 자동 매매 프로그램(참조)/
 dist/
 build/

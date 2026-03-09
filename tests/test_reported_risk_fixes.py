@@ -230,16 +230,16 @@ def test_start_trading_allows_paper_mode_without_login_and_seeds_balance():
             self.initial_balance = 0.0
             self._paper_seeded = False
 
-        def calculate_target_price(self, *_):
+        def calculate_target_price(self, ticker, interval):
             return 1000.0
 
-        def calculate_ma(self, *_):
+        def calculate_ma(self, ticker, interval, period=5):
             return 900.0
 
-        def set_table_item(self, *_):
+        def set_table_item(self, row, col, text, bg_color):
             return None
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
     trader = _Trader()

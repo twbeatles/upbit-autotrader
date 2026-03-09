@@ -7,7 +7,55 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, TypedDict
+
+
+class DailyBucket(TypedDict):
+    trades: int
+    wins: int
+    losses: int
+    pnl: float
+    max_win: float
+    max_loss: float
+
+
+class CoinBucket(TypedDict):
+    trades: int
+    wins: int
+    losses: int
+    pnl: float
+    pnl_list: List[float]
+
+
+class MonthlyBucket(TypedDict):
+    trades: int
+    pnl: float
+    wins: int
+
+
+def _new_daily_bucket() -> DailyBucket:
+    return {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0,
+        "max_win": 0.0,
+        "max_loss": 0.0,
+    }
+
+
+def _new_coin_bucket() -> CoinBucket:
+    return {
+        "trades": 0,
+        "wins": 0,
+        "losses": 0,
+        "pnl": 0.0,
+        "pnl_list": [],
+    }
+
+
+def _new_monthly_bucket() -> MonthlyBucket:
+    return {"trades": 0, "pnl": 0.0, "wins": 0}
 
 
 @dataclass
@@ -42,15 +90,15 @@ class UpbitTradingAnalytics:
 
     def __init__(self, history_file: str = "trade_history.json"):
         self.history_file = history_file
-        self.trade_history = self._load_history()
+        self.trade_history: List[Dict[str, object]] = self._load_history()
 
-    def _load_history(self) -> List[Dict]:
+    def _load_history(self) -> List[Dict[str, object]]:
         if not os.path.exists(self.history_file):
             return []
         try:
             with open(self.history_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return data if isinstance(data, list) else []
+            return [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
         except Exception:
             return []
 
@@ -65,7 +113,7 @@ class UpbitTradingAnalytics:
             return float(default)
 
     @staticmethod
-    def _extract_trade_dt(trade: Dict) -> Optional[datetime]:
+    def _extract_trade_dt(trade: Dict[str, object]) -> Optional[datetime]:
         raw = str(trade.get("timestamp") or trade.get("datetime") or "").strip()
         if not raw:
             return None
@@ -84,16 +132,7 @@ class UpbitTradingAnalytics:
         self.refresh()
 
         cutoff = datetime.now() - timedelta(days=days)
-        daily_data = defaultdict(
-            lambda: {
-                "trades": 0,
-                "wins": 0,
-                "losses": 0,
-                "pnl": 0.0,
-                "max_win": 0.0,
-                "max_loss": 0.0,
-            }
-        )
+        daily_data: defaultdict[str, DailyBucket] = defaultdict(_new_daily_bucket)
 
         for trade in self.trade_history:
             trade_dt = self._extract_trade_dt(trade)
@@ -131,15 +170,7 @@ class UpbitTradingAnalytics:
     def get_coin_performance(self) -> List[CoinPerformance]:
         self.refresh()
 
-        coin_data = defaultdict(
-            lambda: {
-                "trades": 0,
-                "wins": 0,
-                "losses": 0,
-                "pnl": 0.0,
-                "pnl_list": [],
-            }
-        )
+        coin_data: defaultdict[str, CoinBucket] = defaultdict(_new_coin_bucket)
 
         for trade in self.trade_history:
             ticker = str(trade.get("ticker") or "UNKNOWN")
@@ -172,10 +203,10 @@ class UpbitTradingAnalytics:
 
         return sorted(rows, key=lambda x: x.total_pnl, reverse=True)
 
-    def get_monthly_summary(self) -> Dict[str, Dict]:
+    def get_monthly_summary(self) -> Dict[str, MonthlyBucket]:
         self.refresh()
 
-        monthly = defaultdict(lambda: {"trades": 0, "pnl": 0.0, "wins": 0})
+        monthly: defaultdict[str, MonthlyBucket] = defaultdict(_new_monthly_bucket)
         for trade in self.trade_history:
             trade_dt = self._extract_trade_dt(trade)
             if trade_dt is None:
@@ -191,7 +222,7 @@ class UpbitTradingAnalytics:
 
         return dict(sorted(monthly.items()))
 
-    def get_summary_stats(self) -> Dict:
+    def get_summary_stats(self) -> Dict[str, int | float]:
         self.refresh()
         if not self.trade_history:
             return {

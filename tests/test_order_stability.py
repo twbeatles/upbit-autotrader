@@ -148,13 +148,13 @@ def test_start_trading_does_not_clear_existing_pending_orders():
             self.daily_loss_triggered = False
             self.log_messages = []
 
-        def calculate_target_price(self, *_):
+        def calculate_target_price(self, ticker, interval):
             return 1000.0
 
-        def calculate_ma(self, *_):
+        def calculate_ma(self, ticker, interval, period=5):
             return 900.0
 
-        def set_table_item(self, *_):
+        def set_table_item(self, row, col, text, bg_color):
             return None
 
         def stop_trading(self):
@@ -186,10 +186,10 @@ def test_execute_buy_uses_available_krw_after_reservation():
             self._reserved_krw_by_ticker = {"KRW-ETH": 7000.0}
             self._active_session_id = 1
 
-        def set_table_item(self, *_):
+        def set_table_item(self, row, col, text, bg_color):
             return None
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
     trader = _BuyTrader()
@@ -244,7 +244,7 @@ def test_batch_buy_respects_reserved_krw_and_skips_overbudget_orders():
         def start_trading(self):
             return None
 
-        def set_table_item(self, *_):
+        def set_table_item(self, row, col, text, bg_color):
             return None
 
         def log(self, msg):
@@ -288,7 +288,7 @@ def test_check_buy_execution_ignores_stale_session_callback():
             self._active_session_id = 2
             self.logger = _DummyLogger()
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
     trader = _Trader()
@@ -319,7 +319,7 @@ def test_check_sell_execution_handles_missing_universe_ticker_gracefully():
             self.universe = {}
             self.logger = _DummyLogger()
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
     trader = _Trader()
@@ -347,7 +347,7 @@ def test_pending_reconcile_keeps_wait_clears_done_and_cancel():
             }
             self.logger = _DummyLogger()
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
     trader = _Trader()
@@ -404,10 +404,10 @@ def test_execute_buy_uses_paper_route_without_live_api_calls():
             self.logger = _DummyLogger()
             self.strategy = None
 
-        def set_table_item(self, *_):
+        def set_table_item(self, row, col, text, bg_color):
             return None
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
     trader = _Trader()

@@ -44,6 +44,7 @@ def test_trading_controller_pyupbit_monkeypatch_path_still_effective():
     ) as mock_ohlcv:
         target = trader.calculate_target_price("KRW-BTC", "minute60")
     assert mock_ohlcv.called
+    assert target is not None
     assert float(target) == 110.0 + ((130.0 - 90.0) * 0.5)
 
 
@@ -60,6 +61,7 @@ def test_legacy_strategy_pyupbit_monkeypatch_path_still_effective():
     ) as mock_ohlcv:
         ma = manager.calculate_ma("KRW-BTC", "minute60", period=3)
     assert mock_ohlcv.called
+    assert ma is not None
     assert float(ma) == 12.0
 
 

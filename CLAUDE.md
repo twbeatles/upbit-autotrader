@@ -6,7 +6,7 @@ Claude/Codex 작업 가이드 문서입니다.
 ```txt
 upbit_autotrader/
   app/trader.py                       # 퍼사드/앱 수명주기
-  controllers/                        # UI/설정/매매/배치/히스토리
+  controllers/                        # UI/설정/매매/배치/히스토리 + _type_support.py
   services/                           # 주문/보유/설정저장/보안/페이퍼주문
   strategies/                         # 엔진/카탈로그/레거시/메타시그널
   risk/                               # 포지션 사이징/포트폴리오 리스크
@@ -87,11 +87,21 @@ python -m pytest -q
 - `tests/test_refactor_split_compatibility.py`
 - `tests/test_plan_implementation_fixes.py`
 
+## 정적 타입 검사
+```bash
+python -m pyright
+```
+
+현재 기준:
+- `0 errors, 0 warnings, 0 informations`
+- 컨트롤러 믹스인 구조를 수정할 때는 `controllers/_type_support.py`도 함께 갱신해 Pylance/Pyright 정합성을 유지
+
 ## 작업 주의사항
 - 주문/체결 로직 수정 시 pending 정리와 lifecycle 전이를 함께 검토
 - TWAP 경로 수정 시 최소주문금액 및 잔여 slice 재계산 검증
 - 리스크 계산 변경 시 external holdings/unrealized 포함 여부를 분리 검증
 - Discord 실패는 비치명 경로 유지(매매 차단 금지)
+- 문서 수정 시 `README.md`, `CLAUDE.md`, `GEMINI.md`, `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`의 테스트 수치와 참조 문서 정합성 유지
 
 ## 참고 문서
 - 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`

@@ -8,14 +8,14 @@ v3.0 (구조 리팩토링 + 고급 기능)
 import datetime
 import time
 import logging
-from typing import Tuple, Optional, Dict, Any, List
+from typing import Tuple, Optional, Dict, Any, List, cast
 
 try:
     import pyupbit
     import pandas as pd
 except ImportError:
-    pyupbit = None
-    pd = None
+    pyupbit = cast(Any, None)
+    pd = cast(Any, None)
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.strategies.legacy_parts import controls_ops as _legacy_controls, context_ops as _legacy_context, entry_ops as _legacy_entry, indicators as _legacy_indicators, settings_accessors as _legacy_accessors
@@ -184,7 +184,7 @@ class UpbitStrategyManager:
     # =========================================================================
     # v3.0 고급 기능: 재진입 쿨다운
     # =========================================================================
-    def set_cooldown(self, ticker: str, minutes: int = None):
+    def set_cooldown(self, ticker: str, minutes: int | None = None):
         """매도 후 재진입 쿨다운 설정"""
         _legacy_controls.bind_runtime(
             Config=Config,
@@ -231,7 +231,7 @@ class UpbitStrategyManager:
         )
         return _legacy_controls.set_holding_start(self, ticker)
     
-    def check_holding_time_exit(self, ticker: str, max_hours: int = None) -> bool:
+    def check_holding_time_exit(self, ticker: str, max_hours: int | None = None) -> bool:
         """보유 시간 초과 시 청산 필요 여부"""
         _legacy_controls.bind_runtime(
             Config=Config,
@@ -361,7 +361,7 @@ Returns:
         self,
         ticker: str,
         target_price: float,
-        confirm_ticks: int = None,
+        confirm_ticks: int | None = None,
     ) -> bool:
         """목표가 돌파 후 N틱 유지 확인"""
         _legacy_context.bind_runtime(

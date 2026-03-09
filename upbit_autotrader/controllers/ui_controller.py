@@ -29,6 +29,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.ui.dialog_fallbacks import HelpDialog, PresetManagerDialog, SettingsDialog
 from upbit_autotrader.strategies.catalog import STRATEGY_CATALOG, get_default_active_strategies, get_default_weights
 from upbit_autotrader.controllers.ui_sections import build_advanced_tab, build_ops_tab
@@ -59,7 +60,7 @@ except ImportError:
     BACKTESTER_AVAILABLE = False
 
 
-class TraderUIController:
+class TraderUIController(ControllerTypeBase):
     def init_ui(self):
         """UI 초기화"""
         self.setWindowTitle("Upbit Pro Algo-Trader v2.7 [24H 코인 자동매매]")
@@ -351,19 +352,25 @@ class TraderUIController:
         cols = ["코인명", "현재가", "목표가", "MA(5)", "상태", "보유수량", "매입가", "수익률", "최고수익률", "투자금"]
         self.table.setColumnCount(len(cols))
         self.table.setHorizontalHeaderLabels(cols)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header = self.table.horizontalHeader()
+        if header is not None:
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.setAlternatingRowColors(True)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setMinimumHeight(200)
-        self.table.verticalHeader().setDefaultSectionSize(35)  # 행 높이 증가
+        vertical_header = self.table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setDefaultSectionSize(35)  # 행 높이 증가
         
         # 로그 창
         self.log_text = QTextEdit()
         self.log_text.setMinimumHeight(150)
         self.log_text.setReadOnly(True)
         self.log_text.setPlaceholderText("로그가 여기에 표시됩니다...")
-        self.log_text.document().setMaximumBlockCount(Config.MAX_LOG_LINES)
+        document = self.log_text.document()
+        if document is not None:
+            document.setMaximumBlockCount(Config.MAX_LOG_LINES)
         
         splitter.addWidget(self.table)
         splitter.addWidget(self.log_text)
@@ -378,6 +385,8 @@ class TraderUIController:
     def create_statusbar(self):
         """상태바 생성"""
         self.statusbar = self.statusBar()
+        if self.statusbar is None:
+            return
         
         self.status_time = QLabel()
         self.statusbar.addWidget(self.status_time)
@@ -396,9 +405,13 @@ class TraderUIController:
     def create_menu_bar(self):
         """메뉴바 생성"""
         menubar = self.menuBar()
+        if menubar is None:
+            return
         
         # 파일 메뉴
         file_menu = menubar.addMenu("파일")
+        if file_menu is None:
+            return
         
         action_settings = QAction("⚙️ 시스템 설정", self)
         action_settings.triggered.connect(self.show_settings)
@@ -412,6 +425,8 @@ class TraderUIController:
         
         # 보기 메뉴
         view_menu = menubar.addMenu("보기")
+        if view_menu is None:
+            return
         
         action_logs = QAction("📜 로그 폴더 열기", self)
         action_logs.triggered.connect(lambda: os.startfile(Config.LOG_DIR) if os.path.exists(Config.LOG_DIR) else None)
@@ -419,6 +434,8 @@ class TraderUIController:
         
         # v2.7: 도구 메뉴
         tools_menu = menubar.addMenu("도구")
+        if tools_menu is None:
+            return
         
         action_analytics = QAction("📊 거래 분석 리포트", self)
         action_analytics.triggered.connect(self.generate_analytics_report)
@@ -438,6 +455,8 @@ class TraderUIController:
         
         # 도움말 메뉴
         help_menu = menubar.addMenu("도움말")
+        if help_menu is None:
+            return
         
         action_help = QAction("📚 사용 가이드", self)
         action_help.triggered.connect(self.show_help)
@@ -452,12 +471,13 @@ class TraderUIController:
 
     def setup_tray(self):
         """시스템 트레이 설정"""
-        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon = QSystemTrayIcon(parent=self)
+        style = self.style()
+        if style is None:
+            return
         
         # v2.7: 트레이 아이콘 설정 (윈도우 아이콘 사용)
-        self.tray_icon.setIcon(self.style().standardIcon(
-            self.style().StandardPixmap.SP_ComputerIcon
-        ))
+        self.tray_icon.setIcon(style.standardIcon(style.StandardPixmap.SP_ComputerIcon))
         self.tray_icon.setToolTip("Upbit Pro Trader v2.7")
         
         # 트레이 메뉴

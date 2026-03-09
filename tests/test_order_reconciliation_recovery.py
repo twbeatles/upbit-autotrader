@@ -47,7 +47,7 @@ class _Trader(TraderTradingController):
         self._external_buy_done = 0
         self._reserved_krw_by_ticker = {}
 
-    def log(self, *_):
+    def log(self, msg="", *args, **kwargs):
         return None
 
     def _check_external_buy_execution(self, ticker, uuid, **_):

@@ -1,24 +1,26 @@
 import datetime
+from typing import Any, cast
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QDialog, QMessageBox, QInputDialog
 
+from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.services.holdings_service import get_account_holdings as get_account_holdings_v2
 from upbit_autotrader.controllers.batch_parts import batch_ops as _batch_ops
 try:
     import pyupbit
 except ImportError:
-    pyupbit = None
+    pyupbit = cast(Any, None)
 
 try:
     from upbit_autotrader.ui.dialogs import EmergencyCloseDialog
     V3_MODULES_AVAILABLE = True
 except ImportError:
-    EmergencyCloseDialog = None
+    EmergencyCloseDialog = cast(Any, None)
     V3_MODULES_AVAILABLE = False
 
 
-class TraderBatchController:
+class TraderBatchController(ControllerTypeBase):
     def get_account_holdings(self):
         """현재 보유 중인 모든 KRW 마켓 코인 조회"""
         if hasattr(self, "_is_paper_mode") and self._is_paper_mode():
@@ -30,9 +32,12 @@ class TraderBatchController:
             prices_map = {}
             if pyupbit is not None and tickers:
                 try:
-                    prices = pyupbit.get_current_price(tickers)
+                    ticker_arg = tickers if len(tickers) > 1 else tickers[0]
+                    prices = cast(Any, pyupbit).get_current_price(ticker_arg)
                     if isinstance(prices, dict):
                         prices_map = prices
+                    elif len(tickers) == 1 and prices is not None:
+                        prices_map = {tickers[0]: prices}
                 except Exception:
                     prices_map = {}
             holdings = []
@@ -63,7 +68,10 @@ class TraderBatchController:
 
         try:
             balances = self._api_get_balances() if hasattr(self, "_api_get_balances") else None
-            holdings = get_account_holdings_v2(self.upbit, balances=balances)
+            if isinstance(balances, list):
+                holdings = get_account_holdings_v2(self.upbit, balances=balances)
+            else:
+                holdings = get_account_holdings_v2(self.upbit)
             self.logger.info(f"보유 코인 조회: {len(holdings)}개")
             return holdings
         except Exception as e:

@@ -316,7 +316,7 @@ def test_sync_account_holdings_initializes_external_row_columns():
             self.logger = _DummyLogger()
             self._risk_snapshot_cache = {"ts": 0.0, "value": None}
 
-        def set_table_item(self, row, col, text, _bg):
+        def set_table_item(self, row, col, text, bg_color):
             from PyQt6.QtWidgets import QTableWidgetItem
 
             item = self.table.item(row, col)
@@ -343,7 +343,9 @@ def test_sync_account_holdings_initializes_external_row_columns():
     assert trader.table.item(info["row"], 5) is not None
     assert trader.table.item(info["row"], 6) is not None
     assert trader.table.item(info["row"], 9) is not None
-    assert trader.table.item(info["row"], 5).text() == "12.00000000"
+    qty_item = trader.table.item(info["row"], 5)
+    assert qty_item is not None
+    assert qty_item.text() == "12.00000000"
 
 
 def test_reconcile_pending_promotes_stale_missing_order_to_manual_review_even_without_force():
@@ -357,10 +359,10 @@ def test_reconcile_pending_promotes_stale_missing_order_to_manual_review_even_wi
             self.chk_paper_trading = _Check(False)
             self._manual_review_queue = {}
 
-        def _safe_get_order(self, _uuid):
+        def _safe_get_order(self, uuid):
             return None
 
-        def _api_cancel_order(self, _uuid):
+        def _api_cancel_order(self, uuid):
             return None
 
         def _sync_account_holdings_to_universe(self, *args, **kwargs):

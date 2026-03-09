@@ -8,6 +8,7 @@
 - 내부 구조: `upbit_autotrader/` 패키지 기반
 - 호환성: 루트는 `upbit_trader.py` 엔트리포인트만 유지, 기존 래퍼는 `legacy_wrappers/`로 이동
 - 정책: 신규 기능 기본 `OFF`로 기존 동작 유지
+- 타입 정합성: 컨트롤러 믹스인 타입 지원은 `upbit_autotrader/controllers/_type_support.py`에서 관리
 
 ## 패키지 구조(핵심)
 ```txt
@@ -40,11 +41,12 @@ upbit_autotrader/
 - 파일: `upbit_trader.spec`
 - 기준: `v3.3.0`
 - 특징:
-  - `collect_submodules("upbit_autotrader")`로 `risk/`, `execution/`, `strategies/meta_signal.py` 자동 수집
+  - `collect_submodules("upbit_autotrader")`로 `risk/`, `execution/`, `strategies/meta_signal.py`, 컨트롤러 타입 지원 모듈까지 자동 수집
 
 빌드 예시:
 ```bash
 pyinstaller --noconfirm --clean upbit_trader.spec
+pyinstaller --noconfirm --clean --distpath upbit_dist --workpath upbit_build upbit_trader.spec
 ```
 
 ## 테스트
@@ -54,15 +56,24 @@ python -m pytest -q
 ```
 
 현재 기준:
-- 전체 테스트 통과: `74 passed`
+- 전체 테스트 통과: `90 passed`
+
+## 정적 타입 검사
+실행:
+```bash
+python -m pyright
+```
+
+현재 기준:
+- `0 errors, 0 warnings, 0 informations`
 
 ## 문서
 - 사용자 문서: `README.md`
 - 개발 가이드: `CLAUDE.md`
-- 구조/구현 상태: `PROJECT_STRUCTURE_ANALYSIS.md`
-- 전략 옵션 계획: `STRATEGY_OPTIONS_IMPLEMENTATION_PLAN.md`
+- 리스크/정합성 점검: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
+- 레거시 래퍼 안내: `legacy_wrappers/README.md`
 
 ## 작업 시 주의
 1. 설정 변경 시 `settings_version=2` 호환성 유지
 2. 주문/체결 로직 수정 시 lifecycle 전이와 pending 정리 동시 검증
-3. 문서 수정 시 README/CLAUDE/GEMINI/구조문서 간 기능/기본값/테스트 수치 정합성 유지
+3. 문서 수정 시 `README.md`, `CLAUDE.md`, `GEMINI.md`, `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md` 간 기능/기본값/테스트 수치 정합성 유지

@@ -12,7 +12,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Callable
+from typing import Any, Optional, List, Dict
 from datetime import datetime
 from enum import Enum
 import logging
@@ -56,12 +56,12 @@ class DiscordNotifier:
         self.webhook_url = webhook_url
         self.enabled = bool(webhook_url)
     
-    def send(self, message: str, embed: Dict = None) -> bool:
+    def send(self, message: str, embed: Dict[str, Any] | None = None) -> bool:
         if not self.enabled or not requests:
             return False
         
         try:
-            payload = {"content": message}
+            payload: Dict[str, Any] = {"content": message}
             if embed:
                 payload["embeds"] = [embed]
             
@@ -81,13 +81,14 @@ class DiscordNotifier:
             EventType.STOP_LOSS: 0xff6b6b,    # 연빨강
         }
         
-        embed = {
+        fields: List[Dict[str, Any]] = [
+            {"name": "코인", "value": ticker, "inline": True},
+            {"name": "가격", "value": f"₩{price:,.0f}", "inline": True},
+        ]
+        embed: Dict[str, Any] = {
             "title": f"📊 {event_type.value.upper()}",
             "color": colors.get(event_type, 0x808080),
-            "fields": [
-                {"name": "코인", "value": ticker, "inline": True},
-                {"name": "가격", "value": f"₩{price:,.0f}", "inline": True},
-            ],
+            "fields": fields,
             "timestamp": datetime.utcnow().isoformat()
         }
         
@@ -189,14 +190,14 @@ class UpbitNotificationManager:
         self.event_filters: Dict[str, List[EventType]] = {}
     
     def configure_discord(self, webhook_url: str, 
-                         events: List[EventType] = None):
+                         events: List[EventType] | None = None):
         """Discord 설정"""
         self.discord = DiscordNotifier(webhook_url)
         if events:
             self.event_filters['discord'] = events
     
     def configure_telegram(self, bot_token: str, chat_id: str,
-                          events: List[EventType] = None):
+                          events: List[EventType] | None = None):
         """텔레그램 설정"""
         self.telegram = TelegramNotifier(bot_token, chat_id)
         if events:
@@ -204,7 +205,7 @@ class UpbitNotificationManager:
     
     def configure_email(self, smtp_server: str, smtp_port: int,
                        username: str, password: str, to_emails: List[str],
-                       events: List[EventType] = None):
+                       events: List[EventType] | None = None):
         """이메일 설정"""
         self.email = EmailNotifier(smtp_server, smtp_port, 
                                    username, password, to_emails)

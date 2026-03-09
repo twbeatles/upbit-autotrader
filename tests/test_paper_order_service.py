@@ -37,6 +37,7 @@ def test_paper_order_can_be_queried():
 
     ok, result, _ = svc.place_buy_market("KRW-ETH", 10000, 2000)
     assert ok
+    assert result is not None
     order = svc.get_order(result["uuid"])
     assert order is not None
     assert order["state"] == "done"

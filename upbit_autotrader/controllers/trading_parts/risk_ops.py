@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 # Runtime bindings injected by trading_controller facade
-Config = None
-RiskLimitConfig = None
-build_portfolio_risk_snapshot = None
-evaluate_risk_limits = None
-pyupbit = None
-time = None
+Config = cast(Any, None)
+RiskLimitConfig = cast(Any, None)
+build_portfolio_risk_snapshot = cast(Any, None)
+evaluate_risk_limits = cast(Any, None)
+pyupbit = cast(Any, None)
+time = cast(Any, None)
 
 
 def bind_runtime(**kwargs):

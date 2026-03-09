@@ -1,5 +1,6 @@
 ﻿import logging
 import threading
+from typing import Any, cast
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
@@ -8,7 +9,7 @@ from upbit_autotrader.core.config import Config
 try:
     import pyupbit
 except ImportError:
-    pyupbit = None
+    pyupbit = cast(Any, None)
 
 
 class PriceUpdateThread(QThread):
@@ -35,7 +36,8 @@ class PriceUpdateThread(QThread):
             if not coins:
                 break
             try:
-                prices = pyupbit.get_current_price(coins)
+                ticker_arg = coins if len(coins) > 1 else coins[0]
+                prices = cast(Any, pyupbit).get_current_price(ticker_arg)
                 if prices:
                     payload = prices if isinstance(prices, dict) else {coins[0]: prices}
                     self.price_updated.emit(payload)

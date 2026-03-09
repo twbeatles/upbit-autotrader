@@ -2,6 +2,7 @@
 import json
 import logging
 import os
+from typing import Any, cast
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QColor
@@ -19,22 +20,26 @@ from PyQt6.QtWidgets import (
 )
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.controllers._type_support import ControllerTypeBase
 
 try:
     from upbit_autotrader.analytics.trading_analytics import UpbitTradingAnalytics
     ANALYTICS_AVAILABLE = True
 except ImportError:
+    UpbitTradingAnalytics = cast(Any, None)
     ANALYTICS_AVAILABLE = False
 
 try:
     from upbit_autotrader.backtesting.backtester import UpbitBacktestEngine, volatility_breakout_strategy, get_strategy_registry
     BACKTESTER_AVAILABLE = True
 except ImportError:
-    get_strategy_registry = None
+    UpbitBacktestEngine = cast(Any, None)
+    volatility_breakout_strategy = cast(Any, None)
+    get_strategy_registry = cast(Any, None)
     BACKTESTER_AVAILABLE = False
 
 
-class TraderHistoryController:
+class TraderHistoryController(ControllerTypeBase):
     @staticmethod
     def _safe_float(value, default=0.0):
         try:
@@ -114,11 +119,15 @@ class TraderHistoryController:
         history_cols = ["시간", "코인", "구분", "가격", "금액", "손익", "사유"]
         self.history_table.setColumnCount(len(history_cols))
         self.history_table.setHorizontalHeaderLabels(history_cols)
-        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        header = self.history_table.horizontalHeader()
+        if header is not None:
+            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.history_table.setAlternatingRowColors(True)
         self.history_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.history_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        self.history_table.verticalHeader().setDefaultSectionSize(30)
+        vertical_header = self.history_table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setDefaultSectionSize(30)
         
         layout.addWidget(self.history_table)
         
@@ -218,9 +227,16 @@ class TraderHistoryController:
             strategy_label = "변동성 돌파"
             if callable(get_strategy_registry):
                 registry = get_strategy_registry()
-                if registry:
+                if isinstance(registry, dict) and registry:
                     keys = list(registry.keys())
-                    labels = [f"{k} - {registry[k].get('name', k)}" for k in keys]
+                    labels = [
+                        f"{k} - {registry[k].get('name', k)}"
+                        for k in keys
+                        if isinstance(registry.get(k), dict)
+                    ]
+                    keys = [k for k in keys if isinstance(registry.get(k), dict)]
+                    if not keys:
+                        return
                     selected_label, ok = QInputDialog.getItem(
                         self,
                         "백테스트 전략 선택",

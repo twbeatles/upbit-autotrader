@@ -67,7 +67,8 @@ class StrategyEngine:
             return ratio
         if config.use_volatility_targeting:
             realized_vol = float(snapshot.get("realized_vol_pct", 0.0) or 0.0)
-            target_vol = float(getattr(self.trader, "spin_target_vol", None).value()) if hasattr(self.trader, "spin_target_vol") else 2.0
+            target_widget = getattr(self.trader, "spin_target_vol", None)
+            target_vol = float(target_widget.value()) if target_widget is not None and hasattr(target_widget, "value") else 2.0
             if realized_vol > 0:
                 scale = target_vol / realized_vol
                 scale = min(max(scale, 0.4), 1.8)
@@ -189,7 +190,8 @@ class StrategyEngine:
 
     def _pass_regime_filter(self, ticker: str, snapshot: Dict[str, Any]) -> bool:
         adx = float(snapshot.get("adx", 0.0) or 0.0)
-        min_adx = float(getattr(self.trader, "spin_regime_min_adx", None).value()) if hasattr(self.trader, "spin_regime_min_adx") else 18.0
+        adx_widget = getattr(self.trader, "spin_regime_min_adx", None)
+        min_adx = float(adx_widget.value()) if adx_widget is not None and hasattr(adx_widget, "value") else 18.0
         if adx < min_adx:
             return False
         if hasattr(self.trader, "strategy") and self.trader.strategy and hasattr(self.trader.strategy, "check_mtf_condition"):
@@ -200,7 +202,8 @@ class StrategyEngine:
         return True
 
     def _pass_drawdown_guard(self) -> bool:
-        max_daily_loss = float(getattr(self.trader, "spin_drawdown_guard", None).value()) if hasattr(self.trader, "spin_drawdown_guard") else 5.0
+        drawdown_widget = getattr(self.trader, "spin_drawdown_guard", None)
+        max_daily_loss = float(drawdown_widget.value()) if drawdown_widget is not None and hasattr(drawdown_widget, "value") else 5.0
         initial = float(getattr(self.trader, "initial_balance", 0.0) or 0.0)
         pnl = float(getattr(self.trader, "total_realized_profit", 0.0) or 0.0)
         if initial > 0:
@@ -208,7 +211,8 @@ class StrategyEngine:
             if loss_rate <= -abs(max_daily_loss):
                 return False
 
-        max_consecutive = int(getattr(self.trader, "spin_max_consecutive_losses", None).value()) if hasattr(self.trader, "spin_max_consecutive_losses") else 3
+        max_losses_widget = getattr(self.trader, "spin_max_consecutive_losses", None)
+        max_consecutive = int(max_losses_widget.value()) if max_losses_widget is not None and hasattr(max_losses_widget, "value") else 3
         strategy = getattr(self.trader, "strategy", None)
         if strategy is not None:
             losses = int(getattr(strategy, "consecutive_losses", 0) or 0)

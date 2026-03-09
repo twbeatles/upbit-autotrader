@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 # Runtime bindings injected by trading_controller facade
-Config = None
-QMessageBox = None
-QTableWidgetItem = None
-pyupbit = None
-time = None
+Config = cast(Any, None)
+QMessageBox = cast(Any, None)
+QTableWidgetItem = cast(Any, None)
+pyupbit = cast(Any, None)
+time = cast(Any, None)
 
 
 def bind_runtime(**kwargs):

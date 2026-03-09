@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, Tuple, cast
+
 # Runtime bindings injected by legacy_strategy facade
-Config = None
-pd = None
-pyupbit = None
-datetime = None
-time = None
+Config = cast(Any, None)
+pd = cast(Any, None)
+pyupbit = cast(Any, None)
+datetime = cast(Any, None)
+time = cast(Any, None)
 
 
 def bind_runtime(**kwargs):
@@ -122,12 +124,12 @@ def update_recent_price(self, ticker: str, price: float):
 
 
 def check_breakout_confirmation(self, ticker: str, target_price: float, 
-                                 confirm_ticks: int = None) -> bool:
+                                 confirm_ticks: int | None = None) -> bool:
     """목표가 돌파 후 N틱 유지 확인"""
     if not self._is_breakout_confirm_enabled():
         return True  # 비활성화 시 통과
     
-    confirm_ticks = confirm_ticks or Config.DEFAULT_BREAKOUT_CONFIRM_TICKS
+    confirm_ticks = int(confirm_ticks or Config.DEFAULT_BREAKOUT_CONFIRM_TICKS)
     
     if ticker not in self.recent_prices:
         return False

@@ -49,11 +49,15 @@ def build_ops_tab(self):
     cols = ["queued_at", "age", "ticker", "uuid", "reason", "pending_state"]
     self.manual_review_table.setColumnCount(len(cols))
     self.manual_review_table.setHorizontalHeaderLabels(cols)
-    self.manual_review_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    header = self.manual_review_table.horizontalHeader()
+    if header is not None:
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     self.manual_review_table.setAlternatingRowColors(True)
     self.manual_review_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     self.manual_review_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-    self.manual_review_table.verticalHeader().setDefaultSectionSize(30)
+    vertical_header = self.manual_review_table.verticalHeader()
+    if vertical_header is not None:
+        vertical_header.setDefaultSectionSize(30)
     layout.addWidget(self.manual_review_table)
 
     if hasattr(self, "refresh_manual_review_table"):

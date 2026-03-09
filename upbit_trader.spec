@@ -4,11 +4,14 @@ Upbit Pro Algo-Trader v3.3.0 PyInstaller spec (onefile).
 
 Build:
   pyinstaller --noconfirm --clean upbit_trader.spec
+  # Repo-local fallback (artifacts ignored by .gitignore):
+  # pyinstaller --noconfirm --clean --distpath upbit_dist --workpath upbit_build upbit_trader.spec
   # If this repo is on Google Drive (G:) and you see PermissionError writing .exe:
   # pyinstaller --noconfirm --clean --distpath C:\\temp\\upbit_dist --workpath C:\\temp\\upbit_build upbit_trader.spec
 
 Output:
-  dist/UpbitTrader.exe
+  dist/UpbitTrader.exe (default)
+  upbit_dist/UpbitTrader.exe (repo-local fallback)
 """
 
 from pathlib import Path
@@ -43,7 +46,8 @@ hiddenimports = [
 ]
 
 # Refactored package modules (v3.3.0+)
-# Includes risk/, execution/, strategies/meta_signal.py and related controllers.
+# Includes risk/, execution/, strategies/meta_signal.py, controller mixins,
+# and the type-support shim in controllers/_type_support.py.
 hiddenimports += collect_submodules("upbit_autotrader")
 
 # NOTE: Do not bundle local .py files as data; PyInstaller packages them as modules.

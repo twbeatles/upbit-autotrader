@@ -1,6 +1,7 @@
 ﻿from unittest.mock import patch
 
 from PyQt6.QtWidgets import QMessageBox
+from typing import cast
 
 from upbit_autotrader.services.order_service import UpbitOrderService
 from upbit_autotrader.controllers.batch_controller import TraderBatchController
@@ -62,7 +63,7 @@ class _FakeTraderCore:
         self.strategy = None
         self.log_messages = []
 
-    def set_table_item(self, *args, **kwargs):
+    def set_table_item(self, row, col, text, bg_color):
         return None
 
     def log(self, msg):
@@ -91,7 +92,7 @@ def test_check_buy_execution_clears_pending_done_cancel_timeout():
     trader = _FakeTraderCore(_FakeUpbitOrders({"buy-done": done_order}))
     trader.universe[ticker] = {"row": 0, "state": "주문중", "qty": 0, "buy_price": 0, "invest_amt": 0}
     trader.order_service.mark_pending(ticker, "BUY", "buy-done")
-    TraderTradingController.check_buy_execution(trader, ticker, "buy-done")
+    TraderTradingController.check_buy_execution(cast(TraderTradingController, trader), ticker, "buy-done")
     assert not trader.order_service.has_pending(ticker)
     assert trader.universe[ticker]["state"] == "보유중"
     assert trader.universe[ticker]["qty"] > 0
@@ -100,7 +101,7 @@ def test_check_buy_execution_clears_pending_done_cancel_timeout():
     cancel_trader = _FakeTraderCore(_FakeUpbitOrders({"buy-cancel": {"state": "cancel"}}))
     cancel_trader.universe[ticker] = {"row": 0, "state": "주문중", "qty": 0}
     cancel_trader.order_service.mark_pending(ticker, "BUY", "buy-cancel")
-    TraderTradingController.check_buy_execution(cancel_trader, ticker, "buy-cancel")
+    TraderTradingController.check_buy_execution(cast(TraderTradingController, cancel_trader), ticker, "buy-cancel")
     assert not cancel_trader.order_service.has_pending(ticker)
     assert cancel_trader.universe[ticker]["state"] == "감시중"
 
@@ -108,7 +109,9 @@ def test_check_buy_execution_clears_pending_done_cancel_timeout():
     timeout_trader = _FakeTraderCore(_FakeUpbitOrders({"buy-timeout": {"state": "wait"}}))
     timeout_trader.universe[ticker] = {"row": 0, "state": "주문중", "qty": 0}
     timeout_trader.order_service.mark_pending(ticker, "BUY", "buy-timeout")
-    TraderTradingController.check_buy_execution(timeout_trader, ticker, "buy-timeout", retry_count=30)
+    TraderTradingController.check_buy_execution(
+        cast(TraderTradingController, timeout_trader), ticker, "buy-timeout", retry_count=30
+    )
     assert not timeout_trader.order_service.has_pending(ticker)
     assert timeout_trader.universe[ticker]["state"] == "체결확인실패"
 
@@ -127,7 +130,7 @@ def test_check_sell_execution_clears_pending_done_cancel_timeout():
     trader = _FakeTraderCore(_FakeUpbitOrders({"sell-done": done_order}))
     trader.universe[ticker] = {"row": 0, "state": "매도주문중", "qty": 1.0, "invest_amt": 10000.0}
     trader.order_service.mark_pending(ticker, "SELL", "sell-done")
-    TraderTradingController.check_sell_execution(trader, ticker, "sell-done", "테스트매도")
+    TraderTradingController.check_sell_execution(cast(TraderTradingController, trader), ticker, "sell-done", "테스트매도")
     assert not trader.order_service.has_pending(ticker)
     assert trader.universe[ticker]["state"] == "감시중"
     assert trader.universe[ticker]["qty"] == 0
@@ -136,7 +139,7 @@ def test_check_sell_execution_clears_pending_done_cancel_timeout():
     cancel_trader = _FakeTraderCore(_FakeUpbitOrders({"sell-cancel": {"state": "cancel"}}))
     cancel_trader.universe[ticker] = {"row": 0, "state": "매도주문중", "qty": 0.5, "invest_amt": 5000.0}
     cancel_trader.order_service.mark_pending(ticker, "SELL", "sell-cancel")
-    TraderTradingController.check_sell_execution(cancel_trader, ticker, "sell-cancel", "테스트매도")
+    TraderTradingController.check_sell_execution(cast(TraderTradingController, cancel_trader), ticker, "sell-cancel", "테스트매도")
     assert not cancel_trader.order_service.has_pending(ticker)
     assert cancel_trader.universe[ticker]["state"] == "보유중"
 
@@ -145,7 +148,7 @@ def test_check_sell_execution_clears_pending_done_cancel_timeout():
     timeout_trader.universe[ticker] = {"row": 0, "state": "매도주문중", "qty": 0.5, "invest_amt": 5000.0}
     timeout_trader.order_service.mark_pending(ticker, "SELL", "sell-timeout")
     TraderTradingController.check_sell_execution(
-        timeout_trader, ticker, "sell-timeout", "테스트매도", retry_count=30
+        cast(TraderTradingController, timeout_trader), ticker, "sell-timeout", "테스트매도", retry_count=30
     )
     assert not timeout_trader.order_service.has_pending(ticker)
     assert timeout_trader.universe[ticker]["state"] == "체결확인실패"
@@ -178,7 +181,7 @@ class _FakeBatchTrader:
     def start_trading(self):
         return None
 
-    def set_table_item(self, *args, **kwargs):
+    def set_table_item(self, row, col, text, bg_color):
         return None
 
     def get_account_holdings(self):
@@ -213,7 +216,7 @@ def test_batch_sell_routes_universe_and_external_paths():
         "upbit_autotrader.controllers.batch_controller.QTimer.singleShot",
         side_effect=lambda _ms, cb: cb(),
     ):
-        TraderBatchController.execute_batch_sell(trader)
+        TraderBatchController.execute_batch_sell(cast(TraderBatchController, trader))
 
     assert trader.internal_sell_calls == [("KRW-BTC", "일괄매도")]
     assert len(trader.external_sell_checks) == 1
@@ -228,7 +231,7 @@ def test_emergency_close_routes_universe_and_external_paths():
         "upbit_autotrader.controllers.batch_controller.QTimer.singleShot",
         side_effect=lambda _ms, cb: cb(),
     ):
-        TraderBatchController.execute_emergency_close(trader)
+        TraderBatchController.execute_emergency_close(cast(TraderBatchController, trader))
 
     assert len(trader.internal_sell_checks) == 1
     assert trader.internal_sell_checks[0][0] == "KRW-BTC"

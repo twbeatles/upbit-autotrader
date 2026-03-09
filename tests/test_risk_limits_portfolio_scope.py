@@ -49,7 +49,7 @@ class _RiskTrader(TraderTradingController):
     def get_account_holdings(self):
         return list(self.external_holdings)
 
-    def log(self, *_):
+    def log(self, msg="", *args, **kwargs):
         return None
 
 

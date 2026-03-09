@@ -124,10 +124,10 @@ def test_check_buy_condition_reuses_snapshot_with_entry_scoring():
             self.chk_use_risk = _Check(False)
             self.buy_calls = 0
 
-        def log(self, *_):
+        def log(self, msg="", *args, **kwargs):
             return None
 
-        def execute_buy(self, *_):
+        def execute_buy(self, ticker, curr_price):
             self.buy_calls += 1
 
     trader = _BuyTrader()

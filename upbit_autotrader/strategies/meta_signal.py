@@ -4,7 +4,7 @@ import datetime
 import json
 import os
 from dataclasses import dataclass, asdict
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 
 
 def _clamp(value: float, low: float, high: float) -> float:
@@ -108,7 +108,7 @@ class StrategyPerformanceTracker:
         weight_min: float = 0.5,
         weight_max: float = 1.5,
         ema_alpha: float = 0.2,
-        now: datetime.date = None,
+        now: Optional[datetime.date] = None,
     ) -> Tuple[bool, Dict[str, float]]:
         now = now or datetime.date.today()
         now_key = now.isoformat()
@@ -153,7 +153,7 @@ class StrategyPerformanceTracker:
 
 def evaluate_meta_signal(
     payload: MetaSignalInput,
-    tracker: StrategyPerformanceTracker = None,
+    tracker: Optional[StrategyPerformanceTracker] = None,
 ) -> MetaSignalOutput:
     tracker = tracker or StrategyPerformanceTracker()
     perf = tracker.get(payload.strategy_id)
@@ -177,4 +177,3 @@ def evaluate_meta_signal(
             "regime_score": regime_score,
         },
     )
-

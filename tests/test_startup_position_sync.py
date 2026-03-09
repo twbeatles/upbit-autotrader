@@ -136,16 +136,16 @@ class _BaseTrader(TraderTradingController):
         self.balance = 0.0
         self.initial_balance = 1_000_000.0
 
-    def calculate_target_price(self, *_):
+    def calculate_target_price(self, ticker, interval):
         return 1000.0
 
-    def calculate_ma(self, *_):
+    def calculate_ma(self, ticker, interval, period=5):
         return 900.0
 
-    def set_table_item(self, *_):
+    def set_table_item(self, row, col, text, bg_color):
         return None
 
-    def log(self, *_):
+    def log(self, msg="", *args, **kwargs):
         return None
 
 

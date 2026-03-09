@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, Dict, Optional, cast
+
 # Runtime bindings injected by legacy_strategy facade
-Config = None
-pd = None
-pyupbit = None
-datetime = None
-time = None
+Config = cast(Any, None)
+pd = cast(Any, None)
+pyupbit = cast(Any, None)
+datetime = cast(Any, None)
+time = cast(Any, None)
 
 
 def bind_runtime(**kwargs):
@@ -13,9 +15,9 @@ def bind_runtime(**kwargs):
 
 
 
-def set_cooldown(self, ticker: str, minutes: int = None):
+def set_cooldown(self, ticker: str, minutes: int | None = None):
     """매도 후 재진입 쿨다운 설정"""
-    minutes = minutes or Config.DEFAULT_COOLDOWN_MINUTES
+    minutes = int(minutes or Config.DEFAULT_COOLDOWN_MINUTES)
     self.cooldown_tickers[ticker] = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
     self.log(f"[{ticker}] 재진입 쿨다운 설정: {minutes}분")
 
@@ -48,12 +50,12 @@ def set_holding_start(self, ticker: str):
     self.holding_start_times[ticker] = datetime.datetime.now()
 
 
-def check_holding_time_exit(self, ticker: str, max_hours: int = None) -> bool:
+def check_holding_time_exit(self, ticker: str, max_hours: int | None = None) -> bool:
     """보유 시간 초과 시 청산 필요 여부"""
     if not self._is_time_exit_enabled():
         return False
     
-    max_hours = max_hours or Config.DEFAULT_MAX_HOLDING_HOURS
+    max_hours = int(max_hours or Config.DEFAULT_MAX_HOLDING_HOURS)
     
     if ticker not in self.holding_start_times:
         return False

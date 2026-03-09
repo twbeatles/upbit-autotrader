@@ -68,7 +68,9 @@ class UpbitAdvancedIndicators:
         close = df['close']
         
         wr = -100 * (high_max - close) / (high_max - low_min)
-        return float(wr.iloc[-1])
+        wr_series = pd.Series(wr)
+        wr_value = wr_series.iloc[-1]
+        return float(wr_value)
     
     def check_williams_r_condition(self, ticker: str, period: int = 14,
                                    oversold: float = -80, 
@@ -132,14 +134,14 @@ class UpbitAdvancedIndicators:
         if df.empty or len(df) < 2:
             return None
             
-        obv = [0]
+        obv: List[float] = [0.0]
         for i in range(1, len(df)):
             if df['close'].iloc[i] > df['close'].iloc[i-1]:
-                obv.append(obv[-1] + df['volume'].iloc[i])
+                obv.append(float(obv[-1] + float(df['volume'].iloc[i])))
             elif df['close'].iloc[i] < df['close'].iloc[i-1]:
-                obv.append(obv[-1] - df['volume'].iloc[i])
+                obv.append(float(obv[-1] - float(df['volume'].iloc[i])))
             else:
-                obv.append(obv[-1])
+                obv.append(float(obv[-1]))
         return obv
     
     def calculate_obv_signal(self, ticker: str, period: int = 20) -> Tuple[str, float]:
@@ -153,9 +155,10 @@ class UpbitAdvancedIndicators:
             
         obv_series = pd.Series(obv)
         obv_ma = obv_series.rolling(window=period).mean()
+        obv_ma_values = list(obv_ma)
         
         current = obv[-1]
-        ma = obv_ma.iloc[-1]
+        ma = float(obv_ma_values[-1])
         
         if ma == 0:
             return 'NEUTRAL', 0.0

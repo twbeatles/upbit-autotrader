@@ -3,11 +3,13 @@ import json
 import os
 import random
 import time
+from typing import Any, cast
 
 from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QTableWidgetItem, QMessageBox
 
+from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.core.entry_filter import should_enter_by_score
 from upbit_autotrader.strategies.catalog import get_default_active_strategies, get_default_weights
@@ -27,11 +29,11 @@ try:
     import pandas as pd
     import pyupbit
 except ImportError:
-    pd = None
-    pyupbit = None
+    pd = cast(Any, None)
+    pyupbit = cast(Any, None)
 
 
-class TraderTradingController:
+class TraderTradingController(ControllerTypeBase):
     def login(self):
         """업비트 API 연결"""
         access = self.input_access.text().strip()
@@ -482,6 +484,12 @@ class TraderTradingController:
 
     def _get_execution_config(self):
         mode = self._execution_mode()
+        spin_paper_fee_bps = getattr(self, "spin_paper_fee_bps", None)
+        fee_bps = (
+            float(spin_paper_fee_bps.value())
+            if spin_paper_fee_bps is not None and hasattr(spin_paper_fee_bps, "value")
+            else float(getattr(Config, "DEFAULT_PAPER_FEE_BPS", 5.0))
+        )
         return ExecutionConfig(
             enabled=self._use_execution_model(),
             expected_slippage_guard_bps=self._get_spin_value(
@@ -490,7 +498,7 @@ class TraderTradingController:
             ),
             twap_slices=int(self._get_spin_value("spin_twap_slices", getattr(Config, "DEFAULT_TWAP_SLICES", 3))),
             twap_interval_sec=int(self._get_spin_value("spin_twap_interval_sec", getattr(Config, "DEFAULT_TWAP_INTERVAL_SEC", 8))),
-            fee_bps=float(getattr(self, "spin_paper_fee_bps", None).value()) if hasattr(self, "spin_paper_fee_bps") else float(getattr(Config, "DEFAULT_PAPER_FEE_BPS", 5.0)),
+            fee_bps=fee_bps,
             default_mode=str(mode),
             min_order_krw=5000.0,
         )
@@ -727,7 +735,7 @@ class TraderTradingController:
                 self._release_reserved_krw(ticker)
             self._sync_account_holdings_to_universe(account_holdings=None, include_external=True)
 
-    def _ops_alert(self, level, message, key, cooldown=10):
+    def _ops_alert(self, level, message, key, cooldown: float | int = 10):
         self._ensure_order_stability_state()
         now_ts = time.time()
         cache_key = str(key or message)
@@ -1000,7 +1008,7 @@ class TraderTradingController:
         if pyupbit is not None:
             try:
                 fetched = pyupbit.get_current_price(ticker)
-                if fetched is not None:
+                if isinstance(fetched, (int, float)):
                     return float(fetched)
             except Exception:
                 return 0.0
@@ -1335,7 +1343,8 @@ class TraderTradingController:
             )
         if callable(cancel_order):
             cancel_order(uuid)
-        order = safe_get_order(uuid) if callable(safe_get_order) else None
+        order_raw = safe_get_order(uuid) if callable(safe_get_order) else None
+        order = order_raw if isinstance(order_raw, dict) else None
         state = str((order or {}).get("state", "")).lower()
         if state in ("done", "cancel"):
             if callable(transition_pending):
@@ -1465,7 +1474,9 @@ class TraderTradingController:
         if hasattr(self, "logger"):
             label = operation_name or getattr(func, "__name__", "api_call")
             self.logger.error(f"API 호출 최종 실패 ({label}): {last_error}")
-        raise last_error
+        if isinstance(last_error, BaseException):
+            raise last_error
+        raise RuntimeError(f"API 호출 최종 실패: {operation_name or getattr(func, '__name__', 'api_call')}")
 
     def calculate_entry_score(self, ticker, curr_price, info, snapshot=None):
         """진입 점수 계산 (v2.5 신규) - 0~100점"""
@@ -2024,9 +2035,10 @@ class TraderTradingController:
 
         try:
             if hasattr(self, "_safe_get_order"):
-                order = self._safe_get_order(uuid)
+                order_raw = self._safe_get_order(uuid)
             else:
-                order = self.upbit.get_order(uuid)
+                order_raw = self.upbit.get_order(uuid)
+            order = order_raw if isinstance(order_raw, dict) else None
             state = str(order.get("state", "")).lower() if order else "wait"
             if pending and hasattr(self.order_service, "update_pending"):
                 self.order_service.update_pending(
@@ -2388,9 +2400,10 @@ class TraderTradingController:
 
         try:
             if hasattr(self, "_safe_get_order"):
-                order = self._safe_get_order(uuid)
+                order_raw = self._safe_get_order(uuid)
             else:
-                order = self.upbit.get_order(uuid)
+                order_raw = self.upbit.get_order(uuid)
+            order = order_raw if isinstance(order_raw, dict) else None
             state = str(order.get("state", "")).lower() if order else "wait"
             if pending and hasattr(self.order_service, "update_pending"):
                 self.order_service.update_pending(
@@ -2552,9 +2565,10 @@ class TraderTradingController:
 
         try:
             if hasattr(self, "_safe_get_order"):
-                order = self._safe_get_order(uuid)
+                order_raw = self._safe_get_order(uuid)
             else:
-                order = self.upbit.get_order(uuid)
+                order_raw = self.upbit.get_order(uuid)
+            order = order_raw if isinstance(order_raw, dict) else None
             state = str(order.get("state", "")).lower() if order else "wait"
             if pending and hasattr(self.order_service, "update_pending"):
                 self.order_service.update_pending(

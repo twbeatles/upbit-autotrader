@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any, Optional, Tuple, cast
+
 # Runtime bindings injected by legacy_strategy facade
-Config = None
-pd = None
-pyupbit = None
-datetime = None
-time = None
+Config = cast(Any, None)
+pd = cast(Any, None)
+pyupbit = cast(Any, None)
+datetime = cast(Any, None)
+time = cast(Any, None)
 
 
 def bind_runtime(**kwargs):

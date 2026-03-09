@@ -2,12 +2,16 @@
 Holdings service for account-wide KRW market positions.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, cast
 
 import pyupbit
 
 
-def get_account_holdings(upbit, min_order_value: float = 5000.0, balances: List[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+def get_account_holdings(
+    upbit,
+    min_order_value: float = 5000.0,
+    balances: List[Dict[str, Any]] | None = None,
+) -> List[Dict[str, Any]]:
     """
     Read account balances and return KRW market holdings.
     Returned item keys:
@@ -39,12 +43,16 @@ def get_account_holdings(upbit, min_order_value: float = 5000.0, balances: List[
             }
         )
 
-    prices_map = {}
+    prices_map: Dict[str, float] = {}
     if tickers:
         try:
-            prices = pyupbit.get_current_price(tickers)
+            ticker_arg = tickers if len(tickers) > 1 else tickers[0]
+            prices = cast(Any, pyupbit).get_current_price(ticker_arg)
             if isinstance(prices, dict):
-                prices_map = prices
+                prices_map = {
+                    str(key): float(value or 0.0)
+                    for key, value in prices.items()
+                }
             elif len(tickers) == 1 and prices:
                 prices_map = {tickers[0]: float(prices)}
         except Exception:

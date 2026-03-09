@@ -1,20 +1,22 @@
 import os
 import sys
 import winreg
+from typing import Any, cast
 
 from PyQt6.QtWidgets import QMessageBox
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.controllers.settings_field_specs import apply_settings_to_widgets, collect_settings_from_specs
 try:
     from upbit_autotrader.notifications.notifiers import EventType, UpbitNotificationManager
 except ImportError:
-    EventType = None
-    UpbitNotificationManager = None
+    EventType = cast(Any, None)
+    UpbitNotificationManager = cast(Any, None)
 from upbit_autotrader.services.settings_store import load_settings as load_settings_v2, save_settings as save_settings_v2
 
 
-class TraderSettingsController:
+class TraderSettingsController(ControllerTypeBase):
     def save_settings(self):
         """?? ??"""
         settings = collect_settings_from_specs(self, Config)

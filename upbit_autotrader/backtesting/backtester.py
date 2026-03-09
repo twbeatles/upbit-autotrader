@@ -228,8 +228,8 @@ class UpbitBacktestEngine:
             total_trades=len(self.trades),
             winning_trades=len(winning),
             losing_trades=len(losing),
-            avg_win=round(avg_win, 2),
-            avg_loss=round(avg_loss, 2),
+            avg_win=float(round(float(avg_win), 2)),
+            avg_loss=float(round(float(avg_loss), 2)),
             profit_factor=round(profit_factor, 2),
             trades=self.trades,
             equity_curve=self.equity_curve

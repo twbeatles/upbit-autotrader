@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+from typing import Any, cast
+
 # Runtime bindings injected by batch_controller facade
-QDialog = None
-QInputDialog = None
-QMessageBox = None
-QTimer = None
-EmergencyCloseDialog = None
-V3_MODULES_AVAILABLE = None
+QDialog = cast(Any, None)
+QInputDialog = cast(Any, None)
+QMessageBox = cast(Any, None)
+QTimer = cast(Any, None)
+EmergencyCloseDialog = cast(Any, None)
+V3_MODULES_AVAILABLE = cast(Any, None)
 
 
 def bind_runtime(**kwargs):

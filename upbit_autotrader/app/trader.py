@@ -7,6 +7,7 @@ import datetime
 import logging
 import sys
 import time
+from typing import Optional
 from pathlib import Path
 
 try:
@@ -17,6 +18,7 @@ except ImportError:
     sys.exit(1)
 
 from PyQt6.QtCore import QTimer
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 
 from upbit_autotrader.core.config import Config
@@ -97,7 +99,7 @@ class UpbitProTrader(
         }
         
         # v3.0: 전략 매니저 초기화
-        if STRATEGY_MODULE_AVAILABLE:
+        if STRATEGY_MODULE_AVAILABLE and UpbitStrategyManager is not None:
             self.strategy = UpbitStrategyManager(self)
             self.logger_main = logging.getLogger('UpbitTrader')
             self.logger_main.info("v3.0 전략 매니저 로드됨")
@@ -271,11 +273,13 @@ class UpbitProTrader(
     # 설정 저장/불러오기
     # ------------------------------------------------------------------
 
-    def closeEvent(self, event):
+    def closeEvent(self, a0: Optional[QCloseEvent]):
         """종료 처리"""
+        if a0 is None:
+            return
         # 트레이로 최소화 옵션 확인
         if self.system_settings.get('minimize_to_tray', True) and self.isVisible():
-            event.ignore()
+            a0.ignore()
             self.hide()
             self.send_notification("Upbit Pro Trader", "트레이로 최소화되었습니다. 더블클릭으로 다시 열 수 있습니다.")
             return
@@ -285,7 +289,7 @@ class UpbitProTrader(
                 "매매가 진행 중입니다. 정말 종료하시겠습니까?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
             if reply == QMessageBox.StandardButton.No:
-                event.ignore()
+                a0.ignore()
                 return
         
         # v2.7: 종료 전 설정 저장
@@ -307,7 +311,7 @@ class UpbitProTrader(
         self.price_thread.wait(2000)
         self.tray_icon.hide()
         self.logger.info("프로그램 종료")
-        event.accept()
+        a0.accept()
 
 
 # ============================================================================

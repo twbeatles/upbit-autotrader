@@ -123,7 +123,7 @@ def build_portfolio_risk_snapshot(
     dd_defense_pct: float = 5.0,
     dd_halt_pct: float = 8.0,
     corr_window: int = 60,
-    price_history: Dict[str, List[float]] = None,
+    price_history: Dict[str, List[float]] | None = None,
 ) -> Dict[str, Any]:
     realized = _safe_float(realized_pnl, 0.0)
     source_positions = account_wide_positions if include_external_holdings else universe_positions
@@ -202,4 +202,3 @@ def evaluate_risk_limits(
 
     allowed = len(reasons) == 0
     return allowed, triggered, reasons
-

@@ -97,6 +97,8 @@ class OrderServiceTests(unittest.TestCase):
         ok2, result2, msg2 = service.place_sell_market(upbit, "KRW-BTC", 0.1)
 
         self.assertTrue(ok1)
+        self.assertIsNotNone(result1)
+        assert result1 is not None
         self.assertIsNotNone(result1.get("uuid"))
         self.assertFalse(ok2)
         self.assertIsNone(result2)

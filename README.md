@@ -42,11 +42,13 @@ python upbit_trader.py
 ## 배포 빌드(PyInstaller)
 ```bash
 pyinstaller --noconfirm --clean upbit_trader.spec
+pyinstaller --noconfirm --clean --distpath upbit_dist --workpath upbit_build upbit_trader.spec
 ```
 
 - 스펙 파일: `upbit_trader.spec`
 - 엔트리포인트: `upbit_trader.py`
 - 패키지 수집: `collect_submodules("upbit_autotrader")`
+- `upbit_dist/`, `upbit_build/`는 repo-local 빌드 산출물 경로로 `.gitignore`에 포함됩니다.
 
 ## 프로젝트 구조
 ```txt
@@ -58,6 +60,7 @@ upbit_autotrader/
     trading_controller.py
     batch_controller.py
     history_controller.py
+    _type_support.py
   services/
     order_service.py
     paper_order_service.py
@@ -111,6 +114,15 @@ python -m pytest -q
 - `tests/test_structure_guards.py`
 - `tests/test_refactor_split_compatibility.py`
 - `tests/test_plan_implementation_fixes.py`
+
+## 정적 타입 검사
+```bash
+python -m pyright
+```
+
+현재 기준:
+- `0 errors, 0 warnings, 0 informations`
+- 컨트롤러 믹스인/Qt 동적 속성 타입 지원은 `upbit_autotrader/controllers/_type_support.py`에서 관리합니다.
 
 ## 프로젝트 문서
 - 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
