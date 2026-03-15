@@ -47,7 +47,7 @@ def calculate_ma(self, ticker, interval, period=5):
 
 
 def calculate_rsi(self, ticker, period=14):
-    """RSI ??"""
+    """RSI 계산"""
     try:
         interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
         snapshot = self._get_indicator_snapshot(ticker, interval, rsi_period=period)
@@ -59,7 +59,7 @@ def calculate_rsi(self, ticker, period=14):
 
 
 def calculate_macd(self, ticker):
-    """MACD ?? (MACD, Signal, Histogram ??)"""
+    """MACD 계산 (MACD, Signal, Histogram 반환)"""
     try:
         interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
         snapshot = self._get_indicator_snapshot(ticker, interval)
@@ -71,12 +71,12 @@ def calculate_macd(self, ticker):
             snapshot.get('histogram', 0),
         )
     except Exception as e:
-        self.logger.error(f"MACD ?? ?? ({ticker}): {e}")
+        self.logger.error(f"MACD 계산 실패 ({ticker}): {e}")
         return 0, 0, 0
 
 
 def calculate_bollinger_bands(self, ticker):
-    """??? ?? ?? (??, ??, ?? ??)"""
+    """볼린저 밴드 계산 (상단, 중심, 하단 반환)"""
     try:
         interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
         snapshot = self._get_indicator_snapshot(ticker, interval)
@@ -88,7 +88,7 @@ def calculate_bollinger_bands(self, ticker):
             snapshot.get('bb_lower'),
         )
     except Exception as e:
-        self.logger.error(f"??? ?? ?? ?? ({ticker}): {e}")
+        self.logger.error(f"볼린저 밴드 계산 실패 ({ticker}): {e}")
         return None, None, None
 
 
@@ -123,7 +123,7 @@ def calculate_atr(self, ticker, period=14):
 
 
 def calculate_volume_avg(self, ticker, period=20):
-    """?? ??? ??"""
+    """거래량 평균 계산"""
     try:
         interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
         snapshot = self._get_indicator_snapshot(ticker, interval, volume_period=period)

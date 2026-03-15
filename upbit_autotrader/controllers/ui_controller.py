@@ -169,7 +169,7 @@ class TraderUIController(ControllerTypeBase):
         return tab_widget
 
     def create_ops_tab(self):
-        """??/???? ?"""
+        """운영/수동검토 탭"""
         return build_ops_tab(self)
 
     def create_strategy_tab(self):
@@ -295,7 +295,7 @@ class TraderUIController(ControllerTypeBase):
         return widget
 
     def create_advanced_tab(self):
-        """?? ?? ?"""
+        """고급 설정 탭"""
         return build_advanced_tab(self)
 
     def create_statistics_tab(self):

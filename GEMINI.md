@@ -56,7 +56,9 @@ python -m pytest -q
 ```
 
 현재 기준:
-- 전체 테스트 통과: `90 passed`
+- 전체 테스트 통과: `93 passed`
+- 문서 참조 가드: `tests/test_docs_references.py`
+- 신규 무결성 테스트: `tests/test_text_integrity.py`
 
 ## 정적 타입 검사
 실행:
@@ -66,6 +68,17 @@ python -m pyright
 
 현재 기준:
 - `0 errors, 0 warnings, 0 informations`
+- 루트 `pyrightconfig.json`으로 VS Code Pylance와 CLI pyright 기준을 동일하게 유지
+
+## 로컬 품질 점검
+실행:
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
+- pre-commit 훅은 `tests/test_docs_references.py`, `tests/test_text_integrity.py`, `python -m pyright` 검사를 수행합니다.
 
 ## 문서
 - 사용자 문서: `README.md`

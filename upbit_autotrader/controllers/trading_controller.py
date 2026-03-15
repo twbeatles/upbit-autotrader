@@ -152,7 +152,7 @@ class TraderTradingController(ControllerTypeBase):
         return _indicator_ops.calculate_ma(self, ticker, interval, period)
 
     def calculate_rsi(self, ticker, period=14):
-        """RSI ??"""
+        """RSI 계산"""
         _indicator_ops.bind_runtime(
             Config=Config,
             pd=pd,
@@ -161,7 +161,7 @@ class TraderTradingController(ControllerTypeBase):
         )
         return _indicator_ops.calculate_rsi(self, ticker, period)
     def calculate_macd(self, ticker):
-        """MACD ?? (MACD, Signal, Histogram ??)"""
+        """MACD 계산 (MACD, Signal, Histogram 반환)"""
         _indicator_ops.bind_runtime(
             Config=Config,
             pd=pd,
@@ -170,7 +170,7 @@ class TraderTradingController(ControllerTypeBase):
         )
         return _indicator_ops.calculate_macd(self, ticker)
     def calculate_bollinger_bands(self, ticker):
-        """??? ?? ?? (??, ??, ?? ??)"""
+        """볼린저 밴드 계산 (상단, 중심, 하단 반환)"""
         _indicator_ops.bind_runtime(
             Config=Config,
             pd=pd,
@@ -189,7 +189,7 @@ class TraderTradingController(ControllerTypeBase):
         return _indicator_ops.calculate_atr(self, ticker, period)
 
     def calculate_volume_avg(self, ticker, period=20):
-        """?? ??? ??"""
+        """거래량 평균 계산"""
         _indicator_ops.bind_runtime(
             Config=Config,
             pd=pd,

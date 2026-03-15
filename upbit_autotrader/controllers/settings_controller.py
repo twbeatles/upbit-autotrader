@@ -18,7 +18,7 @@ from upbit_autotrader.services.settings_store import load_settings as load_setti
 
 class TraderSettingsController(ControllerTypeBase):
     def save_settings(self):
-        """?? ??"""
+        """설정 저장"""
         settings = collect_settings_from_specs(self, Config)
         settings["access_key"] = self.input_access.text().strip()
         settings["secret_key"] = self.input_secret.text().strip()
@@ -38,12 +38,12 @@ class TraderSettingsController(ControllerTypeBase):
         try:
             save_settings_v2(Config.SETTINGS_FILE, settings)
             self.configure_runtime_integrations()
-            self.log("? ??? ???????")
+            self.log("✅ 설정이 저장되었습니다")
         except Exception as e:
-            self.log(f"[ERROR] ?? ?? ??: {e}")
+            self.log(f"[ERROR] 설정 저장 실패: {e}")
 
     def load_settings(self):
-        """?? ????"""
+        """설정 불러오기"""
         try:
             s = load_settings_v2(Config.SETTINGS_FILE)
             if not s:
@@ -90,15 +90,15 @@ class TraderSettingsController(ControllerTypeBase):
 
             credential_error = s.get("_credential_error")
             if credential_error:
-                self.log(f"[WARN] API ? ??? ??: {credential_error}")
-                self.send_notification("Upbit Pro Trader", "??? API ?? ????? ?????.")
+                self.log(f"[WARN] API 키 복호화 실패: {credential_error}")
+                self.send_notification("Upbit Pro Trader", "저장된 API 키를 복호화하지 못했습니다.")
 
             self.configure_runtime_integrations()
-            self.log("?? ??? ??? ??????")
+            self.log("📂 저장된 설정을 불러왔습니다")
             if hasattr(self, "refresh_trade_action_buttons"):
                 self.refresh_trade_action_buttons()
         except Exception as e:
-            self.log(f"[WARN] ?? ???? ??: {e}")
+            self.log(f"[WARN] 설정 불러오기 실패: {e}")
 
     def configure_runtime_integrations(self):
         """알림/복구 관련 런타임 통합 설정 적용."""

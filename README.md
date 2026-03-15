@@ -104,13 +104,15 @@ python -m pytest -q
 ```
 
 현재 기준:
-- `90 passed`
+- `93 passed`
 
 추가된 핵심 테스트:
+- `tests/test_docs_references.py`
 - `tests/test_position_sizing.py`
 - `tests/test_portfolio_risk_engine.py`
 - `tests/test_execution_model.py`
 - `tests/test_meta_signal.py`
+- `tests/test_text_integrity.py`
 - `tests/test_structure_guards.py`
 - `tests/test_refactor_split_compatibility.py`
 - `tests/test_plan_implementation_fixes.py`
@@ -122,19 +124,22 @@ python -m pyright
 
 현재 기준:
 - `0 errors, 0 warnings, 0 informations`
+- 루트 `pyrightconfig.json`으로 VS Code Pylance와 CLI pyright 기준을 동일하게 맞춥니다.
 - 컨트롤러 믹스인/Qt 동적 속성 타입 지원은 `upbit_autotrader/controllers/_type_support.py`에서 관리합니다.
 
 ## 프로젝트 문서
 - 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
 - 개발 가이드: `CLAUDE.md`, `GEMINI.md`
+- 레거시 래퍼 안내: `legacy_wrappers/README.md`
 
 ## 로컬 품질 가드 (pre-commit)
 ```bash
 pip install pre-commit
 pre-commit install
+pre-commit run --all-files
 ```
 
-- 커밋 시 문서 참조 무결성 테스트(`tests/test_docs_references.py`)가 자동 실행됩니다.
+- 커밋 시 `tests/test_docs_references.py`, `tests/test_text_integrity.py`, `python -m pyright` 검사가 자동 실행됩니다.
 
 ## 주의사항
 1. 실거래 자금이 사용됩니다.

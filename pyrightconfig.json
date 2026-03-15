@@ -1,0 +1,15 @@
+{
+  "include": [
+    "upbit_autotrader",
+    "legacy_wrappers",
+    "tests",
+    "upbit_trader.py"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".pytest_cache",
+    "logs"
+  ],
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": "none"
+}
