@@ -22,3 +22,4 @@
 
 현재 실행 엔트리포인트는 루트 `upbit_trader.py`입니다.
 PyInstaller 스펙(`upbit_trader.spec`)도 `upbit_autotrader` 패키지만 기준으로 수집합니다.
+현재 본 코드베이스의 실구현은 `upbit_autotrader.app.bootstrap_ops` / `runtime_ops`, `controllers/trading_parts`, `controllers/ui_parts`, `market_regime`까지 세분화되어 있지만 공개 진입점과 호환 경로는 그대로 유지됩니다.

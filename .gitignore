@@ -21,9 +21,13 @@ build/
 
 # Local runtime data
 upbit_settings.json
+upbit_presets.json
 trade_history.json
 strategy_performance.json
 reconciliation_state.json
+analytics_report.html
+backtest_report.html
+trade_history_*.csv
 
 # OS/editor
 .DS_Store

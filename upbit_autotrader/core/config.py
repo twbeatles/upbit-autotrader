@@ -154,6 +154,14 @@ class Config:
     DEFAULT_WEIGHT_MIN = 0.5
     DEFAULT_WEIGHT_MAX = 1.5
 
+    DEFAULT_USE_MARKET_REGIME_FILTER = False
+    DEFAULT_USE_MARKET_REGIME_RISK_SCALING = False
+    DEFAULT_MARKET_REGIME_MIN_SCORE = 55.0
+    DEFAULT_MARKET_REGIME_REFRESH_SEC = 60
+    DEFAULT_MARKET_REGIME_TOP_N = 20
+    DEFAULT_MARKET_REGIME_USE_FEAR_GREED = True
+    DEFAULT_MARKET_REGIME_USE_ETF_FLOW = False
+
     DEFAULT_ENABLE_DISCORD_ALERTS = False
     DEFAULT_DISCORD_WEBHOOK = ""
     DEFAULT_PERSIST_RECONCILIATION_STATE = False
@@ -327,6 +335,13 @@ class Config:
         "meta_signal": "엔진 점수 + 전략 성과를 결합한 메타 진입 게이트를 사용합니다.",
         "meta_min_expectancy": "기대값 최소 기준(%)입니다.",
         "meta_score_threshold": "메타 점수 임계값입니다.",
+        "market_regime_filter": "전역 시장 레짐 점수가 임계값보다 낮으면 신규 진입을 차단합니다.",
+        "market_regime_risk_scaling": "시장 레짐에 따라 최종 주문 금액을 0.5/0.75/1.0/1.15배로 조절합니다.",
+        "market_regime_min_score": "시장 레짐 필터 최소 통과 점수입니다.",
+        "market_regime_refresh_sec": "시장 레짐 외부/내부 신호 갱신 주기(초)입니다.",
+        "market_regime_top_n": "시장 폭 계산에 사용할 업비트 KRW 상위 종목 수입니다.",
+        "market_regime_use_fear_greed": "Alternative Fear & Greed Index를 1단계 레짐 점수에 반영합니다.",
+        "market_regime_use_etf_flow": "ETF flow + BTC dominance 오버레이를 사용합니다. 기본값은 OFF입니다.",
         "weight_rebalance_daily": "전략 가중치를 일 1회 자동 리밸런싱합니다.",
         "discord_alerts": "운영 이벤트를 Discord 웹훅으로 전송합니다.",
         "persist_reconciliation": "pending/manual/orphan 상태를 디스크에 주기적으로 저장합니다.",

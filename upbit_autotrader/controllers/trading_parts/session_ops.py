@@ -168,6 +168,8 @@ def start_trading(self):
             self.price_thread.set_coins(list(self.universe.keys()))
             if not self.price_thread.isRunning():
                 self.price_thread.start()
+        if hasattr(self, "_restart_market_regime_thread"):
+            self._restart_market_regime_thread()
         
         self.status_trading.setText("● 매매 중")
         self.status_trading.setStyleSheet("color: #00b894;")
@@ -183,6 +185,8 @@ def start_trading(self):
 def stop_trading(self):
     """매매 중지"""
     self.is_running = False
+    if hasattr(self, "_stop_market_regime_thread"):
+        self._stop_market_regime_thread()
     self.price_thread.stop()
     self.price_thread.wait(2000)
     self._reconcile_pending_orders(force=True)

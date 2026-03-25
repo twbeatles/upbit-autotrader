@@ -71,3 +71,20 @@ def test_weight_rebalance_runs_once_per_day():
     assert not changed_again
     assert w2 == w1
 
+
+def test_meta_signal_uses_market_regime_and_legacy_alias_together():
+    out = evaluate_meta_signal(
+        MetaSignalInput(
+            strategy_id="ema_cross_trend",
+            engine_score=80.0,
+            regime_score=20.0,
+            market_regime_score=90.0,
+            min_expectancy=-1.0,
+            score_threshold=60.0,
+        ),
+        tracker=StrategyPerformanceTracker(),
+    )
+    assert out.gate_pass
+    assert out.components["technical_regime_score"] == 20.0
+    assert out.components["market_regime_score"] == 90.0
+    assert out.meta_score == 66.5

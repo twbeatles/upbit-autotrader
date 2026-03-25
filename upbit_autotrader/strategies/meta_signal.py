@@ -33,9 +33,15 @@ class StrategyPerformance:
 class MetaSignalInput:
     strategy_id: str
     engine_score: float
-    regime_score: float = 50.0
+    technical_regime_score: float = 50.0
+    market_regime_score: float = 50.0
+    regime_score: Optional[float] = None
     min_expectancy: float = 0.0
     score_threshold: float = 60.0
+
+    def __post_init__(self):
+        if self.regime_score is not None:
+            self.technical_regime_score = _safe_float(self.regime_score, self.technical_regime_score)
 
 
 @dataclass
@@ -159,11 +165,17 @@ def evaluate_meta_signal(
     perf = tracker.get(payload.strategy_id)
 
     engine_score = _clamp(payload.engine_score, 0.0, 100.0)
-    regime_score = _clamp(payload.regime_score, 0.0, 100.0)
+    technical_regime_score = _clamp(payload.technical_regime_score, 0.0, 100.0)
+    market_regime_score = _clamp(payload.market_regime_score, 0.0, 100.0)
     expected_value = _safe_float(perf.expectancy, 0.0)
     expectancy_score = _clamp(50.0 + (expected_value * 5.0), 0.0, 100.0)
 
-    meta_score = (0.60 * engine_score) + (0.25 * expectancy_score) + (0.15 * regime_score)
+    meta_score = (
+        (0.50 * engine_score)
+        + (0.20 * expectancy_score)
+        + (0.15 * technical_regime_score)
+        + (0.15 * market_regime_score)
+    )
     gate_pass = (expected_value > float(payload.min_expectancy)) and (meta_score >= float(payload.score_threshold))
 
     return MetaSignalOutput(
@@ -174,6 +186,7 @@ def evaluate_meta_signal(
         components={
             "engine_score": engine_score,
             "expectancy_score": expectancy_score,
-            "regime_score": regime_score,
+            "technical_regime_score": technical_regime_score,
+            "market_regime_score": market_regime_score,
         },
     )

@@ -5,16 +5,22 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 FILE_LINE_LIMITS = {
-    "upbit_autotrader/controllers/trading_controller.py": 3000,
-    "upbit_autotrader/controllers/ui_controller.py": 700,
+    "upbit_autotrader/controllers/trading_controller.py": 1800,
+    "upbit_autotrader/controllers/ui_controller.py": 500,
+    "upbit_autotrader/controllers/ui_sections.py": 260,
+    "upbit_autotrader/controllers/trading_parts/indicator_ops.py": 220,
+    "upbit_autotrader/app/trader.py": 280,
     "upbit_autotrader/controllers/settings_controller.py": 240,
     "upbit_autotrader/controllers/batch_controller.py": 360,
     "upbit_autotrader/strategies/legacy_strategy.py": 600,
 }
 
 CLASS_METHOD_LINE_LIMITS = {
-    "upbit_autotrader/controllers/trading_controller.py": 240,
-    "upbit_autotrader/controllers/ui_controller.py": 140,
+    "upbit_autotrader/controllers/trading_controller.py": 120,
+    "upbit_autotrader/controllers/ui_controller.py": 90,
+    "upbit_autotrader/controllers/ui_sections.py": 80,
+    "upbit_autotrader/controllers/trading_parts/indicator_ops.py": 60,
+    "upbit_autotrader/app/trader.py": 90,
     "upbit_autotrader/controllers/settings_controller.py": 120,
     "upbit_autotrader/controllers/batch_controller.py": 130,
     "upbit_autotrader/strategies/legacy_strategy.py": 120,

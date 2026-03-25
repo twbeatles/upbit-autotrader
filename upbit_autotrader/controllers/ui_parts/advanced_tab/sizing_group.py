@@ -1,0 +1,108 @@
+from PyQt6.QtWidgets import QCheckBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QSpinBox
+
+from upbit_autotrader.core.config import Config
+
+
+def build_sizing_group(self):
+    group = QGroupBox("📐 확장 리스크/사이징")
+    layout = QGridLayout()
+
+    self.chk_use_risk_budget_sizing = QCheckBox("리스크 예산 기반 사이징 사용")
+    self.chk_use_risk_budget_sizing.setChecked(Config.DEFAULT_USE_RISK_BUDGET_SIZING)
+    self.chk_use_risk_budget_sizing.setToolTip(Config.TOOLTIPS.get("risk_budget_sizing", ""))
+    layout.addWidget(self.chk_use_risk_budget_sizing, 0, 0, 1, 2)
+
+    layout.addWidget(QLabel("리스크 예산(%):"), 0, 2)
+    self.spin_risk_budget_pct = QDoubleSpinBox()
+    self.spin_risk_budget_pct.setRange(0.1, 5.0)
+    self.spin_risk_budget_pct.setSingleStep(0.1)
+    self.spin_risk_budget_pct.setValue(Config.DEFAULT_RISK_BUDGET_PCT)
+    self.spin_risk_budget_pct.setSuffix(" %")
+    self.spin_risk_budget_pct.setToolTip(Config.TOOLTIPS.get("risk_budget_pct", ""))
+    layout.addWidget(self.spin_risk_budget_pct, 0, 3)
+
+    layout.addWidget(QLabel("ATR 손절 배수:"), 1, 0)
+    self.spin_atr_stop_mult = QDoubleSpinBox()
+    self.spin_atr_stop_mult.setRange(0.5, 10.0)
+    self.spin_atr_stop_mult.setSingleStep(0.1)
+    self.spin_atr_stop_mult.setValue(Config.DEFAULT_ATR_STOP_MULT)
+    self.spin_atr_stop_mult.setToolTip(Config.TOOLTIPS.get("atr_stop_mult", ""))
+    layout.addWidget(self.spin_atr_stop_mult, 1, 1)
+
+    layout.addWidget(QLabel("최소 손절(%):"), 1, 2)
+    self.spin_min_stop_pct = QDoubleSpinBox()
+    self.spin_min_stop_pct.setRange(0.1, 5.0)
+    self.spin_min_stop_pct.setSingleStep(0.1)
+    self.spin_min_stop_pct.setValue(Config.DEFAULT_MIN_STOP_PCT)
+    self.spin_min_stop_pct.setSuffix(" %")
+    self.spin_min_stop_pct.setToolTip(Config.TOOLTIPS.get("min_stop_pct", ""))
+    layout.addWidget(self.spin_min_stop_pct, 1, 3)
+
+    layout.addWidget(QLabel("최대 비중(%):"), 1, 4)
+    self.spin_max_betting_pct = QDoubleSpinBox()
+    self.spin_max_betting_pct.setRange(1.0, 100.0)
+    self.spin_max_betting_pct.setSingleStep(1.0)
+    self.spin_max_betting_pct.setValue(Config.DEFAULT_MAX_BETTING_PCT)
+    self.spin_max_betting_pct.setSuffix(" %")
+    self.spin_max_betting_pct.setToolTip(Config.TOOLTIPS.get("max_betting_pct", ""))
+    layout.addWidget(self.spin_max_betting_pct, 1, 5)
+
+    self.chk_use_kelly_adjustment = QCheckBox("Kelly 보정 사용")
+    self.chk_use_kelly_adjustment.setChecked(Config.DEFAULT_USE_KELLY_ADJUSTMENT)
+    self.chk_use_kelly_adjustment.setToolTip(Config.TOOLTIPS.get("kelly_adjustment", ""))
+    layout.addWidget(self.chk_use_kelly_adjustment, 2, 0, 1, 2)
+
+    layout.addWidget(QLabel("Kelly 스케일:"), 2, 2)
+    self.spin_kelly_scale = QDoubleSpinBox()
+    self.spin_kelly_scale.setRange(0.05, 1.0)
+    self.spin_kelly_scale.setSingleStep(0.05)
+    self.spin_kelly_scale.setValue(Config.DEFAULT_KELLY_SCALE)
+    layout.addWidget(self.spin_kelly_scale, 2, 3)
+
+    self.chk_drawdown_state_enabled = QCheckBox("드로우다운 상태머신 사용")
+    self.chk_drawdown_state_enabled.setChecked(Config.DEFAULT_DRAWDOWN_STATE_ENABLED)
+    self.chk_drawdown_state_enabled.setToolTip(Config.TOOLTIPS.get("drawdown_state", ""))
+    layout.addWidget(self.chk_drawdown_state_enabled, 3, 0, 1, 2)
+
+    layout.addWidget(QLabel("주의/방어/중단(%):"), 3, 2)
+    dd_row = QHBoxLayout()
+    self.spin_dd_caution_pct = QDoubleSpinBox()
+    self.spin_dd_caution_pct.setRange(1.0, 30.0)
+    self.spin_dd_caution_pct.setValue(Config.DEFAULT_DD_CAUTION_PCT)
+    self.spin_dd_caution_pct.setSuffix("%")
+    dd_row.addWidget(self.spin_dd_caution_pct)
+    self.spin_dd_defense_pct = QDoubleSpinBox()
+    self.spin_dd_defense_pct.setRange(1.0, 30.0)
+    self.spin_dd_defense_pct.setValue(Config.DEFAULT_DD_DEFENSE_PCT)
+    self.spin_dd_defense_pct.setSuffix("%")
+    dd_row.addWidget(self.spin_dd_defense_pct)
+    self.spin_dd_halt_pct = QDoubleSpinBox()
+    self.spin_dd_halt_pct.setRange(1.0, 50.0)
+    self.spin_dd_halt_pct.setValue(Config.DEFAULT_DD_HALT_PCT)
+    self.spin_dd_halt_pct.setSuffix("%")
+    dd_row.addWidget(self.spin_dd_halt_pct)
+    layout.addLayout(dd_row, 3, 3, 1, 3)
+
+    layout.addWidget(QLabel("상관창(캔들):"), 4, 0)
+    self.spin_portfolio_corr_window = QSpinBox()
+    self.spin_portfolio_corr_window.setRange(20, 300)
+    self.spin_portfolio_corr_window.setValue(Config.DEFAULT_PORTFOLIO_CORR_WINDOW)
+    self.spin_portfolio_corr_window.setToolTip(Config.TOOLTIPS.get("portfolio_corr_window", ""))
+    layout.addWidget(self.spin_portfolio_corr_window, 4, 1)
+
+    layout.addWidget(QLabel("상관 익스포저 한도(%):"), 4, 2)
+    self.spin_max_correlation_exposure_pct = QDoubleSpinBox()
+    self.spin_max_correlation_exposure_pct.setRange(10.0, 100.0)
+    self.spin_max_correlation_exposure_pct.setSingleStep(5.0)
+    self.spin_max_correlation_exposure_pct.setValue(Config.DEFAULT_MAX_CORRELATION_EXPOSURE_PCT)
+    self.spin_max_correlation_exposure_pct.setSuffix(" %")
+    self.spin_max_correlation_exposure_pct.setToolTip(Config.TOOLTIPS.get("max_correlation_exposure_pct", ""))
+    layout.addWidget(self.spin_max_correlation_exposure_pct, 4, 3)
+
+    self.chk_persist_reconciliation_state = QCheckBox("주문 복구 상태 영속화")
+    self.chk_persist_reconciliation_state.setChecked(Config.DEFAULT_PERSIST_RECONCILIATION_STATE)
+    self.chk_persist_reconciliation_state.setToolTip(Config.TOOLTIPS.get("persist_reconciliation", ""))
+    layout.addWidget(self.chk_persist_reconciliation_state, 4, 4, 1, 2)
+
+    group.setLayout(layout)
+    return group
