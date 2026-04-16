@@ -47,6 +47,9 @@ pyinstaller --noconfirm --clean upbit_trader.spec
 pyinstaller --noconfirm --clean --distpath upbit_dist --workpath upbit_build upbit_trader.spec
 ```
 
+- 기본 산출물은 `dist/`, `build/`에 생성되고 repo-local fallback은 `upbit_dist/`, `upbit_build/`를 사용합니다.
+- 위 산출물 경로와 `reconciliation_state.json.tmp` 같은 임시 상태 파일은 `.gitignore`에 포함되어 있어야 합니다.
+
 ## 테스트
 실행:
 ```bash
@@ -86,11 +89,11 @@ pre-commit run --all-files
 ## 문서
 - 사용자 문서: `README.md`
 - 개발 가이드: `CLAUDE.md`
-- 리스크/정합성 점검: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
+- 리스크/정합성 점검: `IMPLEMENTATION_RISK_REVIEW_2026-04-16.md`
 - 시장 레짐 설계/구현 메모: `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`
 - 레거시 래퍼 안내: `legacy_wrappers/README.md`
 
 ## 작업 시 주의
 1. 설정 변경 시 `settings_version=2` 호환성을 유지합니다.
 2. 주문/체결 로직 수정 시 lifecycle 전이와 pending 정리를 같이 검증합니다.
-3. 문서 수정 시 `README.md`, `CLAUDE.md`, `GEMINI.md`, `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`, `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`, `legacy_wrappers/README.md`를 함께 확인합니다.
+3. 문서 수정 시 `README.md`, `CLAUDE.md`, `GEMINI.md`, `IMPLEMENTATION_RISK_REVIEW_2026-04-16.md`, `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`, `legacy_wrappers/README.md`를 함께 확인합니다.

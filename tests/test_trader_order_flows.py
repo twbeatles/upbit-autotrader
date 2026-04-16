@@ -116,6 +116,25 @@ def test_check_buy_execution_clears_pending_done_cancel_timeout():
     assert timeout_trader.universe[ticker]["state"] == "체결확인실패"
 
 
+def test_check_buy_execution_treats_cancel_with_fill_as_executed():
+    ticker = "KRW-BTC"
+    cancel_with_fill = {
+        "state": "cancel",
+        "executed_volume": "0.01",
+        "paid_fee": "100",
+        "trades": [{"price": "50000000", "volume": "0.01"}],
+    }
+    trader = _FakeTraderCore(_FakeUpbitOrders({"buy-cancel-fill": cancel_with_fill}))
+    trader.universe[ticker] = {"row": 0, "state": "주문중", "qty": 0.0, "buy_price": 0.0, "invest_amt": 0.0}
+    trader.order_service.mark_pending(ticker, "BUY", "buy-cancel-fill", reserved_krw=6000.0)
+
+    TraderTradingController.check_buy_execution(cast(TraderTradingController, trader), ticker, "buy-cancel-fill")
+
+    assert not trader.order_service.has_pending(ticker)
+    assert trader.universe[ticker]["state"] == "보유중"
+    assert trader.universe[ticker]["qty"] > 0
+
+
 def test_check_sell_execution_clears_pending_done_cancel_timeout():
     ticker = "KRW-ETH"
 
@@ -152,6 +171,27 @@ def test_check_sell_execution_clears_pending_done_cancel_timeout():
     )
     assert not timeout_trader.order_service.has_pending(ticker)
     assert timeout_trader.universe[ticker]["state"] == "체결확인실패"
+
+
+def test_check_sell_execution_treats_cancel_with_fill_as_partial_execution():
+    ticker = "KRW-ETH"
+    cancel_with_fill = {
+        "state": "cancel",
+        "executed_volume": "0.4",
+        "executed_funds": "4800",
+        "paid_fee": "4.8",
+        "trades": [{"price": "12000", "volume": "0.4"}],
+    }
+    trader = _FakeTraderCore(_FakeUpbitOrders({"sell-cancel-fill": cancel_with_fill}))
+    trader.universe[ticker] = {"row": 0, "state": "매도주문중", "qty": 1.0, "invest_amt": 10000.0, "buy_price": 10000.0}
+    trader.order_service.mark_pending(ticker, "SELL", "sell-cancel-fill")
+
+    TraderTradingController.check_sell_execution(cast(TraderTradingController, trader), ticker, "sell-cancel-fill", "테스트매도")
+
+    assert not trader.order_service.has_pending(ticker)
+    assert trader.universe[ticker]["state"] == "보유중"
+    assert 0.0 < trader.universe[ticker]["qty"] < 1.0
+    assert trader.universe[ticker]["invest_amt"] > 0.0
 
 
 class _FakeCheck:

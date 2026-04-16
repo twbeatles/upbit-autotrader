@@ -221,8 +221,14 @@ class Config:
     API_MAX_RETRIES = 3
     API_RETRY_DELAY = 1
     API_MIN_INTERVAL_SEC = 0.12
+    API_MIN_INTERVAL_BY_GROUP_SEC = {
+        "quotation": 0.12,
+        "exchange_default": 0.05,
+        "order": 0.13,
+    }
     API_BACKOFF_BASE_SEC = 0.4
     API_BACKOFF_JITTER_SEC = 0.2
+    MARKET_REGIME_CANDLE_REQUEST_DELAY_SEC = 0.11
 
     MAX_LOG_LINES = 500
     INDICATOR_CACHE_TTL_BY_INTERVAL = {

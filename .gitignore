@@ -25,6 +25,7 @@ upbit_presets.json
 trade_history.json
 strategy_performance.json
 reconciliation_state.json
+reconciliation_state.json.tmp
 analytics_report.html
 backtest_report.html
 trade_history_*.csv

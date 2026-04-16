@@ -16,6 +16,90 @@ except ImportError:
     EventType = None
 
 
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _extract_min_total(chance, side, default=0.0):
+    if not isinstance(chance, dict):
+        return float(default)
+    market = chance.get("market")
+    if not isinstance(market, dict):
+        return float(default)
+    policy = market.get(str(side or "").lower())
+    if not isinstance(policy, dict):
+        return float(default)
+    return _safe_float(policy.get("min_total"), default)
+
+
+def _extract_market_state(chance):
+    if not isinstance(chance, dict):
+        return ""
+    market = chance.get("market")
+    if not isinstance(market, dict):
+        return ""
+    return str(market.get("state", "") or "").lower()
+
+
+def _supports_order_type(chance, side, order_type):
+    if not isinstance(chance, dict):
+        return True
+    market = chance.get("market")
+    if not isinstance(market, dict):
+        return True
+    key = "bid_types" if str(side or "").lower() == "buy" else "ask_types"
+    types = market.get(key)
+    if not isinstance(types, list):
+        return True
+    normalized = {str(v or "").lower() for v in types}
+    return str(order_type or "").lower() in normalized
+
+
+def _validate_live_order_request(self, ticker, side, *, notional_krw=0.0, qty=0.0, ref_price=0.0):
+    if self._is_paper_mode():
+        return True, "", None
+    chance_getter = getattr(self, "_api_get_order_chance", None)
+    if not callable(chance_getter):
+        return True, "", None
+
+    chance = chance_getter(ticker)
+    if not isinstance(chance, dict):
+        return True, "", None
+
+    market_state = _extract_market_state(chance)
+    if market_state and market_state != "active":
+        return False, f"[{ticker}] 주문 불가 마켓 상태: {market_state}", chance
+
+    if str(side or "").upper() == "BUY":
+        if not _supports_order_type(chance, "buy", "price"):
+            return False, f"[{ticker}] 업비트 주문 정책상 시장가 매수(price)를 지원하지 않습니다.", chance
+        min_total = _extract_min_total(chance, "bid", 5000.0 if str(ticker).startswith("KRW-") else 0.0)
+        if min_total > 0 and float(notional_krw or 0.0) + 1e-8 < min_total:
+            return False, f"[{ticker}] 업비트 최소 주문금액 미만 ({min_total:,.0f})", chance
+    else:
+        if not _supports_order_type(chance, "sell", "market"):
+            return False, f"[{ticker}] 업비트 주문 정책상 시장가 매도(market)를 지원하지 않습니다.", chance
+        min_total = 5000.0 if str(ticker).startswith("KRW-") else 0.0
+        est_notional = float(qty or 0.0) * max(0.0, float(ref_price or 0.0))
+        if min_total > 0 and est_notional > 0 and est_notional + 1e-8 < min_total:
+            return False, f"[{ticker}] 업비트 최소 주문금액 미만 추정 ({est_notional:,.0f} < {min_total:,.0f})", chance
+
+    return True, "", chance
+
+
+def _buy_order_has_fill(self, order):
+    executed_volume, total_cost, _avg_price = self.order_service.get_buy_fill_metrics(order)
+    return executed_volume > 0 and total_cost > 0
+
+
+def _sell_order_has_fill(self, order):
+    executed_volume, proceeds, _avg_price = self.order_service.get_sell_fill_metrics(order)
+    return executed_volume > 0 and proceeds > 0
+
+
 def _start_twap_buy(self, ticker, curr_price, slices, session_id):
     self._ensure_order_stability_state()
     if not slices:
@@ -346,6 +430,10 @@ def execute_buy(self, ticker, curr_price):
     info["last_execution_mode"] = execution_plan.mode
     info["last_expected_slippage_bps"] = float(execution_plan.expected_slippage_bps)
     info["last_breakeven_pct"] = float(execution_plan.breakeven_pct)
+    can_order, order_err, _chance = _validate_live_order_request(self, ticker, "BUY", notional_krw=bet_cash)
+    if not can_order:
+        self.log(order_err)
+        return
     if bet_cash < 5000:
         self.log(f"[{ticker}] 매수금액 부족 (최소 5,000원)")
         return
@@ -412,6 +500,7 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
         order_raw = self._safe_get_order(uuid) if hasattr(self, "_safe_get_order") else self.upbit.get_order(uuid)
         order = order_raw if isinstance(order_raw, dict) else None
         state = str(order.get("state", "")).lower() if order else "wait"
+        terminal_with_fill = state in ("done", "cancel") and _buy_order_has_fill(self, order)
         if pending and hasattr(self.order_service, "update_pending"):
             self.order_service.update_pending(
                 ticker,
@@ -433,9 +522,10 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
                 )
             return
 
-        if state == "done":
+        if terminal_with_fill:
             if callable(transition_pending):
-                transition_pending(ticker, "done", reason="buy_execution_done")
+                reason = "buy_execution_done" if state == "done" else "buy_execution_cancel_with_fill"
+                transition_pending(ticker, "done", reason=reason, metadata={"raw_state": state})
             info = self.universe.get(ticker)
             execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
             expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
@@ -507,7 +597,8 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
                 fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
                 ref_price = float((info or {}).get("current", avg_price) or avg_price)
                 realized_slippage_bps = estimate_realized_slippage_bps(ref_price, avg_price, side="buy")
-                self.log(f"✅ [{ticker}] 매수 체결: {executed_volume:.8f} @ {avg_price:,.0f}원")
+                suffix = " (취소 상태 잔여분 정리 후 체결 반영)" if state == "cancel" else ""
+                self.log(f"✅ [{ticker}] 매수 체결: {executed_volume:.8f} @ {avg_price:,.0f}원{suffix}")
                 self.add_trade_record(
                     ticker,
                     "BUY",
@@ -633,6 +724,16 @@ def execute_sell(self, ticker, reason):
     execution_plan = plan_execution(exec_cfg, notional, realized_vol_pct=0.0, force_mode=self._execution_mode())
     if execution_plan.mode == "twap_market":
         self.log(f"[{ticker}] 매도 TWAP는 현재 단일 시장가로 실행합니다.")
+    can_order, order_err, _chance = _validate_live_order_request(
+        self,
+        ticker,
+        "SELL",
+        qty=qty,
+        ref_price=max(curr_price, float(info.get("buy_price", 0.0) or 0.0)),
+    )
+    if not can_order:
+        self.log(order_err)
+        return
 
     try:
         ok, result, err_msg = self._place_sell_order(ticker, qty, side="SELL", session_id=session_id, source="auto_sell")
@@ -682,6 +783,16 @@ def _execute_partial_sell(self, ticker, qty, reason, level=None):
     execution_plan = plan_execution(exec_cfg, notional, realized_vol_pct=0.0, force_mode=self._execution_mode())
     if execution_plan.mode == "twap_market":
         self.log(f"[{ticker}] 분할익절 TWAP는 현재 단일 시장가로 실행합니다.")
+    can_order, order_err, _chance = _validate_live_order_request(
+        self,
+        ticker,
+        "SELL",
+        qty=qty,
+        ref_price=max(curr_price, float(info.get("buy_price", 0.0) or 0.0)),
+    )
+    if not can_order:
+        self.log(order_err)
+        return False
 
     session_id = getattr(self, "_active_session_id", 0)
     try:
@@ -733,6 +844,7 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
         order_raw = self._safe_get_order(uuid) if hasattr(self, "_safe_get_order") else self.upbit.get_order(uuid)
         order = order_raw if isinstance(order_raw, dict) else None
         state = str(order.get("state", "")).lower() if order else "wait"
+        terminal_with_fill = state in ("done", "cancel") and _sell_order_has_fill(self, order)
         if pending and hasattr(self.order_service, "update_pending"):
             self.order_service.update_pending(
                 ticker,
@@ -753,8 +865,9 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
                 )
             return
 
-        if state == "done":
-            self._transition_pending(ticker, "done", reason="partial_sell_execution_done")
+        if terminal_with_fill:
+            transition_reason = "partial_sell_execution_done" if state == "done" else "partial_sell_execution_cancel_with_fill"
+            self._transition_pending(ticker, "done", reason=transition_reason, metadata={"raw_state": state})
             info = self.universe.get(ticker)
             if not info:
                 if callable(clear_pending_if_uuid):
@@ -808,7 +921,8 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
                 self.table.setItem(info["row"], 5, qty_item)
                 info.setdefault("ui_items", {})["qty"] = qty_item
             qty_item.setText(f"{info['qty']:.8f}")
-            self.log(f"✅ [{ticker}] 분할 매도 체결 (손익: {profit:+,.0f}원)")
+            suffix = " (취소 상태 잔여분 정리 후 체결 반영)" if state == "cancel" else ""
+            self.log(f"✅ [{ticker}] 분할 매도 체결 (손익: {profit:+,.0f}원){suffix}")
             ref_price = float(info.get("current", trades_price) or trades_price)
             fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
             realized_slippage_bps = estimate_realized_slippage_bps(ref_price, trades_price, side="sell")
@@ -886,6 +1000,7 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
         order_raw = self._safe_get_order(uuid) if hasattr(self, "_safe_get_order") else self.upbit.get_order(uuid)
         order = order_raw if isinstance(order_raw, dict) else None
         state = str(order.get("state", "")).lower() if order else "wait"
+        terminal_with_fill = state in ("done", "cancel") and _sell_order_has_fill(self, order)
         if pending and hasattr(self.order_service, "update_pending"):
             self.order_service.update_pending(
                 ticker,
@@ -907,9 +1022,10 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
                 )
             return
 
-        if state == "done":
+        if terminal_with_fill:
             if callable(transition_pending):
-                transition_pending(ticker, "done", reason="sell_execution_done")
+                reason_key = "sell_execution_done" if state == "done" else "sell_execution_cancel_with_fill"
+                transition_pending(ticker, "done", reason=reason_key, metadata={"raw_state": state})
             info = self.universe.get(ticker)
             if not info:
                 if callable(clear_pending_if_uuid):
@@ -944,38 +1060,54 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
                     self.order_service.clear_pending(ticker)
                 return
 
-            buy_amount = info["invest_amt"]
-            profit = sell_amount - buy_amount
+            buy_amount = float(info.get("invest_amt", 0.0) or 0.0)
+            remaining_qty = max(0.0, float(info.get("qty", 0.0) or 0.0) - executed_volume)
+            terminal_full_exit = remaining_qty <= 1e-12
+            if terminal_full_exit:
+                profit = sell_amount - buy_amount
+            else:
+                buy_amount, profit = self.order_service.apply_partial_sell_accounting(
+                    buy_amount,
+                    remaining_qty,
+                    executed_volume,
+                    trades_price,
+                )
             self.total_realized_profit += profit
             self.trade_count += 1
             if profit > 0:
                 self.win_count += 1
             self.lbl_total_profit.setText(f"📈 당일 실현손익: {self.total_realized_profit:,.0f}원")
-            info["qty"] = 0
-            info["state"] = "감시중"
-            info["buy_price"] = 0
-            info["invest_amt"] = 0
-            info["high_since_buy"] = 0
-            info["max_profit_rate"] = 0.0
-            info["partial_sold"] = []
-            self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+            info["qty"] = remaining_qty
+            if terminal_full_exit:
+                info["state"] = "감시중"
+                info["buy_price"] = 0
+                info["invest_amt"] = 0
+                info["high_since_buy"] = 0
+                info["max_profit_rate"] = 0.0
+                info["partial_sold"] = []
+                self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+            else:
+                info["state"] = "보유중"
+                info["invest_amt"] = max(0.0, buy_amount)
+                info["buy_price"] = (info["invest_amt"] / remaining_qty) if remaining_qty > 0 else 0.0
+                self.set_table_item(info["row"], 4, "💼 보유중", "#00b4d8")
             qty_item = info.get("ui_items", {}).get("qty")
             if qty_item is not None:
-                qty_item.setText("0.00000000")
+                qty_item.setText("0.00000000" if terminal_full_exit else f"{remaining_qty:.8f}")
             buy_price_item = info.get("ui_items", {}).get("buy_price")
             if buy_price_item is not None:
-                buy_price_item.setText("-")
+                buy_price_item.setText("-" if terminal_full_exit else f"{float(info.get('buy_price', 0.0) or 0.0):,.0f}")
             invest_item = info.get("ui_items", {}).get("invest")
             if invest_item is not None:
-                invest_item.setText("-")
+                invest_item.setText("-" if terminal_full_exit else f"{float(info.get('invest_amt', 0.0) or 0.0):,.0f}")
             profit_item = info.get("ui_items", {}).get("profit")
-            if profit_item is not None:
+            if profit_item is not None and terminal_full_exit:
                 profit_item.setText("-")
             max_profit_item = info.get("ui_items", {}).get("max_profit")
-            if max_profit_item is not None:
+            if max_profit_item is not None and terminal_full_exit:
                 max_profit_item.setText("-")
 
-            if self.strategy:
+            if terminal_full_exit and self.strategy:
                 self.strategy.update_consecutive_results(profit > 0)
                 self.strategy.clear_holding_start(ticker)
                 self.strategy.clear_partial_profit(ticker)
@@ -985,7 +1117,12 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
 
             fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
             realized_slippage_bps = estimate_realized_slippage_bps(float(info.get("current", trades_price) or trades_price), trades_price, side="sell")
-            self.log(f"✅ [{ticker}] 매도 체결 (손익: {profit:+,.0f}원)")
+            suffix = ""
+            if state == "cancel":
+                suffix = " (취소 상태 잔여분 정리 후 체결 반영)"
+            if not terminal_full_exit:
+                suffix = f"{suffix} [부분 체결 잔여수량 {remaining_qty:.8f}]".strip()
+            self.log(f"✅ [{ticker}] 매도 체결 (손익: {profit:+,.0f}원){(' ' + suffix) if suffix else ''}")
             self.add_trade_record(
                 ticker,
                 "SELL",
@@ -1006,20 +1143,22 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
             manager = getattr(self, "notification_manager", None)
             if manager is not None and EventType is not None and hasattr(manager, "notify_sell"):
                 try:
-                    pnl_pct = (profit / buy_amount * 100.0) if buy_amount > 0 else 0.0
+                    denom = float(info.get("invest_amt", 0.0) or 0.0) + profit if not terminal_full_exit else buy_amount
+                    pnl_pct = (profit / denom * 100.0) if denom > 0 else 0.0
                     manager.notify_sell(ticker, trades_price, executed_volume, pnl_pct, reason=reason)
                 except Exception:
                     pass
 
-            strategy_id = str(info.get("last_strategy_id", "legacy") or "legacy")
-            pnl_pct = (profit / buy_amount * 100.0) if buy_amount > 0 else 0.0
-            tracker = getattr(self, "strategy_perf_tracker", None)
-            if tracker is None:
-                tracker = StrategyPerformanceTracker()
-                self.strategy_perf_tracker = tracker
-            tracker.update(strategy_id, pnl_pct)
-            if callable(persist_strategy_performance):
-                persist_strategy_performance()
+            if terminal_full_exit:
+                strategy_id = str(info.get("last_strategy_id", "legacy") or "legacy")
+                pnl_pct = (profit / buy_amount * 100.0) if buy_amount > 0 else 0.0
+                tracker = getattr(self, "strategy_perf_tracker", None)
+                if tracker is None:
+                    tracker = StrategyPerformanceTracker()
+                    self.strategy_perf_tracker = tracker
+                tracker.update(strategy_id, pnl_pct)
+                if callable(persist_strategy_performance):
+                    persist_strategy_performance()
 
             self._update_statistics()
             self._risk_snapshot_cache = {"ts": 0.0, "value": None}

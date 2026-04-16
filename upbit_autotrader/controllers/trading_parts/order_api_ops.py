@@ -142,6 +142,15 @@ def _safe_log_order_error(self, uuid, message):
         self.logger.warning(message)
 
 
+def _resolve_api_rate_group(operation_name: str) -> str:
+    label = str(operation_name or "").lower()
+    if any(token in label for token in ("buy_market_order", "sell_market_order", "create_order")):
+        return "order"
+    if label.startswith(("get_", "cancel_order", "get_balance", "get_balances", "get_order", "get_chance")):
+        return "exchange_default"
+    return "quotation"
+
+
 def _api_get_order(self, uuid):
     if not uuid:
         return None
@@ -153,7 +162,13 @@ def _api_get_order(self, uuid):
     if not getattr(self, "upbit", None):
         return None
     try:
-        return api_call_with_retry(self, self.upbit.get_order, uuid, operation_name=f"get_order:{uuid}")
+        return api_call_with_retry(
+            self,
+            self.upbit.get_order,
+            uuid,
+            operation_name=f"get_order:{uuid}",
+            rate_group="exchange_default",
+        )
     except Exception as e:
         _safe_log_order_error(self, uuid, f"주문 상태 조회 실패 ({uuid}): {e}")
         return None
@@ -170,7 +185,13 @@ def _api_get_balance(self, currency="KRW"):
     if not getattr(self, "upbit", None):
         return None
     try:
-        return api_call_with_retry(self, self.upbit.get_balance, currency, operation_name=f"get_balance:{currency}")
+        return api_call_with_retry(
+            self,
+            self.upbit.get_balance,
+            currency,
+            operation_name=f"get_balance:{currency}",
+            rate_group="exchange_default",
+        )
     except Exception:
         return None
 
@@ -194,9 +215,66 @@ def _api_get_balances(self):
     if not getattr(self, "upbit", None):
         return []
     try:
-        return list(api_call_with_retry(self, self.upbit.get_balances, operation_name="get_balances") or [])
+        return list(
+            api_call_with_retry(
+                self,
+                self.upbit.get_balances,
+                operation_name="get_balances",
+                rate_group="exchange_default",
+            )
+            or []
+        )
     except Exception:
         return []
+
+
+def _api_get_order_chance(self, ticker):
+    if not ticker:
+        return None
+    if self._is_paper_mode():
+        market_price = float(self._resolve_market_price(ticker) or 0.0)
+        krw_balance = float(self._api_get_balance("KRW") or 0.0)
+        balances = self._api_get_balances() or []
+        ask_balance = 0.0
+        for item in balances:
+            currency = str((item or {}).get("currency", "")).upper()
+            if currency == str(ticker).replace("KRW-", "").upper():
+                try:
+                    ask_balance = float((item or {}).get("balance", 0.0) or 0.0)
+                except Exception:
+                    ask_balance = 0.0
+                break
+        return {
+            "bid_fee": "0.0005",
+            "ask_fee": "0.0005",
+            "market": {
+                "id": ticker,
+                "state": "active",
+                "bid_types": ["price", "limit"],
+                "ask_types": ["market", "limit"],
+                "bid": {"currency": "KRW", "min_total": "5000"},
+                "ask": {"currency": ticker.replace("KRW-", ""), "min_total": "5000"},
+            },
+            "bid_account": {"currency": "KRW", "balance": str(krw_balance)},
+            "ask_account": {"currency": ticker.replace("KRW-", ""), "balance": str(ask_balance)},
+            "reference_price": market_price,
+        }
+    if not getattr(self, "upbit", None):
+        return None
+    chance_fn = getattr(self.upbit, "get_chance", None)
+    if not callable(chance_fn):
+        return None
+    try:
+        return api_call_with_retry(
+            self,
+            chance_fn,
+            ticker,
+            operation_name=f"get_chance:{ticker}",
+            rate_group="exchange_default",
+        )
+    except Exception as e:
+        _safe_log_order_error(self, ticker, f"주문 가능 정보 조회 실패 ({ticker}): {e}")
+        return None
 
 
 def _api_cancel_order(self, uuid):
@@ -219,7 +297,13 @@ def _api_cancel_order(self, uuid):
     if not callable(cancel_fn):
         return None
     try:
-        return api_call_with_retry(self, cancel_fn, uuid, operation_name=f"cancel_order:{uuid}")
+        return api_call_with_retry(
+            self,
+            cancel_fn,
+            uuid,
+            operation_name=f"cancel_order:{uuid}",
+            rate_group="exchange_default",
+        )
     except Exception as e:
         _safe_log_order_error(self, uuid, f"주문 취소 실패 ({uuid}): {e}")
         return None
@@ -236,6 +320,7 @@ def _api_buy_market_order(self, ticker, krw_amount):
         ticker,
         krw_amount,
         operation_name=f"buy_market_order:{ticker}",
+        rate_group="order",
     )
 
 
@@ -250,6 +335,7 @@ def _api_sell_market_order(self, ticker, qty):
         ticker,
         qty,
         operation_name=f"sell_market_order:{ticker}",
+        rate_group="order",
     )
 
 
@@ -257,22 +343,31 @@ def _safe_get_order(self, uuid):
     return _api_get_order(self, uuid)
 
 
-def api_call_with_retry(self, func, *args, max_retries=None, delay=None, operation_name="", **kwargs):
+def api_call_with_retry(self, func, *args, max_retries=None, delay=None, operation_name="", rate_group="", **kwargs):
     """중앙 API 재시도/백오프/레이트리밋 래퍼."""
     self._ensure_order_stability_state()
     max_retries = int(max_retries or getattr(Config, "API_MAX_RETRIES", 3))
     base_delay = float(delay if delay is not None else getattr(Config, "API_BACKOFF_BASE_SEC", Config.API_RETRY_DELAY))
-    min_interval = float(getattr(Config, "API_MIN_INTERVAL_SEC", 0.0))
+    group = str(rate_group or _resolve_api_rate_group(operation_name))
+    intervals = dict(getattr(Config, "API_MIN_INTERVAL_BY_GROUP_SEC", {}) or {})
+    min_interval = float(intervals.get(group, getattr(Config, "API_MIN_INTERVAL_SEC", 0.0)) or 0.0)
     jitter_max = float(getattr(Config, "API_BACKOFF_JITTER_SEC", 0.0))
+    last_call_by_group = getattr(self, "_api_last_call_ts_by_group", None)
+    if not isinstance(last_call_by_group, dict):
+        last_call_by_group = {}
+        self._api_last_call_ts_by_group = last_call_by_group
 
     last_error = None
     for attempt in range(max_retries):
         try:
-            wait_sec = max(0.0, min_interval - (time.time() - float(self._api_last_call_ts or 0.0)))
+            last_group_ts = float(last_call_by_group.get(group, 0.0) or 0.0)
+            wait_sec = max(0.0, min_interval - (time.time() - last_group_ts))
             if wait_sec > 0:
                 time.sleep(wait_sec)
             result = func(*args, **kwargs)
-            self._api_last_call_ts = time.time()
+            now_ts = time.time()
+            self._api_last_call_ts = now_ts
+            last_call_by_group[group] = now_ts
             return result
         except Exception as e:
             last_error = e

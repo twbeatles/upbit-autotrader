@@ -108,6 +108,7 @@ class TraderTradingController(ControllerTypeBase):
     _api_get_order = _order_api_ops._api_get_order
     _api_get_balance = _order_api_ops._api_get_balance
     _api_get_balances = _order_api_ops._api_get_balances
+    _api_get_order_chance = _order_api_ops._api_get_order_chance
     _api_cancel_order = _order_api_ops._api_cancel_order
     _api_buy_market_order = _order_api_ops._api_buy_market_order
     _api_sell_market_order = _order_api_ops._api_sell_market_order

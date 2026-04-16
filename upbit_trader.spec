@@ -11,7 +11,9 @@ Build:
 
 Output:
   dist/UpbitTrader.exe (default)
+  build/                 (default workpath)
   upbit_dist/UpbitTrader.exe (repo-local fallback)
+  upbit_build/           (repo-local fallback workpath)
 """
 
 from pathlib import Path
@@ -51,7 +53,9 @@ hiddenimports = [
 # strategies/meta_signal.py, and the type-support shim in controllers/_type_support.py.
 hiddenimports += collect_submodules("upbit_autotrader")
 
-# NOTE: Do not bundle local .py files as data; PyInstaller packages them as modules.
+# NOTE:
+# - Do not bundle local .py files as data; PyInstaller packages them as modules.
+# - Runtime JSON/log files (settings/history/reconciliation/logs) remain external user data.
 datas = []
 
 a = Analysis(

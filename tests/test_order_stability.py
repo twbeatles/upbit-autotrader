@@ -104,8 +104,9 @@ class _DummyTable:
 
 
 class _FakeOrderApi:
-    def __init__(self, order_map=None):
+    def __init__(self, order_map=None, chance_map=None):
         self.order_map = order_map or {}
+        self.chance_map = chance_map or {}
         self.buy_calls = []
 
     def get_order(self, uuid):
@@ -114,6 +115,19 @@ class _FakeOrderApi:
     def buy_market_order(self, ticker, amount):
         self.buy_calls.append((ticker, amount))
         return {"uuid": f"buy-{len(self.buy_calls)}"}
+
+    def get_chance(self, ticker):
+        default = {
+            "market": {
+                "id": ticker,
+                "state": "active",
+                "bid_types": ["price", "limit"],
+                "ask_types": ["market", "limit"],
+                "bid": {"min_total": "5000"},
+                "ask": {"min_total": "5000"},
+            }
+        }
+        return self.chance_map.get(ticker, default)
 
 
 def test_send_notification_does_not_raise_when_tray_unavailable():
@@ -202,6 +216,49 @@ def test_execute_buy_uses_available_krw_after_reservation():
     pending = trader.order_service.get_pending("KRW-BTC")
     assert pending is not None
     assert abs(float(pending.get("reserved_krw", 0.0)) - 6500.0) < 1e-6
+
+
+def test_execute_buy_blocks_inactive_market_from_order_chance():
+    class _BuyTrader(TraderTradingController):
+        def __init__(self):
+            self.upbit = _FakeOrderApi(
+                chance_map={
+                    "KRW-BTC": {
+                        "market": {
+                            "id": "KRW-BTC",
+                            "state": "halt",
+                            "bid_types": ["price", "limit"],
+                            "ask_types": ["market", "limit"],
+                            "bid": {"min_total": "5000"},
+                            "ask": {"min_total": "5000"},
+                        }
+                    }
+                }
+            )
+            self.order_service = UpbitOrderService()
+            self.pending_orders = self.order_service.pending_orders
+            self.universe = {"KRW-BTC": {"row": 0, "state": "감시중", "qty": 0}}
+            self.strategy = None
+            self.spin_betting = _Spin(50)
+            self.logger = _DummyLogger()
+            self.balance = 20000.0
+            self._reserved_krw_by_ticker = {}
+            self._active_session_id = 1
+            self.logs = []
+
+        def set_table_item(self, row, col, text, bg_color):
+            return None
+
+        def log(self, msg="", *args, **kwargs):
+            self.logs.append(str(msg))
+
+    trader = _BuyTrader()
+    with patch("upbit_autotrader.controllers.trading_controller.QTimer.singleShot", side_effect=lambda *_: None):
+        trader.execute_buy("KRW-BTC", 1000)
+
+    assert trader.upbit.buy_calls == []
+    assert not trader.order_service.has_pending("KRW-BTC")
+    assert any("주문 불가 마켓 상태" in msg for msg in trader.logs)
 
 
 def test_batch_buy_respects_reserved_krw_and_skips_overbudget_orders():

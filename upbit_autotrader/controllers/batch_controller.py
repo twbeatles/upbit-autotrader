@@ -171,12 +171,15 @@ class TraderBatchController(ControllerTypeBase):
                             self._release_reserved_krw(ticker)
                 return
 
-            if state == 'done':
+            executed_volume, total_cost, avg_price = self.order_service.get_buy_fill_metrics(order)
+            terminal_with_fill = state in ("done", "cancel") and executed_volume > 0 and total_cost > 0
+            if terminal_with_fill:
                 if hasattr(self, "_transition_pending"):
-                    self._transition_pending(ticker, "done", reason="external_buy_execution_done")
-                executed_volume, total_cost, avg_price = self.order_service.get_buy_fill_metrics(order)
+                    reason = "external_buy_execution_done" if state == "done" else "external_buy_execution_cancel_with_fill"
+                    self._transition_pending(ticker, "done", reason=reason, metadata={"raw_state": state})
                 if executed_volume > 0 and total_cost > 0:
-                    self.log(f"✅ [{ticker}] {reason} 체결 완료: {executed_volume:.8f} @ {avg_price:,.0f}원")
+                    suffix = " (취소 상태 잔여분 정리 후 체결 반영)" if state == "cancel" else ""
+                    self.log(f"✅ [{ticker}] {reason} 체결 완료: {executed_volume:.8f} @ {avg_price:,.0f}원{suffix}")
                     self.add_trade_record(ticker, 'BUY', avg_price, executed_volume, 0, reason)
                     self.get_balance()
                     if hasattr(self, "_risk_snapshot_cache"):
@@ -278,16 +281,19 @@ class TraderBatchController(ControllerTypeBase):
                             self.order_service.clear_pending(ticker)
                 return
 
-            if state == 'done':
+            executed_volume, sell_amount, avg_net_price = self.order_service.get_sell_fill_metrics(order)
+            terminal_with_fill = state in ("done", "cancel") and executed_volume > 0 and sell_amount > 0
+            if terminal_with_fill:
                 if hasattr(self, "_transition_pending"):
-                    self._transition_pending(ticker, "done", reason="external_sell_execution_done")
-                executed_volume, _, avg_net_price = self.order_service.get_sell_fill_metrics(order)
+                    reason_key = "external_sell_execution_done" if state == "done" else "external_sell_execution_cancel_with_fill"
+                    self._transition_pending(ticker, "done", reason=reason_key, metadata={"raw_state": state})
                 if executed_volume > 0 and avg_net_price > 0:
                     avg_buy_price = float((pending or {}).get("avg_buy_price", 0.0) or 0.0)
                     profit = 0.0
                     if avg_buy_price > 0:
                         profit = (avg_net_price - avg_buy_price) * executed_volume
-                    self.log(f"✅ [{ticker}] {context_label} 체결 완료 (손익: {profit:+,.0f}원)")
+                    suffix = " (취소 상태 잔여분 정리 후 체결 반영)" if state == "cancel" else ""
+                    self.log(f"✅ [{ticker}] {context_label} 체결 완료 (손익: {profit:+,.0f}원){suffix}")
                     self.add_trade_record(ticker, 'SELL', avg_net_price, executed_volume, profit, reason)
                     self.get_balance()
                     if hasattr(self, "_risk_snapshot_cache"):

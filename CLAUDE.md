@@ -123,11 +123,11 @@ pre-commit run --all-files
 - 주문/체결 로직 수정 시 pending 정리와 lifecycle 전이를 함께 검토합니다.
 - TWAP 경로 수정 시 최소주문금액과 잔여 slice 재계산을 검증합니다.
 - 외부 시장 데이터 실패는 비치명 경로로 유지하고 internal-only fallback을 보장합니다.
-- 문서 수정 시 `README.md`, `CLAUDE.md`, `GEMINI.md`, `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`, `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`, `legacy_wrappers/README.md` 정합성을 함께 맞춥니다.
-- `upbit_trader.spec`는 `collect_submodules("upbit_autotrader")` 기반이라 신규 모듈 추가 시 보통 build 설정 변경은 필요 없지만, spec 주석과 배포 문구는 함께 갱신합니다.
+- 문서 수정 시 `README.md`, `CLAUDE.md`, `GEMINI.md`, `IMPLEMENTATION_RISK_REVIEW_2026-04-16.md`, `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`, `legacy_wrappers/README.md` 정합성을 함께 맞춥니다.
+- `upbit_trader.spec`는 `collect_submodules("upbit_autotrader")` 기반이라 신규 모듈 추가 시 보통 build 설정 변경은 필요 없지만, spec 주석과 배포 문구, `.gitignore`의 빌드 산출물 경로는 함께 갱신합니다.
 
 ## 참고 문서
-- 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
+- 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-04-16.md`
 - 시장 레짐 설계/구현 메모: `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`
 - 사용자 문서: `README.md`
 - 레거시 래퍼 안내: `legacy_wrappers/README.md`

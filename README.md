@@ -42,7 +42,7 @@ pyinstaller --noconfirm --clean --distpath upbit_dist --workpath upbit_build upb
 - 엔트리포인트: `upbit_trader.py`
 - 패키지 수집: `collect_submodules("upbit_autotrader")`
 - `app/bootstrap_ops.py`, `app/runtime_ops.py`, `controllers/trading_parts/*`, `controllers/ui_parts/*`, `market_regime/*`도 자동 수집됩니다.
-- `upbit_dist/`, `upbit_build/`는 repo-local 빌드 산출물 경로로 `.gitignore`에 포함됩니다.
+- `dist/`, `build/`, `upbit_dist/`, `upbit_build/`는 빌드 산출물 경로로 `.gitignore`에 포함됩니다.
 
 ## 프로젝트 구조
 ```txt
@@ -136,7 +136,7 @@ python -m pyright
 - 컨트롤러 믹스인/Qt 동적 속성 타입 지원은 `upbit_autotrader/controllers/_type_support.py`에서 관리합니다.
 
 ## 프로젝트 문서
-- 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-03-08.md`
+- 기능 구현 리스크 리뷰: `IMPLEMENTATION_RISK_REVIEW_2026-04-16.md`
 - 시장 레짐 설계 및 구현 메모: `ARCHITECTURE_MARKET_REGIME_PLAN_2026-03-25.md`
 - 개발 가이드: `CLAUDE.md`, `GEMINI.md`
 - 레거시 래퍼 안내: `legacy_wrappers/README.md`

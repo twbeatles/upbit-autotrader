@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 from typing import Any, Dict, Optional
@@ -74,9 +75,10 @@ class UpbitMarketBreadthProvider:
     MARKET_ALL_URL = "https://api.upbit.com/v1/market/all"
     TICKER_URL = "https://api.upbit.com/v1/ticker"
 
-    def __init__(self, session: Any = None, timeout: int = 10):
+    def __init__(self, session: Any = None, timeout: int = 10, candle_request_delay_sec: float = 0.11):
         self.session = session or requests
         self.timeout = int(timeout)
+        self.candle_request_delay_sec = max(0.0, float(candle_request_delay_sec))
 
     def _fetch_krw_markets(self) -> list[str]:
         response = self.session.get(
@@ -134,7 +136,11 @@ class UpbitMarketBreadthProvider:
             try:
                 df = pyupbit.get_ohlcv(market, interval=interval, count=30)
             except Exception:
+                if self.candle_request_delay_sec > 0:
+                    time.sleep(self.candle_request_delay_sec)
                 continue
+            if self.candle_request_delay_sec > 0:
+                time.sleep(self.candle_request_delay_sec)
             if df is None or len(df) < 21:
                 continue
             close = df["close"]

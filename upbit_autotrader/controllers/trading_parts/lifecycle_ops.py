@@ -29,6 +29,8 @@ def _ensure_order_stability_state(self):
         self._ops_alert_last_ts = {}
     if not hasattr(self, "_api_last_call_ts"):
         self._api_last_call_ts = 0.0
+    if not hasattr(self, "_api_last_call_ts_by_group"):
+        self._api_last_call_ts_by_group = {}
     if not hasattr(self, "_risk_snapshot_cache"):
         self._risk_snapshot_cache = {"ts": 0.0, "value": None}
     if not hasattr(self, "_last_price_update_ts"):
