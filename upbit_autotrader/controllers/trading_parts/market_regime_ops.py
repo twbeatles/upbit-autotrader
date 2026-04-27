@@ -61,6 +61,10 @@ def _get_market_regime_config(self):
             getattr(self, "chk_market_regime_use_etf_flow", None),
             getattr(Config, "DEFAULT_MARKET_REGIME_USE_ETF_FLOW", False),
         ),
+        "fail_closed_on_stale_market_regime": _toggle(
+            getattr(self, "chk_fail_closed_on_stale_market_regime", None),
+            getattr(Config, "DEFAULT_FAIL_CLOSED_ON_STALE_MARKET_REGIME", False),
+        ),
     }
 
 
@@ -108,6 +112,11 @@ def _apply_market_regime_filter(self, ticker):
     if not cfg["use_market_regime_filter"]:
         return True
     output = _get_market_regime_output(self)
+    stale = {str(v) for v in (getattr(output, "stale_components", []) or [])}
+    if cfg.get("fail_closed_on_stale_market_regime") and stale.intersection({"local_breadth", "btc_trend_vol"}):
+        if hasattr(self, "log"):
+            self.log(f"[{ticker}] market regime stale 차단: {','.join(sorted(stale))}")
+        return False
     score = float(getattr(output, "market_regime_score", 50.0) or 50.0)
     threshold = float(cfg["market_regime_min_score"])
     if score >= threshold:
@@ -134,7 +143,9 @@ def _update_market_regime_status(self):
         return
     label = str(getattr(output, "label", "neutral") or "neutral")
     score = float(getattr(output, "market_regime_score", 50.0) or 50.0)
-    label_widget.setText(f"MR: {label} {score:.1f}")
+    stale = tuple(sorted(getattr(output, "stale_components", []) or []))
+    suffix = f" stale:{len(stale)}" if stale else ""
+    label_widget.setText(f"MR: {label} {score:.1f}{suffix}")
 
 
 def _on_market_regime_update(self, snapshot, output):

@@ -1,4 +1,5 @@
 import os
+from typing import Any, cast
 
 from PyQt6.QtWidgets import QApplication
 
@@ -53,11 +54,13 @@ def test_build_advanced_tab_preserves_group_order_and_widget_surface():
 
     titles = []
     layout = widget.layout()
+    assert layout is not None
     for idx in range(layout.count() - 1):
         item = layout.itemAt(idx)
+        assert item is not None
         child = item.widget()
         if child is not None and hasattr(child, "title"):
-            titles.append(child.title())
+            titles.append(cast(Any, child).title())
 
     assert titles == [
         "📈 RSI 필터",

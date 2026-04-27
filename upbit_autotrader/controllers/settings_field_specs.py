@@ -109,6 +109,12 @@ COMMON_FIELD_SPECS: tuple[FieldSpec, ...] = (
         "check",
         _cfg("DEFAULT_MARKET_REGIME_USE_ETF_FLOW"),
     ),
+    FieldSpec(
+        "fail_closed_on_stale_market_regime",
+        "chk_fail_closed_on_stale_market_regime",
+        "check",
+        _cfg("DEFAULT_FAIL_CLOSED_ON_STALE_MARKET_REGIME"),
+    ),
     FieldSpec("weight_rebalance_daily", "chk_weight_rebalance_daily", "check", _cfg("DEFAULT_WEIGHT_REBALANCE_DAILY")),
     FieldSpec("weight_min", "spin_weight_min", "spin", _cfg("DEFAULT_WEIGHT_MIN")),
     FieldSpec("weight_max", "spin_weight_max", "spin", _cfg("DEFAULT_WEIGHT_MAX")),

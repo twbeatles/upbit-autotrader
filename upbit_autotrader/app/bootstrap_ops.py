@@ -27,6 +27,7 @@ def bootstrap_trader(self):
     self.universe = {}
     self.balance = 0
     self.initial_balance = 0
+    self.daily_start_equity_krw = 0.0
     self.total_realized_profit = 0
     self.trade_count = 0
     self.win_count = 0

@@ -15,8 +15,16 @@ class ExecutionConfig:
     twap_slices: int = 3
     twap_interval_sec: int = 8
     fee_bps: float = 5.0
+    fee_buy_bps: float | None = None
+    fee_sell_bps: float | None = None
     default_mode: str = "single_market"
     min_order_krw: float = 5000.0
+
+    def resolved_fee_buy_bps(self) -> float:
+        return max(0.0, float(self.fee_buy_bps if self.fee_buy_bps is not None else self.fee_bps or 0.0))
+
+    def resolved_fee_sell_bps(self) -> float:
+        return max(0.0, float(self.fee_sell_bps if self.fee_sell_bps is not None else self.fee_bps or 0.0))
 
 
 @dataclass
@@ -107,14 +115,14 @@ def plan_execution(
             order_notional_krw=target_notional,
             slice_notionals=[target_notional],
             expected_slippage_bps=0.0,
-            breakeven_pct=compute_breakeven_pct(config.fee_bps, config.fee_bps, 0.0, 0.0),
+            breakeven_pct=compute_breakeven_pct(config.resolved_fee_buy_bps(), config.resolved_fee_sell_bps(), 0.0, 0.0),
         )
 
     expected_slippage = estimate_expected_slippage_bps(
         realized_vol_pct=realized_vol_pct,
         order_notional_krw=target_notional,
         est_liquidity_krw=est_liquidity_krw,
-        base_slippage_bps=config.fee_bps,
+        base_slippage_bps=config.resolved_fee_buy_bps(),
     )
     adjusted_notional = target_notional
     blocked = False
@@ -140,7 +148,12 @@ def plan_execution(
             order_notional_krw=adjusted_notional,
             slice_notionals=[],
             expected_slippage_bps=expected_slippage,
-            breakeven_pct=compute_breakeven_pct(config.fee_bps, config.fee_bps, expected_slippage, expected_slippage),
+            breakeven_pct=compute_breakeven_pct(
+                config.resolved_fee_buy_bps(),
+                config.resolved_fee_sell_bps(),
+                expected_slippage,
+                expected_slippage,
+            ),
             blocked=True,
             reason=reason,
         )
@@ -158,7 +171,12 @@ def plan_execution(
         order_notional_krw=adjusted_notional,
         slice_notionals=slices,
         expected_slippage_bps=expected_slippage,
-        breakeven_pct=compute_breakeven_pct(config.fee_bps, config.fee_bps, expected_slippage, expected_slippage),
+        breakeven_pct=compute_breakeven_pct(
+            config.resolved_fee_buy_bps(),
+            config.resolved_fee_sell_bps(),
+            expected_slippage,
+            expected_slippage,
+        ),
         blocked=False,
         reason=reason,
     )

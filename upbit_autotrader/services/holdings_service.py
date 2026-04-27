@@ -4,7 +4,12 @@ Holdings service for account-wide KRW market positions.
 
 from typing import List, Dict, Any, cast
 
-import pyupbit
+from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
+
+try:
+    import pyupbit
+except ImportError:  # pragma: no cover - exercised by tests without optional dependency
+    pyupbit = pyupbit_fallback
 
 
 def get_account_holdings(

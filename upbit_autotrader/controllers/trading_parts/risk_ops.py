@@ -55,6 +55,14 @@ def _get_risk_snapshot(self, force=False):
             payload["current_price"] = float(prev.get("current_price", 0.0) or 0.0)
         account_wide_positions[ticker] = payload
 
+    equity_info = (
+        self._calculate_current_equity(account_wide_positions)
+        if hasattr(self, "_calculate_current_equity")
+        else {}
+    )
+    if float(getattr(self, "daily_start_equity_krw", 0.0) or 0.0) <= 0:
+        self.daily_start_equity_krw = float(equity_info.get("equity_krw", getattr(self, "initial_balance", 0.0)) or 0.0)
+
     price_history = {}
     corr_limit = self._max_correlation_exposure_pct()
     if corr_limit < 100.0 and pyupbit is not None and account_wide_positions:
@@ -85,6 +93,10 @@ def _get_risk_snapshot(self, force=False):
         realized_pnl=realized_pnl,
         universe_positions=universe_positions,
         account_wide_positions=account_wide_positions,
+        equity_krw=float(equity_info.get("equity_krw", 0.0) or 0.0),
+        cash_krw=float(equity_info.get("cash_krw", getattr(self, "balance", 0.0)) or 0.0),
+        reserved_krw=float(equity_info.get("reserved_krw", 0.0) or 0.0),
+        daily_start_equity_krw=float(getattr(self, "daily_start_equity_krw", 0.0) or 0.0),
         include_unrealized=self._risk_include_unrealized(),
         include_external_holdings=self._risk_include_external_holdings(),
         drawdown_state_enabled=self._drawdown_state_enabled(),

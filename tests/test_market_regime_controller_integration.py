@@ -1,6 +1,7 @@
 import json
 import types
 from pathlib import Path
+from typing import Any
 
 from upbit_autotrader.controllers.history_controller import TraderHistoryController
 from upbit_autotrader.controllers.settings_field_specs import (
@@ -27,7 +28,7 @@ class _Check:
 
 
 class _Spin:
-    def __init__(self, value=0):
+    def __init__(self, value: float = 0):
         self._value = value
 
     def value(self):
@@ -101,8 +102,8 @@ def test_market_regime_filter_blocks_buy_before_execute():
         def execute_buy(self, ticker, curr_price):
             self.buy_calls.append((ticker, curr_price))
 
-        def log(self, message):
-            self.logs.append(message)
+        def log(self, msg):
+            self.logs.append(msg)
 
     trader = _Trader()
     info = {"target": 100.0, "ma5": 90.0}
@@ -172,8 +173,8 @@ def test_execute_buy_applies_market_regime_risk_scaling_before_execution(monkeyp
         def set_table_item(self, row, col, text, bg_color):
             return None
 
-        def log(self, message):
-            self.logs.append(message)
+        def log(self, msg):
+            self.logs.append(msg)
 
     monkeypatch.setattr(
         "upbit_autotrader.controllers.trading_controller.QTimer.singleShot",

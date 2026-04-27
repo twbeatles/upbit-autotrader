@@ -9,6 +9,7 @@ from upbit_autotrader.core.config import Config
 from upbit_autotrader.execution.execution_model import estimate_realized_slippage_bps, plan_execution
 from upbit_autotrader.risk.position_sizing import PositionSizingInput, compute_position_size
 from upbit_autotrader.strategies.meta_signal import StrategyPerformanceTracker
+from upbit_autotrader.controllers.trading_parts.order_api_ops import _extract_chance_fee_bps
 
 try:
     from upbit_autotrader.notifications.notifiers import EventType
@@ -90,6 +91,16 @@ def _validate_live_order_request(self, ticker, side, *, notional_krw=0.0, qty=0.
     return True, "", chance
 
 
+def _market_regime_fields_dict(value):
+    if isinstance(value, dict):
+        return {
+            "market_regime_score": float(value.get("market_regime_score", 50.0) or 50.0),
+            "market_regime_label": str(value.get("market_regime_label", "neutral") or "neutral"),
+            "market_regime_ts": str(value.get("market_regime_ts", "") or ""),
+        }
+    return {"market_regime_score": 50.0, "market_regime_label": "neutral", "market_regime_ts": ""}
+
+
 def _buy_order_has_fill(self, order):
     executed_volume, total_cost, _avg_price = self.order_service.get_buy_fill_metrics(order)
     return executed_volume > 0 and total_cost > 0
@@ -154,7 +165,7 @@ def _run_next_twap_buy_slice(self, ticker):
 
     info = self.universe.get(ticker)
     if hasattr(self.order_service, "update_pending"):
-        market_regime_fields = self._resolve_market_regime_fields(info=info)
+        market_regime_fields = _market_regime_fields_dict(self._resolve_market_regime_fields(info=info))
         self.order_service.update_pending(
             ticker,
             execution_mode="twap_market",
@@ -361,7 +372,7 @@ def execute_buy(self, ticker, curr_price):
     cfg = self._get_strategy_runtime_config() if hasattr(self, "_get_strategy_runtime_config") else None
     candle_text = self.combo_candle.currentText() if hasattr(self, "combo_candle") else Config.DEFAULT_CANDLE
     interval = Config.CANDLE_INTERVALS.get(candle_text, "minute240")
-    market_regime_fields = self._capture_market_regime_fields(info)
+    market_regime_fields = _market_regime_fields_dict(self._capture_market_regime_fields(info))
     snapshot = None
     if cfg and cfg.enabled and hasattr(self, "strategy_engine"):
         snapshot = self._get_indicator_snapshot(
@@ -392,10 +403,12 @@ def execute_buy(self, ticker, curr_price):
             tracker = StrategyPerformanceTracker()
             self.strategy_perf_tracker = tracker
         perf = tracker.get(strategy_id)
+        equity_info = self._calculate_current_equity() if hasattr(self, "_calculate_current_equity") else {}
+        equity_krw = float(equity_info.get("equity_krw", getattr(self, "initial_balance", 0.0)) or 0.0)
         sizing_out = compute_position_size(
             PositionSizingInput(
                 use_risk_budget_sizing=True,
-                equity_krw=float(getattr(self, "initial_balance", 0.0) or 0.0),
+                equity_krw=equity_krw,
                 available_krw=available_krw,
                 current_price=float(curr_price or 0.0),
                 atr_value=atr_val,
@@ -420,7 +433,20 @@ def execute_buy(self, ticker, curr_price):
     if hasattr(self, "_apply_market_regime_risk_scaling"):
         bet_cash = min(float(self._apply_market_regime_risk_scaling(bet_cash)), available_krw)
 
-    execution_cfg = self._get_execution_config()
+    can_order, order_err, chance = _validate_live_order_request(self, ticker, "BUY", notional_krw=bet_cash)
+    if not can_order:
+        self.log(order_err)
+        return
+    default_fee_bps = float(getattr(Config, "DEFAULT_PAPER_FEE_BPS", 5.0))
+    fee_buy_bps, fee_sell_bps = _extract_chance_fee_bps(chance, default_fee_bps)
+    try:
+        execution_cfg = self._get_execution_config(fee_buy_bps=fee_buy_bps, fee_sell_bps=fee_sell_bps)
+    except TypeError:
+        execution_cfg = self._get_execution_config()
+        if hasattr(execution_cfg, "fee_buy_bps"):
+            execution_cfg.fee_buy_bps = fee_buy_bps
+        if hasattr(execution_cfg, "fee_sell_bps"):
+            execution_cfg.fee_sell_bps = fee_sell_bps
     realized_vol = float((snapshot or {}).get("realized_vol_pct", 0.0) or 0.0)
     execution_plan = plan_execution(execution_cfg, bet_cash, realized_vol_pct=realized_vol, force_mode=self._execution_mode())
     if execution_plan.blocked:
@@ -428,12 +454,12 @@ def execute_buy(self, ticker, curr_price):
         return
     bet_cash = float(execution_plan.order_notional_krw or 0.0)
     info["last_execution_mode"] = execution_plan.mode
+    info["last_execution_mode_requested"] = self._execution_mode()
+    info["last_execution_mode_actual"] = execution_plan.mode
     info["last_expected_slippage_bps"] = float(execution_plan.expected_slippage_bps)
     info["last_breakeven_pct"] = float(execution_plan.breakeven_pct)
-    can_order, order_err, _chance = _validate_live_order_request(self, ticker, "BUY", notional_krw=bet_cash)
-    if not can_order:
-        self.log(order_err)
-        return
+    info["last_expected_fee_buy_bps"] = float(fee_buy_bps)
+    info["last_expected_fee_sell_bps"] = float(fee_sell_bps)
     if bet_cash < 5000:
         self.log(f"[{ticker}] 매수금액 부족 (최소 5,000원)")
         return
@@ -445,6 +471,10 @@ def execute_buy(self, ticker, curr_price):
             return
         self.log(f"[{ticker}] TWAP 시작 실패, 단일 시장가로 fallback")
 
+    if execution_plan.mode == "twap_market" and len(execution_plan.slice_notionals) > 1:
+        info["last_execution_mode_actual"] = "single_market"
+        info["last_execution_fallback_reason"] = "twap_start_failed"
+
     if not self._reserve_krw_for_buy(ticker, bet_cash, session_id=session_id):
         self.log(f"[{ticker}] 사용 가능 잔고 부족 (가용: {self._get_available_krw():,.0f}원)")
         return
@@ -455,9 +485,15 @@ def execute_buy(self, ticker, curr_price):
             if hasattr(self.order_service, "update_pending"):
                 self.order_service.update_pending(
                     ticker,
-                    execution_mode=str(execution_plan.mode),
+                    execution_mode=str(info.get("last_execution_mode_actual", execution_plan.mode)),
+                    execution_mode_requested=str(info.get("last_execution_mode_requested", self._execution_mode())),
+                    execution_mode_actual=str(info.get("last_execution_mode_actual", execution_plan.mode)),
+                    execution_fallback_reason=str(info.get("last_execution_fallback_reason", "")),
+                    twap_skipped_slices=0,
                     expected_slippage_bps=float(execution_plan.expected_slippage_bps),
                     breakeven_pct=float(execution_plan.breakeven_pct),
+                    expected_fee_buy_bps=float(fee_buy_bps),
+                    expected_fee_sell_bps=float(fee_sell_bps),
                     strategy_score=float(info.get("last_strategy_score", 0.0) or 0.0),
                     meta_score=float(info.get("last_meta_score", 0.0) or 0.0),
                     risk_state=str(info.get("last_risk_state", "normal")),
@@ -529,11 +565,13 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
             info = self.universe.get(ticker)
             execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
             expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
+            expected_fee_buy_bps = float((pending or {}).get("expected_fee_buy_bps", 0.0) or 0.0)
+            expected_fee_sell_bps = float((pending or {}).get("expected_fee_sell_bps", 0.0) or 0.0)
             strategy_score = float((pending or {}).get("strategy_score", 0.0) or 0.0)
             meta_score = float((pending or {}).get("meta_score", 0.0) or 0.0)
             risk_state = str((pending or {}).get("risk_state", "normal") or "normal")
             resolve_market_regime_fields = getattr(self, "_resolve_market_regime_fields", None)
-            market_regime_fields = (
+            market_regime_fields = _market_regime_fields_dict(
                 resolve_market_regime_fields(pending=pending, info=info)
                 if callable(resolve_market_regime_fields)
                 else {
@@ -610,6 +648,12 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
                     expected_slippage_bps=expected_slippage_bps,
                     realized_slippage_bps=realized_slippage_bps,
                     execution_mode=execution_mode,
+                    execution_mode_requested=str((pending or {}).get("execution_mode_requested", execution_mode) or execution_mode),
+                    execution_mode_actual=str((pending or {}).get("execution_mode_actual", execution_mode) or execution_mode),
+                    execution_fallback_reason=str((pending or {}).get("execution_fallback_reason", "") or ""),
+                    twap_skipped_slices=int((pending or {}).get("twap_skipped_slices", 0) or 0),
+                    expected_fee_buy_bps=expected_fee_buy_bps,
+                    expected_fee_sell_bps=expected_fee_sell_bps,
                     session_id=session_id,
                     risk_state=risk_state,
                     strategy_score=strategy_score,
@@ -719,7 +763,7 @@ def execute_sell(self, ticker, reason):
 
     curr_price = float(info.get("current", 0.0) or 0.0)
     notional = float(qty) * curr_price if curr_price > 0 else float(info.get("invest_amt", 0.0) or 0.0)
-    market_regime_fields = self._capture_market_regime_fields(info)
+    market_regime_fields = _market_regime_fields_dict(self._capture_market_regime_fields(info))
     exec_cfg = self._get_execution_config()
     execution_plan = plan_execution(exec_cfg, notional, realized_vol_pct=0.0, force_mode=self._execution_mode())
     if execution_plan.mode == "twap_market":
@@ -778,7 +822,7 @@ def _execute_partial_sell(self, ticker, qty, reason, level=None):
 
     curr_price = float(info.get("current", 0.0) or 0.0)
     notional = float(qty) * curr_price if curr_price > 0 else float(qty * info.get("buy_price", 0.0))
-    market_regime_fields = self._capture_market_regime_fields(info)
+    market_regime_fields = _market_regime_fields_dict(self._capture_market_regime_fields(info))
     exec_cfg = self._get_execution_config()
     execution_plan = plan_execution(exec_cfg, notional, realized_vol_pct=0.0, force_mode=self._execution_mode())
     if execution_plan.mode == "twap_market":
@@ -879,11 +923,13 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
             executed_volume, _, trades_price = self.order_service.get_sell_fill_metrics(order)
             execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
             expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
+            expected_fee_buy_bps = float((pending or {}).get("expected_fee_buy_bps", 0.0) or 0.0)
+            expected_fee_sell_bps = float((pending or {}).get("expected_fee_sell_bps", 0.0) or 0.0)
             strategy_score = float((pending or {}).get("strategy_score", 0.0) or 0.0)
             meta_score = float((pending or {}).get("meta_score", 0.0) or 0.0)
             risk_state = str((pending or {}).get("risk_state", "normal") or "normal")
             resolve_market_regime_fields = getattr(self, "_resolve_market_regime_fields", None)
-            market_regime_fields = (
+            market_regime_fields = _market_regime_fields_dict(
                 resolve_market_regime_fields(pending=pending, info=info)
                 if callable(resolve_market_regime_fields)
                 else {
@@ -937,6 +983,11 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
                 expected_slippage_bps=expected_slippage_bps,
                 realized_slippage_bps=realized_slippage_bps,
                 execution_mode=execution_mode,
+                execution_mode_requested=str((pending or {}).get("execution_mode_requested", execution_mode) or execution_mode),
+                execution_mode_actual=str((pending or {}).get("execution_mode_actual", execution_mode) or execution_mode),
+                execution_fallback_reason=str((pending or {}).get("execution_fallback_reason", "") or ""),
+                expected_fee_buy_bps=expected_fee_buy_bps,
+                expected_fee_sell_bps=expected_fee_sell_bps,
                 session_id=session_id,
                 risk_state=risk_state,
                 strategy_score=strategy_score,
@@ -1037,11 +1088,13 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
             executed_volume, sell_amount, trades_price = self.order_service.get_sell_fill_metrics(order)
             execution_mode = str((pending or {}).get("execution_mode", "single_market") or "single_market")
             expected_slippage_bps = float((pending or {}).get("expected_slippage_bps", 0.0) or 0.0)
+            expected_fee_buy_bps = float((pending or {}).get("expected_fee_buy_bps", 0.0) or 0.0)
+            expected_fee_sell_bps = float((pending or {}).get("expected_fee_sell_bps", 0.0) or 0.0)
             strategy_score = float((pending or {}).get("strategy_score", 0.0) or 0.0)
             meta_score = float((pending or {}).get("meta_score", 0.0) or 0.0)
             risk_state = str((pending or {}).get("risk_state", "normal") or "normal")
             resolve_market_regime_fields = getattr(self, "_resolve_market_regime_fields", None)
-            market_regime_fields = (
+            market_regime_fields = _market_regime_fields_dict(
                 resolve_market_regime_fields(pending=pending, info=info)
                 if callable(resolve_market_regime_fields)
                 else {
@@ -1134,6 +1187,11 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
                 expected_slippage_bps=expected_slippage_bps,
                 realized_slippage_bps=realized_slippage_bps,
                 execution_mode=execution_mode,
+                execution_mode_requested=str((pending or {}).get("execution_mode_requested", execution_mode) or execution_mode),
+                execution_mode_actual=str((pending or {}).get("execution_mode_actual", execution_mode) or execution_mode),
+                execution_fallback_reason=str((pending or {}).get("execution_fallback_reason", "") or ""),
+                expected_fee_buy_bps=expected_fee_buy_bps,
+                expected_fee_sell_bps=expected_fee_sell_bps,
                 session_id=session_id,
                 risk_state=risk_state,
                 strategy_score=strategy_score,

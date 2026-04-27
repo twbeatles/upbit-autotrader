@@ -50,12 +50,14 @@ hiddenimports = [
 # Refactored package modules
 # Includes app bootstrap/runtime helpers, controllers/trading_parts/,
 # controllers/ui_parts/, market_regime/, risk/, execution/,
+# services/rate_limit.py, services/pyupbit_compat.py,
 # strategies/meta_signal.py, and the type-support shim in controllers/_type_support.py.
 hiddenimports += collect_submodules("upbit_autotrader")
 
 # NOTE:
 # - Do not bundle local .py files as data; PyInstaller packages them as modules.
 # - Runtime JSON/log files (settings/history/reconciliation/logs) remain external user data.
+# - typings/ is for local pyright only and is intentionally not bundled.
 datas = []
 
 a = Analysis(

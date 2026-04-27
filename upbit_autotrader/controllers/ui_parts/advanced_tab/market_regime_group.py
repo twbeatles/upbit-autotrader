@@ -49,5 +49,10 @@ def build_market_regime_group(self):
     self.chk_market_regime_use_etf_flow.setToolTip(Config.TOOLTIPS.get("market_regime_use_etf_flow", ""))
     layout.addWidget(self.chk_market_regime_use_etf_flow, 2, 2, 1, 3)
 
+    self.chk_fail_closed_on_stale_market_regime = QCheckBox("레짐 데이터 stale 시 신규 진입 차단")
+    self.chk_fail_closed_on_stale_market_regime.setChecked(Config.DEFAULT_FAIL_CLOSED_ON_STALE_MARKET_REGIME)
+    self.chk_fail_closed_on_stale_market_regime.setToolTip(Config.TOOLTIPS.get("fail_closed_on_stale_market_regime", ""))
+    layout.addWidget(self.chk_fail_closed_on_stale_market_regime, 3, 0, 1, 4)
+
     group.setLayout(layout)
     return group

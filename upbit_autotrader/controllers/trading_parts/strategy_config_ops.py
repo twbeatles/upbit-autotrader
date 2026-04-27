@@ -217,7 +217,7 @@ def _drawdown_thresholds(self):
     )
 
 
-def _get_execution_config(self):
+def _get_execution_config(self, fee_buy_bps=None, fee_sell_bps=None):
     mode = _execution_mode(self)
     spin_paper_fee_bps = getattr(self, "spin_paper_fee_bps", None)
     fee_bps = (
@@ -237,6 +237,8 @@ def _get_execution_config(self):
             _get_spin_value(self, "spin_twap_interval_sec", getattr(Config, "DEFAULT_TWAP_INTERVAL_SEC", 8))
         ),
         fee_bps=fee_bps,
+        fee_buy_bps=float(fee_buy_bps) if fee_buy_bps is not None else None,
+        fee_sell_bps=float(fee_sell_bps) if fee_sell_bps is not None else None,
         default_mode=str(mode),
         min_order_krw=5000.0,
     )
