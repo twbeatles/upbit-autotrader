@@ -10,6 +10,8 @@
     ".pytest_cache",
     "logs"
   ],
+  "stubPath": "typings",
   "typeCheckingMode": "standard",
+  "reportMissingModuleSource": "none",
   "reportMissingTypeStubs": "none"
 }

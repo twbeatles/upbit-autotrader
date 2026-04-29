@@ -63,6 +63,19 @@ def start_trading(self):
             return
         if float(getattr(self, "initial_balance", 0.0) or 0.0) <= 0:
             self.initial_balance = float(self.balance)
+    if not self._is_paper_mode() and not bool(getattr(self, "persist_reconciliation_state", False)):
+        self.log("[WARN] 실거래 주문 복구 상태 저장이 OFF입니다. 재시작 시 pending 복구가 제한될 수 있습니다.")
+        ops_alert = getattr(self, "_ops_alert", None)
+        if callable(ops_alert):
+            ops_alert(
+                level="warning",
+                message="실거래 주문 복구 상태 저장이 OFF입니다.",
+                key="reconciliation_persistence_off",
+                cooldown=60,
+            )
+    equity_info = self._calculate_current_equity() if hasattr(self, "_calculate_current_equity") else {}
+    if float(getattr(self, "daily_start_equity_krw", 0.0) or 0.0) <= 0:
+        self.daily_start_equity_krw = float(equity_info.get("equity_krw", getattr(self, "balance", 0.0)) or 0.0)
     self.is_running = True
     self._next_trading_session()
     self._reconcile_pending_orders(force=False)

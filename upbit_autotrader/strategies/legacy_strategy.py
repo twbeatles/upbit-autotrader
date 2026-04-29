@@ -10,11 +10,13 @@ import time
 import logging
 from typing import Tuple, Optional, Dict, Any, List, cast
 
+from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
+
 try:
     import pyupbit
     import pandas as pd
 except ImportError:
-    pyupbit = cast(Any, None)
+    pyupbit = pyupbit_fallback
     pd = cast(Any, None)
 
 from upbit_autotrader.core.config import Config

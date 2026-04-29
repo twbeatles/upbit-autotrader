@@ -9,8 +9,7 @@ try:
     import pandas as pd  # noqa: F401
     import pyupbit  # noqa: F401
 except ImportError:
-    print("pyupbit library is required. Install it with: pip install pyupbit")
-    sys.exit(1)
+    pyupbit = None  # type: ignore[assignment]
 
 from PyQt6.QtWidgets import QApplication, QMainWindow
 

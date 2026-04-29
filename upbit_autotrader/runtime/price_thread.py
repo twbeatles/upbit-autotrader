@@ -5,11 +5,12 @@ from typing import Any, cast
 from PyQt6.QtCore import QThread, pyqtSignal
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
 
 try:
     import pyupbit
 except ImportError:
-    pyupbit = cast(Any, None)
+    pyupbit = pyupbit_fallback
 
 
 class PriceUpdateThread(QThread):

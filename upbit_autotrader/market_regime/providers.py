@@ -12,12 +12,15 @@ from typing import Any, Dict, Optional
 
 import requests
 
+from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
+
 try:
     import pyupbit
 except ImportError:  # pragma: no cover - handled in callers/tests
-    pyupbit = None
+    pyupbit = pyupbit_fallback
 
 from upbit_autotrader.market_regime.engine import MarketRegimeSnapshot
+from upbit_autotrader.services.rate_limit import RateLimitState, is_rate_limit_error
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -79,9 +82,22 @@ class UpbitMarketBreadthProvider:
         self.session = session or requests
         self.timeout = int(timeout)
         self.candle_request_delay_sec = max(0.0, float(candle_request_delay_sec))
+        self.rate_limit_state = RateLimitState(min_interval_by_group={"quotation": self.candle_request_delay_sec})
+
+    def _get(self, url: str, **kwargs: Any):
+        self.rate_limit_state.wait_before_call("quotation", default_interval=self.candle_request_delay_sec)
+        try:
+            response = self.session.get(url, **kwargs)
+        except Exception as exc:
+            if is_rate_limit_error(exc):
+                self.rate_limit_state.penalize("quotation", seconds=1.0)
+            raise
+        self.rate_limit_state.mark_call("quotation")
+        self.rate_limit_state.observe_response("quotation", response)
+        return response
 
     def _fetch_krw_markets(self) -> list[str]:
-        response = self.session.get(
+        response = self._get(
             self.MARKET_ALL_URL,
             params={"isDetails": "false"},
             timeout=self.timeout,
@@ -102,7 +118,7 @@ class UpbitMarketBreadthProvider:
             chunk = markets[idx : idx + 100]
             if not chunk:
                 continue
-            response = self.session.get(
+            response = self._get(
                 self.TICKER_URL,
                 params={"markets": ",".join(chunk)},
                 timeout=self.timeout,

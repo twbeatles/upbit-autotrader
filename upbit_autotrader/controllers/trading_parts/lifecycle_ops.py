@@ -6,6 +6,7 @@ import os
 import time
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.rate_limit import RateLimitState
 from upbit_autotrader.strategies.meta_signal import StrategyPerformanceTracker
 
 try:
@@ -31,6 +32,10 @@ def _ensure_order_stability_state(self):
         self._api_last_call_ts = 0.0
     if not hasattr(self, "_api_last_call_ts_by_group"):
         self._api_last_call_ts_by_group = {}
+    if not hasattr(self, "_rate_limit_state"):
+        self._rate_limit_state = RateLimitState(
+            min_interval_by_group=dict(getattr(Config, "API_MIN_INTERVAL_BY_GROUP_SEC", {}) or {})
+        )
     if not hasattr(self, "_risk_snapshot_cache"):
         self._risk_snapshot_cache = {"ts": 0.0, "value": None}
     if not hasattr(self, "_last_price_update_ts"):

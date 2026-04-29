@@ -7,6 +7,10 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pyright/
+.cache/
+.tox/
+.nox/
 htmlcov/
 .coverage
 .coverage.*
@@ -18,17 +22,23 @@ upbit_build/
 dist/
 build/
 *.exe
+*.log
+*.tmp
 
 # Local runtime data
 upbit_settings.json
 upbit_presets.json
 trade_history.json
 strategy_performance.json
+strategy_performance.json.tmp
 reconciliation_state.json
 reconciliation_state.json.tmp
 analytics_report.html
 backtest_report.html
 trade_history_*.csv
+*.db
+*.sqlite
+*.sqlite3
 
 # OS/editor
 .DS_Store
@@ -43,3 +53,5 @@ venv/
 
 # Backup files
 *.bak
+*.orig
+*.rej

@@ -40,6 +40,41 @@ def _get_available_krw(self):
     return max(0.0, balance - _get_reserved_krw_total(self))
 
 
+def _calculate_current_equity(self, account_wide_positions=None):
+    cash_krw = float(getattr(self, "balance", 0.0) or 0.0)
+    reserved_krw = _get_reserved_krw_total(self)
+    positions = account_wide_positions
+    if positions is None:
+        positions = {}
+        for ticker, info in getattr(self, "universe", {}).items():
+            qty = float(info.get("qty", 0.0) or 0.0)
+            if qty <= 0:
+                continue
+            cur = float(info.get("current", 0.0) or 0.0)
+            buy = float(info.get("buy_price", 0.0) or 0.0)
+            positions[ticker] = {"qty": qty, "current_price": cur, "buy_price": buy}
+    gross_exposure = 0.0
+    unrealized_pnl = 0.0
+    for pos in dict(positions or {}).values():
+        qty = float(pos.get("qty", 0.0) or 0.0)
+        buy_price = float(pos.get("buy_price", 0.0) or 0.0)
+        current_price = float(pos.get("current_price", 0.0) or pos.get("current", 0.0) or 0.0)
+        if qty <= 0:
+            continue
+        basis = current_price if current_price > 0 else buy_price
+        gross_exposure += max(0.0, qty * basis)
+        if buy_price > 0 and current_price > 0:
+            unrealized_pnl += (current_price - buy_price) * qty
+    equity = max(0.0, cash_krw + reserved_krw + gross_exposure)
+    return {
+        "equity_krw": equity,
+        "cash_krw": cash_krw,
+        "reserved_krw": reserved_krw,
+        "gross_exposure_krw": gross_exposure,
+        "unrealized_pnl": unrealized_pnl,
+    }
+
+
 def _reserve_krw_for_buy(self, ticker, amount, session_id=0):
     self._ensure_order_stability_state()
     amount = float(amount or 0.0)

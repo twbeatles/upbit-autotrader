@@ -7,11 +7,13 @@ from typing import Any, cast
 from PyQt6.QtWidgets import QMessageBox
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
+from upbit_autotrader.services.rate_limit import is_rate_limit_error
 
 try:
     import pyupbit
 except ImportError:
-    pyupbit = cast(Any, None)
+    pyupbit = pyupbit_fallback
 
 
 def login(self):
@@ -140,6 +142,25 @@ def _safe_log_order_error(self, uuid, message):
     self._order_error_log_ts[key] = now_ts
     if hasattr(self, "logger"):
         self.logger.warning(message)
+
+
+def _fee_rate_to_bps(value, default_bps=5.0):
+    try:
+        fee = float(value)
+    except (TypeError, ValueError):
+        return float(default_bps)
+    if fee <= 0:
+        return float(default_bps)
+    return fee * 10000.0 if fee < 1.0 else fee
+
+
+def _extract_chance_fee_bps(chance, default_bps=5.0):
+    if not isinstance(chance, dict):
+        return float(default_bps), float(default_bps)
+    return (
+        _fee_rate_to_bps(chance.get("bid_fee"), default_bps),
+        _fee_rate_to_bps(chance.get("ask_fee"), default_bps),
+    )
 
 
 def _resolve_api_rate_group(operation_name: str) -> str:
@@ -360,6 +381,9 @@ def api_call_with_retry(self, func, *args, max_retries=None, delay=None, operati
     last_error = None
     for attempt in range(max_retries):
         try:
+            rate_state = getattr(self, "_rate_limit_state", None)
+            if rate_state is not None and hasattr(rate_state, "wait_before_call"):
+                rate_state.wait_before_call(group, default_interval=min_interval)
             last_group_ts = float(last_call_by_group.get(group, 0.0) or 0.0)
             wait_sec = max(0.0, min_interval - (time.time() - last_group_ts))
             if wait_sec > 0:
@@ -368,9 +392,15 @@ def api_call_with_retry(self, func, *args, max_retries=None, delay=None, operati
             now_ts = time.time()
             self._api_last_call_ts = now_ts
             last_call_by_group[group] = now_ts
+            if rate_state is not None and hasattr(rate_state, "mark_call"):
+                rate_state.mark_call(group)
             return result
         except Exception as e:
             last_error = e
+            if is_rate_limit_error(e):
+                rate_state = getattr(self, "_rate_limit_state", None)
+                if rate_state is not None and hasattr(rate_state, "penalize"):
+                    rate_state.penalize(group, seconds=base_delay * (2 ** attempt) + 1.0)
             if attempt >= max_retries - 1:
                 break
             sleep_sec = base_delay * (2 ** attempt)

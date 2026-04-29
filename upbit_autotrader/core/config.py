@@ -161,6 +161,7 @@ class Config:
     DEFAULT_MARKET_REGIME_TOP_N = 20
     DEFAULT_MARKET_REGIME_USE_FEAR_GREED = True
     DEFAULT_MARKET_REGIME_USE_ETF_FLOW = False
+    DEFAULT_FAIL_CLOSED_ON_STALE_MARKET_REGIME = False
 
     DEFAULT_ENABLE_DISCORD_ALERTS = False
     DEFAULT_DISCORD_WEBHOOK = ""
@@ -348,6 +349,7 @@ class Config:
         "market_regime_top_n": "시장 폭 계산에 사용할 업비트 KRW 상위 종목 수입니다.",
         "market_regime_use_fear_greed": "Alternative Fear & Greed Index를 1단계 레짐 점수에 반영합니다.",
         "market_regime_use_etf_flow": "ETF flow + BTC dominance 오버레이를 사용합니다. 기본값은 OFF입니다.",
+        "fail_closed_on_stale_market_regime": "핵심 시장 레짐 데이터가 stale/error이면 신규 진입을 차단합니다.",
         "weight_rebalance_daily": "전략 가중치를 일 1회 자동 리밸런싱합니다.",
         "discord_alerts": "운영 이벤트를 Discord 웹훅으로 전송합니다.",
         "persist_reconciliation": "pending/manual/orphan 상태를 디스크에 주기적으로 저장합니다.",

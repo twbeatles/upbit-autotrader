@@ -23,13 +23,17 @@ from upbit_autotrader.controllers.trading_parts import (
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.market_regime import build_neutral_market_regime_output
 from upbit_autotrader.risk.portfolio_risk import RiskLimitConfig, build_portfolio_risk_snapshot, evaluate_risk_limits
+from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
 
 try:
     import pandas as pd
-    import pyupbit
 except ImportError:
     pd = cast(Any, None)
-    pyupbit = cast(Any, None)
+
+try:
+    import pyupbit
+except ImportError:
+    pyupbit = pyupbit_fallback
 
 
 class TraderTradingController(ControllerTypeBase):
@@ -89,6 +93,7 @@ class TraderTradingController(ControllerTypeBase):
 
     _get_reserved_krw_total = _account_ops._get_reserved_krw_total
     _get_available_krw = _account_ops._get_available_krw
+    _calculate_current_equity = _account_ops._calculate_current_equity
     _reserve_krw_for_buy = _account_ops._reserve_krw_for_buy
     _release_reserved_krw = _account_ops._release_reserved_krw
     _sync_reserved_with_pending = _account_ops._sync_reserved_with_pending

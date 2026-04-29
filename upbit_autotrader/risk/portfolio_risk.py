@@ -116,6 +116,10 @@ def build_portfolio_risk_snapshot(
     realized_pnl: float,
     universe_positions: Dict[str, Dict[str, Any]],
     account_wide_positions: Dict[str, Dict[str, Any]],
+    equity_krw: float | None = None,
+    cash_krw: float = 0.0,
+    reserved_krw: float = 0.0,
+    daily_start_equity_krw: float | None = None,
     include_unrealized: bool = True,
     include_external_holdings: bool = True,
     drawdown_state_enabled: bool = False,
@@ -134,9 +138,15 @@ def build_portfolio_risk_snapshot(
     unrealized = _calc_unrealized_pnl(source_positions) if include_unrealized else 0.0
     portfolio_pnl = realized + unrealized
     initial = max(0.0, _safe_float(initial_balance, 0.0))
-    loss_rate = (portfolio_pnl / initial * 100.0) if initial > 0 else 0.0
-
     gross_exposure = sum(_position_notional(pos) for pos in account_wide_positions.values())
+    cash = max(0.0, _safe_float(cash_krw, 0.0))
+    reserved = max(0.0, _safe_float(reserved_krw, 0.0))
+    equity = _safe_float(equity_krw, 0.0)
+    if equity <= 0:
+        equity = cash + reserved + gross_exposure
+    daily_start = _safe_float(daily_start_equity_krw, 0.0)
+    denominator = daily_start if daily_start > 0 else initial
+    loss_rate = (portfolio_pnl / denominator * 100.0) if denominator > 0 else 0.0
     corr_exposure, max_pair_corr = _calc_correlation_exposure(
         positions=account_wide_positions,
         price_history=price_history or {},
@@ -160,6 +170,10 @@ def build_portfolio_risk_snapshot(
         "unrealized_pnl": unrealized,
         "portfolio_pnl": portfolio_pnl,
         "loss_rate": loss_rate,
+        "equity_krw": equity,
+        "cash_krw": cash,
+        "reserved_krw": reserved,
+        "daily_start_equity_krw": daily_start,
         "holdings_count": sum(1 for pos in account_wide_positions.values() if _safe_float(pos.get("qty"), 0.0) > 0),
         "external_holdings_count": len(external),
         "gross_exposure_krw": gross_exposure,

@@ -46,6 +46,7 @@ class _Trader(TraderTradingController):
         self._sync_count = 0
         self._external_buy_done = 0
         self._reserved_krw_by_ticker = {}
+        self._active_session_id = 0
 
     def log(self, msg="", *args, **kwargs):
         return None

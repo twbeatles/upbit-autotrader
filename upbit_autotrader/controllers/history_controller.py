@@ -341,6 +341,8 @@ class TraderHistoryController(ControllerTypeBase):
                 if value is None:
                     continue
                 record[str(key)] = value
+        if "fee_krw" in record and "actual_fee_krw" not in record:
+            record["actual_fee_krw"] = record["fee_krw"]
         self.trade_history.append(record)
         
         # 히스토리 테이블 업데이트
