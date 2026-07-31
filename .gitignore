@@ -1,4 +1,4 @@
-﻿# Python cache
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
@@ -55,3 +55,14 @@ venv/
 *.bak
 *.orig
 *.rej
+
+# AI Agent files and directories
+CLAUDE.md
+GEMINI.md
+.agents/
+.claude/
+.codegraph/
+.grok/
+.specify/
+mcps/
+
