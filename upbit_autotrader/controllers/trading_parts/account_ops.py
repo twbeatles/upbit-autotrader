@@ -7,6 +7,22 @@ from PyQt6.QtWidgets import QTableWidgetItem
 from upbit_autotrader.core.config import Config
 
 
+def _handle_ws_asset_event(self, data: dict):
+    """Handle real-time private myAsset WebSocket events."""
+    if not isinstance(data, dict):
+        return
+    currency = str(data.get("currency") or "").upper()
+    balance_val = data.get("balance")
+    if currency == "KRW" and balance_val is not None:
+        try:
+            self.balance = float(balance_val)
+            if hasattr(self, "lbl_balance"):
+                paper_tag = " [PAPER]" if self._is_paper_mode() else ""
+                self.lbl_balance.setText(f"💰 주문가능금액: {self.balance:,.0f} 원{paper_tag}")
+        except Exception:
+            pass
+
+
 def get_balance(self):
     """잔고 조회"""
     if self._is_paper_mode():

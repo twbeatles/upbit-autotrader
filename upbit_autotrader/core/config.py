@@ -1,4 +1,4 @@
-﻿"""
+"""
 Upbit Pro Algo-Trader - configuration constants.
 """
 
@@ -223,13 +223,22 @@ class Config:
     API_RETRY_DELAY = 1
     API_MIN_INTERVAL_SEC = 0.12
     API_MIN_INTERVAL_BY_GROUP_SEC = {
-        "quotation": 0.12,
-        "exchange_default": 0.05,
+        "quotation": 0.11,
+        "quotation_ticker": 0.11,
+        "quotation_candle": 0.11,
+        "quotation_orderbook": 0.11,
+        "exchange": 0.04,
+        "exchange_default": 0.04,
         "order": 0.13,
+        "default": 0.05,
     }
     API_BACKOFF_BASE_SEC = 0.4
     API_BACKOFF_JITTER_SEC = 0.2
     MARKET_REGIME_CANDLE_REQUEST_DELAY_SEC = 0.11
+    DEFAULT_USE_NATIVE_UPBIT_CLIENT = True
+    DEFAULT_AUTO_RECOVER_OPEN_ORDERS = True
+    DEFAULT_USE_ORDERBOOK_GUARD = False
+    DEFAULT_MAX_ORDERBOOK_SPREAD_BPS = 40.0
 
     MAX_LOG_LINES = 500
     INDICATOR_CACHE_TTL_BY_INTERVAL = {
@@ -356,6 +365,10 @@ class Config:
         "paper_trading": "실주문 대신 모의 체결로 테스트합니다.",
         "paper_allow_without_login": "페이퍼 모드에서 API 로그인 없이 시작 허용",
         "paper_seed_krw": "무로그인 페이퍼 시작 시 초기 KRW 시드",
+        "use_native_upbit_client": "업비트 공식 최신 REST API 클라이언트(JWT 서명, Rate Limit 피드백 내장)를 우선 사용합니다.",
+        "auto_recover_open_orders": "시작 시 거래소에 잔존하는 미체결 주문을 감지하여 수동검토 큐에 자동 등록합니다.",
+        "use_orderbook_guard": "매수 전 호가창 스프레드 및 잔량 깊이를 사전 점검하여 슬리피지를 방어합니다.",
+        "max_orderbook_spread_bps": "허용 가능한 최대 호가창 스프레드(bps)입니다. 초과 시 매수를 보류합니다.",
     }
 
     HELP_CONTENT = {

@@ -194,6 +194,22 @@ def _check_buy_condition(self, ticker, curr, info):
     if not self.check_risk_limits():
         return
 
+    # Orderbook Spread Guard
+    use_ob_guard = bool(getattr(self, "chk_use_orderbook_guard", None) and self.chk_use_orderbook_guard.isChecked())
+    if use_ob_guard and hasattr(self, "_api_get_orderbook"):
+        try:
+            from upbit_autotrader.execution.orderbook_guard import analyze_orderbook_depth
+            ob_list = self._api_get_orderbook(ticker, count=5)
+            if ob_list and isinstance(ob_list, list):
+                max_spread = float(self.spin_max_orderbook_spread_bps.value()) if hasattr(self, "spin_max_orderbook_spread_bps") else 40.0
+                ob_res = analyze_orderbook_depth(ob_list[0], notional_krw=0.0, side="BUY", max_spread_bps=max_spread)
+                if not ob_res.is_safe:
+                    self.log(f"[{ticker}] 호가창 가드 보류: {ob_res.reason}")
+                    return
+        except Exception as e:
+            if hasattr(self, "logger"):
+                self.logger.warning(f"[{ticker}] 호가창 가드 검사 예외: {e}")
+
     score = None
     if self.chk_use_entry_scoring.isChecked():
         score, reasons = calculate_entry_score(self, ticker, curr, info, snapshot=snapshot)

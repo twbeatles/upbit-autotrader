@@ -111,6 +111,27 @@ def _sell_order_has_fill(self, order):
     return executed_volume > 0 and proceeds > 0
 
 
+def _handle_ws_order_event(self, data: dict):
+    """Handle real-time private myOrder WebSocket events."""
+    if not isinstance(data, dict):
+        return
+    market = str(data.get("code") or data.get("market") or "").strip()
+    uuid_val = str(data.get("uuid") or "").strip()
+    state = str(data.get("state") or "").strip().lower()
+    if not market or not uuid_val:
+        return
+
+    if hasattr(self, "order_service") and self.order_service.has_pending(market):
+        pending = self.order_service.get_pending(market)
+        if str((pending or {}).get("uuid")) == uuid_val:
+            if state in ("trade", "done"):
+                self._transition_pending(market, "done" if state == "done" else "wait", reason=f"ws_myorder_{state}")
+                self._mark_reconciliation_dirty()
+            elif state in ("cancel", "cancelled"):
+                self._transition_pending(market, "cancel", reason="ws_myorder_cancel")
+                self._mark_reconciliation_dirty()
+
+
 def _start_twap_buy(self, ticker, curr_price, slices, session_id):
     self._ensure_order_stability_state()
     if not slices:

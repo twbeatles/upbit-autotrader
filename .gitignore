@@ -56,9 +56,7 @@ venv/
 *.orig
 *.rej
 
-# AI Agent files and directories
-CLAUDE.md
-GEMINI.md
+# AI Agent internal artifacts
 .agents/
 .claude/
 .codegraph/

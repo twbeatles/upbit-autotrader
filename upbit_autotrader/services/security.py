@@ -44,11 +44,12 @@ def encrypt_dpapi(text: str) -> str:
     if text is None:
         text = ""
 
-    if not hasattr(ctypes.windll, "crypt32"):
+    windll = getattr(ctypes, "windll", None)
+    if windll is None or not hasattr(windll, "crypt32"):
         raise DPAPIError("DPAPI is only available on Windows.")
 
-    crypt32 = ctypes.windll.crypt32
-    kernel32 = ctypes.windll.kernel32
+    crypt32 = windll.crypt32
+    kernel32 = windll.kernel32
 
     input_blob = _bytes_to_blob(text.encode("utf-8"))
     output_blob = DATA_BLOB()
@@ -78,11 +79,12 @@ def decrypt_dpapi(cipher_b64: str) -> str:
     if not cipher_b64:
         return ""
 
-    if not hasattr(ctypes.windll, "crypt32"):
+    windll = getattr(ctypes, "windll", None)
+    if windll is None or not hasattr(windll, "crypt32"):
         raise DPAPIError("DPAPI is only available on Windows.")
 
-    crypt32 = ctypes.windll.crypt32
-    kernel32 = ctypes.windll.kernel32
+    crypt32 = windll.crypt32
+    kernel32 = windll.kernel32
 
     try:
         encrypted_bytes = base64.b64decode(cipher_b64.encode("ascii"))

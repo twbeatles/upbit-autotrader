@@ -53,6 +53,7 @@ hiddenimports = [
 # services/rate_limit.py, services/pyupbit_compat.py,
 # strategies/meta_signal.py, and the type-support shim in controllers/_type_support.py.
 hiddenimports += collect_submodules("upbit_autotrader")
+hiddenimports += collect_submodules("legacy_wrappers")
 
 # NOTE:
 # - Do not bundle local .py files as data; PyInstaller packages them as modules.

@@ -29,7 +29,7 @@ def parse_remaining_req(value: str | None) -> dict[str, Any]:
 
 @dataclass
 class RateLimitState:
-    """Group-level wait state driven by Remaining-Req headers and penalties."""
+    """Group/pocket-level wait state driven by Remaining-Req headers and penalties."""
 
     min_interval_by_group: dict[str, float] = field(default_factory=dict)
     low_remaining_threshold: int = 3
@@ -37,6 +37,7 @@ class RateLimitState:
     _last_call_ts: dict[str, float] = field(default_factory=dict)
     _penalty_until_ts: dict[str, float] = field(default_factory=dict)
     _adaptive_interval_by_group: dict[str, float] = field(default_factory=dict)
+    _remaining_by_group: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def wait_before_call(self, group: str, default_interval: float = 0.0) -> None:
         group = str(group or "default")
@@ -61,23 +62,41 @@ class RateLimitState:
                 header = ""
         parsed = parse_remaining_req(header)
         sec = parsed.get("sec")
-        if not isinstance(sec, int):
+        minute = parsed.get("min")
+        if not isinstance(sec, int) and not isinstance(minute, int):
             return
-        group = str(group or parsed.get("group") or "default")
-        base = float(self.min_interval_by_group.get(group, 0.0) or 0.0)
-        if sec <= self.low_remaining_threshold:
-            self._adaptive_interval_by_group[group] = max(base, 0.25)
-        else:
-            current = float(self._adaptive_interval_by_group.get(group, base) or 0.0)
-            self._adaptive_interval_by_group[group] = max(base, current * self.penalty_decay)
+
+        header_group = str(parsed.get("group") or "").strip()
+        group_key = str(group or header_group or "default")
+        self._remaining_by_group[group_key] = parsed
+
+        base = float(self.min_interval_by_group.get(group_key, 0.0) or 0.0)
+        if isinstance(sec, int):
+            if sec <= 1:
+                self._adaptive_interval_by_group[group_key] = max(base, 0.6)
+            elif sec <= self.low_remaining_threshold:
+                self._adaptive_interval_by_group[group_key] = max(base, 0.3)
+            else:
+                current = float(self._adaptive_interval_by_group.get(group_key, base) or 0.0)
+                self._adaptive_interval_by_group[group_key] = max(base, current * self.penalty_decay)
+
+        if isinstance(minute, int) and minute <= 5:
+            self._adaptive_interval_by_group[group_key] = max(
+                float(self._adaptive_interval_by_group.get(group_key, base) or 0.0),
+                1.0,
+            )
 
     def penalize(self, group: str, seconds: float = 1.0) -> None:
         group = str(group or "default")
         until_ts = time.time() + max(0.0, float(seconds or 0.0))
         self._penalty_until_ts[group] = max(float(self._penalty_until_ts.get(group, 0.0) or 0.0), until_ts)
 
+    def get_remaining(self, group: str) -> dict[str, Any]:
+        return dict(self._remaining_by_group.get(str(group or "default"), {}))
+
 
 def is_rate_limit_error(exc: BaseException) -> bool:
     text = str(exc or "").lower()
     return "429" in text or "too many" in text or "rate limit" in text or "remaining-req" in text
+
 

@@ -95,7 +95,7 @@ def _get_indicator_snapshot(self, ticker, interval, rsi_period=None, volume_peri
         return cached.get("data")
 
     count = max(50, rsi_period + 2, volume_period + 1, bb_period + 5)
-    df = pyupbit.get_ohlcv(ticker, interval=interval, count=count)
+    df = compute_ops._fetch_ohlcv(self, ticker, interval=interval, count=count)
     if df is None or len(df) == 0:
         return None
 

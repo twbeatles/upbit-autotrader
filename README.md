@@ -4,11 +4,14 @@ Upbit OpenAPI 기반 자동매매 데스크톱 프로그램입니다. 실행 진
 
 ## 주요 기능
 
-- 실시간 가격 감시와 자동매매
+- 실시간 WebSocket 초저지연 시세 및 private(`myOrder`, `myAsset`) 이벤트 연동
+- 업비트 공식 REST 클라이언트(SHA512 JWT 서명, 포켓별 Rate Limit 실시간 피드백)
+- 호가창 스프레드 및 잔량 깊이(Depth) 분석 기반 슬리피지 사전 가드
+- 최유리 지정가(`best`) 및 분할 주문(TWAP) 실행 모델
+- 10단계 호가단위(Tick Size) 규칙 및 거래소 미체결 주문 자동 감지/복구
 - 변동성 돌파 기반 레거시 전략과 strategy engine(`single` / `ensemble`)
 - 시장 레짐 점수 기반 신규 진입 필터와 주문 금액 스케일링
 - 리스크 예산 기반 포지션 사이징, Kelly 보정, drawdown 상태 제어
-- 단일 시장가 및 TWAP 분할 주문 실행 모델
 - pending 주문 추적, 주문 복구 상태 저장, 수동 검토 큐
 - 페이퍼 트레이딩, 거래 내역 저장, 분석 리포트, 백테스트
 - Discord 및 운영 이벤트 알림
@@ -24,6 +27,8 @@ pyupbit >= 0.2.30
 pandas
 numpy
 requests
+websocket-client >= 1.6.0
+PyJWT >= 2.8.0
 ```
 
 ## 설치 및 실행

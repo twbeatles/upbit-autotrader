@@ -76,7 +76,7 @@ class UpbitBacktestEngine:
             if df is not None:
                 df = df.reset_index()
                 df.columns = ['datetime', 'open', 'high', 'low', 'close', 'volume']
-            return df
+            return df if df is not None else pd.DataFrame()
         except Exception as e:
             print(f"데이터 조회 실패: {e}")
             return pd.DataFrame()

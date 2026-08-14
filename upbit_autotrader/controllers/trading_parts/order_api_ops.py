@@ -6,9 +6,11 @@ from typing import Any, cast
 
 from PyQt6.QtWidgets import QMessageBox
 
+import uuid
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
 from upbit_autotrader.services.rate_limit import is_rate_limit_error
+from upbit_autotrader.services.upbit_client import UpbitRestClient
 
 try:
     import pyupbit
@@ -29,7 +31,16 @@ def login(self):
     self.lbl_connection.setStyleSheet("color: #ffc107; font-weight: bold;")
 
     try:
-        self.upbit = pyupbit.Upbit(access, secret)
+        self._ensure_order_stability_state()
+        use_native = getattr(Config, "DEFAULT_USE_NATIVE_UPBIT_CLIENT", True)
+        if use_native:
+            rate_state = getattr(self, "_rate_limit_state", None)
+            self.upbit = UpbitRestClient(access, secret, rate_limit_state=rate_state)
+        elif pyupbit is not None and pyupbit is not pyupbit_fallback:
+            self.upbit = pyupbit.Upbit(access, secret)
+        else:
+            self.upbit = UpbitRestClient(access, secret)
+
         balance = self._api_get_balance("KRW")
         if balance is None:
             raise Exception("잔고 조회 실패")
@@ -57,7 +68,8 @@ def login(self):
         QMessageBox.critical(self, "오류", f"API 연결에 실패했습니다.\n{e}")
 
 
-def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy"):
+def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy", identifier=""):
+    client_id = str(identifier or f"buy-{uuid.uuid4().hex[:16]}")
     if self._is_paper_mode():
         svc = self._ensure_paper_service_state()
         self._seed_paper_balance_once()
@@ -73,6 +85,7 @@ def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy"):
                 session_id=session_id,
                 source=source,
                 reserved_krw=krw_amount,
+                identifier=client_id,
             )
             self._transition_pending(ticker, "wait", reason="buy_order_submitted")
             self._mark_reconciliation_dirty()
@@ -80,7 +93,7 @@ def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy"):
     if self.order_service.has_pending(ticker):
         pending = self.order_service.get_pending(ticker)
         return False, None, f"이미 {pending['side']} 주문이 대기 중입니다."
-    result = self._api_buy_market_order(ticker, krw_amount)
+    result = self._api_buy_market_order(ticker, krw_amount, identifier=client_id)
     if result and "uuid" in result:
         self.order_service.mark_pending(
             ticker,
@@ -89,6 +102,7 @@ def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy"):
             session_id=session_id,
             source=source,
             reserved_krw=krw_amount,
+            identifier=client_id,
         )
         self._transition_pending(ticker, "wait", reason="buy_order_submitted")
         self._mark_reconciliation_dirty()
@@ -96,7 +110,8 @@ def _place_buy_order(self, ticker, krw_amount, session_id=0, source="auto_buy"):
     return False, result, "매수 주문 응답이 비정상입니다."
 
 
-def _place_sell_order(self, ticker, qty, side="SELL", session_id=0, source="auto_sell"):
+def _place_sell_order(self, ticker, qty, side="SELL", session_id=0, source="auto_sell", identifier=""):
+    client_id = str(identifier or f"sell-{uuid.uuid4().hex[:16]}")
     if self._is_paper_mode():
         svc = self._ensure_paper_service_state()
         if svc is None:
@@ -110,6 +125,7 @@ def _place_sell_order(self, ticker, qty, side="SELL", session_id=0, source="auto
                 result["uuid"],
                 session_id=session_id,
                 source=source,
+                identifier=client_id,
             )
             self._transition_pending(ticker, "wait", reason="sell_order_submitted")
             self._mark_reconciliation_dirty()
@@ -117,7 +133,7 @@ def _place_sell_order(self, ticker, qty, side="SELL", session_id=0, source="auto
     if self.order_service.has_pending(ticker):
         pending = self.order_service.get_pending(ticker)
         return False, None, f"이미 {pending['side']} 주문이 대기 중입니다."
-    result = self._api_sell_market_order(ticker, qty)
+    result = self._api_sell_market_order(ticker, qty, identifier=client_id)
     if result and "uuid" in result:
         self.order_service.mark_pending(
             ticker,
@@ -125,6 +141,7 @@ def _place_sell_order(self, ticker, qty, side="SELL", session_id=0, source="auto
             result["uuid"],
             session_id=session_id,
             source=source,
+            identifier=client_id,
         )
         self._transition_pending(ticker, "wait", reason="sell_order_submitted")
         self._mark_reconciliation_dirty()
@@ -161,6 +178,18 @@ def _extract_chance_fee_bps(chance, default_bps=5.0):
         _fee_rate_to_bps(chance.get("bid_fee"), default_bps),
         _fee_rate_to_bps(chance.get("ask_fee"), default_bps),
     )
+
+
+def _extract_chance_all_fees_bps(chance, default_bps=5.0):
+    """Extract (taker_bid_bps, taker_ask_bps, maker_bid_bps, maker_ask_bps) from orders/chance."""
+    if not isinstance(chance, dict):
+        d = float(default_bps)
+        return d, d, d, d
+    bid_fee = _fee_rate_to_bps(chance.get("bid_fee"), default_bps)
+    ask_fee = _fee_rate_to_bps(chance.get("ask_fee"), default_bps)
+    maker_bid_fee = _fee_rate_to_bps(chance.get("maker_bid_fee", chance.get("bid_fee")), default_bps)
+    maker_ask_fee = _fee_rate_to_bps(chance.get("maker_ask_fee", chance.get("ask_fee")), default_bps)
+    return bid_fee, ask_fee, maker_bid_fee, maker_ask_fee
 
 
 def _resolve_api_rate_group(operation_name: str) -> str:
@@ -330,34 +359,279 @@ def _api_cancel_order(self, uuid):
         return None
 
 
-def _api_buy_market_order(self, ticker, krw_amount):
+def _api_buy_market_order(self, ticker, krw_amount, identifier=None):
     if self._is_paper_mode():
         return None
     if not getattr(self, "upbit", None):
         return None
+    fn = self.upbit.buy_market_order
+    kwargs = {}
+    if identifier:
+        import inspect
+        sig = inspect.signature(fn)
+        if "identifier" in sig.parameters:
+            kwargs["identifier"] = identifier
     return api_call_with_retry(
         self,
-        self.upbit.buy_market_order,
+        fn,
         ticker,
         krw_amount,
         operation_name=f"buy_market_order:{ticker}",
         rate_group="order",
+        **kwargs,
     )
 
 
-def _api_sell_market_order(self, ticker, qty):
+def _api_sell_market_order(self, ticker, qty, identifier=None):
     if self._is_paper_mode():
         return None
     if not getattr(self, "upbit", None):
         return None
+    fn = self.upbit.sell_market_order
+    kwargs = {}
+    if identifier:
+        import inspect
+        sig = inspect.signature(fn)
+        if "identifier" in sig.parameters:
+            kwargs["identifier"] = identifier
     return api_call_with_retry(
         self,
-        self.upbit.sell_market_order,
+        fn,
         ticker,
         qty,
         operation_name=f"sell_market_order:{ticker}",
         rate_group="order",
+        **kwargs,
     )
+
+
+def _api_get_orders_by_uuids(self, uuids=None, identifiers=None):
+    """GET /v1/orders/uuids - 복수 주문 일괄 조회."""
+    if not getattr(self, "upbit", None):
+        return []
+    fn = getattr(self.upbit, "get_orders_by_uuids", None)
+    if not callable(fn):
+        return []
+    try:
+        return list(
+            api_call_with_retry(
+                self,
+                fn,
+                uuids=uuids,
+                identifiers=identifiers,
+                operation_name="get_orders_by_uuids",
+                rate_group="exchange_default",
+            )
+            or []
+        )
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"복수 주문 조회 실패: {e}")
+        return []
+
+
+def _api_get_open_orders(self, market=None, state="wait"):
+    """GET /v1/orders/open - 미체결 주문 목록 조회."""
+    if not getattr(self, "upbit", None):
+        return []
+    fn = getattr(self.upbit, "get_open_orders", None)
+    if not callable(fn):
+        return []
+    try:
+        return list(
+            api_call_with_retry(
+                self,
+                fn,
+                market=market,
+                state=state,
+                operation_name="get_open_orders",
+                rate_group="exchange_default",
+            )
+            or []
+        )
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"미체결 주문 조회 실패: {e}")
+        return []
+
+
+def _api_get_closed_orders(self, market=None, limit=100):
+    """GET /v1/orders/closed - 종료 주문 목록 조회."""
+    if not getattr(self, "upbit", None):
+        return []
+    fn = getattr(self.upbit, "get_closed_orders", None)
+    if not callable(fn):
+        return []
+    try:
+        return list(
+            api_call_with_retry(
+                self,
+                fn,
+                market=market,
+                limit=limit,
+                operation_name="get_closed_orders",
+                rate_group="exchange_default",
+            )
+            or []
+        )
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"종료 주문 조회 실패: {e}")
+        return []
+
+
+def _api_cancel_orders_by_uuids(self, uuids=None, identifiers=None):
+    """DELETE /v1/orders/uuids - 복수 주문 일괄 취소."""
+    if not getattr(self, "upbit", None):
+        return []
+    fn = getattr(self.upbit, "cancel_orders_by_uuids", None)
+    if not callable(fn):
+        return []
+    try:
+        return list(
+            api_call_with_retry(
+                self,
+                fn,
+                uuids=uuids,
+                identifiers=identifiers,
+                operation_name="cancel_orders_by_uuids",
+                rate_group="order",
+            )
+            or []
+        )
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"복수 주문 일괄 취소 실패: {e}")
+        return []
+
+
+def _api_get_orderbook(self, markets, count=None):
+    """GET /v1/orderbook - 호가 정보 조회."""
+    if not getattr(self, "upbit", None):
+        return []
+    fn = getattr(self.upbit, "get_orderbook", None)
+    if not callable(fn):
+        return []
+    try:
+        kwargs = {"count": count} if count is not None else {}
+        return list(
+            api_call_with_retry(
+                self,
+                fn,
+                markets,
+                operation_name="get_orderbook",
+                rate_group="quotation_orderbook",
+                **kwargs,
+            )
+            or []
+        )
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"호가 정보 조회 실패: {e}")
+        return []
+
+
+def _api_get_orderbook_instruments(self, markets=None):
+    """GET /v1/orderbook/instruments - 호가 정책 및 tick_size 조회."""
+    if not getattr(self, "upbit", None):
+        return []
+    fn = getattr(self.upbit, "get_orderbook_instruments", None)
+    if not callable(fn):
+        return []
+    try:
+        return list(
+            api_call_with_retry(
+                self,
+                fn,
+                markets=markets,
+                operation_name="get_orderbook_instruments",
+                rate_group="quotation_orderbook",
+            )
+            or []
+        )
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"호가 정책 조회 실패: {e}")
+        return []
+
+
+def _place_best_buy_order(self, ticker, krw_amount, time_in_force="ioc", session_id=0, source="auto_buy", identifier=""):
+    """최유리 지정가 매수 발주."""
+    client_id = str(identifier or f"best-buy-{uuid.uuid4().hex[:16]}")
+    if self._is_paper_mode():
+        return _place_buy_order(self, ticker, krw_amount, session_id=session_id, source=source, identifier=client_id)
+    if self.order_service.has_pending(ticker):
+        pending = self.order_service.get_pending(ticker)
+        return False, None, f"이미 {pending['side']} 주문이 대기 중입니다."
+
+    fn = getattr(getattr(self, "upbit", None), "buy_best_order", None)
+    if not callable(fn):
+        # Fallback to market buy
+        return _place_buy_order(self, ticker, krw_amount, session_id=session_id, source=source, identifier=client_id)
+
+    result = api_call_with_retry(
+        self,
+        fn,
+        ticker,
+        krw_amount,
+        identifier=client_id,
+        time_in_force=time_in_force,
+        operation_name=f"buy_best_order:{ticker}",
+        rate_group="order",
+    )
+    if result and "uuid" in result:
+        self.order_service.mark_pending(
+            ticker,
+            "BUY",
+            result["uuid"],
+            session_id=session_id,
+            source=source,
+            reserved_krw=krw_amount,
+            identifier=client_id,
+        )
+        self._transition_pending(ticker, "wait", reason="best_buy_order_submitted")
+        self._mark_reconciliation_dirty()
+        return True, result, ""
+    return False, result, "최유리 매수 주문 응답이 비정상입니다."
+
+
+def _place_best_sell_order(self, ticker, qty, time_in_force="ioc", side="SELL", session_id=0, source="auto_sell", identifier=""):
+    """최유리 지정가 매도 발주."""
+    client_id = str(identifier or f"best-sell-{uuid.uuid4().hex[:16]}")
+    if self._is_paper_mode():
+        return _place_sell_order(self, ticker, qty, side=side, session_id=session_id, source=source, identifier=client_id)
+    if self.order_service.has_pending(ticker):
+        pending = self.order_service.get_pending(ticker)
+        return False, None, f"이미 {pending['side']} 주문이 대기 중입니다."
+
+    fn = getattr(getattr(self, "upbit", None), "sell_best_order", None)
+    if not callable(fn):
+        # Fallback to market sell
+        return _place_sell_order(self, ticker, qty, side=side, session_id=session_id, source=source, identifier=client_id)
+
+    result = api_call_with_retry(
+        self,
+        fn,
+        ticker,
+        qty,
+        identifier=client_id,
+        time_in_force=time_in_force,
+        operation_name=f"sell_best_order:{ticker}",
+        rate_group="order",
+    )
+    if result and "uuid" in result:
+        self.order_service.mark_pending(
+            ticker,
+            side,
+            result["uuid"],
+            session_id=session_id,
+            source=source,
+            identifier=client_id,
+        )
+        self._transition_pending(ticker, "wait", reason="best_sell_order_submitted")
+        self._mark_reconciliation_dirty()
+        return True, result, ""
+    return False, result, "최유리 매도 주문 응답이 비정상입니다."
 
 
 def _safe_get_order(self, uuid):

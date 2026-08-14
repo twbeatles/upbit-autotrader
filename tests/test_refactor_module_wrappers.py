@@ -1,4 +1,4 @@
-﻿import importlib
+import importlib
 
 
 def test_legacy_module_wrappers_alias_refactored_modules():
@@ -22,6 +22,16 @@ def test_legacy_module_wrappers_alias_refactored_modules():
             "legacy_wrappers.strategies.upbit_strategy_engine",
             "upbit_autotrader.strategies.engine",
             "StrategyEngine",
+        ),
+        (
+            "legacy_wrappers.services.upbit_client",
+            "upbit_autotrader.services.upbit_client",
+            "UpbitRestClient",
+        ),
+        (
+            "legacy_wrappers.services.upbit_websocket",
+            "upbit_autotrader.services.upbit_websocket",
+            "UpbitWebSocketClient",
         ),
     ]
 

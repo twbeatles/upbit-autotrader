@@ -52,13 +52,21 @@ def get_account_holdings(
     if tickers:
         try:
             ticker_arg = tickers if len(tickers) > 1 else tickers[0]
-            prices = cast(Any, pyupbit).get_current_price(ticker_arg)
+            prices = None
+            if hasattr(upbit, "get_current_price") and callable(getattr(upbit, "get_current_price")):
+                try:
+                    prices = upbit.get_current_price(ticker_arg)
+                except Exception:
+                    prices = None
+            if prices is None and pyupbit is not None and pyupbit is not pyupbit_fallback:
+                prices = cast(Any, pyupbit).get_current_price(ticker_arg)
+
             if isinstance(prices, dict):
                 prices_map = {
                     str(key): float(value or 0.0)
                     for key, value in prices.items()
                 }
-            elif len(tickers) == 1 and prices:
+            elif len(tickers) == 1 and prices is not None:
                 prices_map = {tickers[0]: float(prices)}
         except Exception:
             prices_map = {}

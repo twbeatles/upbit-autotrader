@@ -13,8 +13,12 @@ from upbit_autotrader.runtime.price_thread import PriceUpdateThread
 
 
 def _create_price_thread(self):
-    self.price_thread = PriceUpdateThread()
+    self.price_thread = PriceUpdateThread(parent=self)
     self.price_thread.price_updated.connect(self.on_price_update)
+    if hasattr(self, "_handle_ws_order_event"):
+        self.price_thread.order_event_received.connect(self._handle_ws_order_event)
+    if hasattr(self, "_handle_ws_asset_event"):
+        self.price_thread.asset_event_received.connect(self._handle_ws_asset_event)
 
 
 def _restart_price_thread(self, coins):
@@ -26,8 +30,9 @@ def _restart_price_thread(self, coins):
             _create_price_thread(self)
     else:
         _create_price_thread(self)
-    self.price_thread.set_coins(coins)
-    self.price_thread.start()
+    if self.price_thread is not None:
+        self.price_thread.set_coins(coins)
+        self.price_thread.start()
 
 
 def _create_market_regime_thread(self):

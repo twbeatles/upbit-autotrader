@@ -12,10 +12,27 @@ def bind_runtime(**kwargs):
     globals().update(kwargs)
 
 
+def _fetch_ohlcv(self, ticker, interval, count):
+    upbit_inst = getattr(self, "upbit", None)
+    if upbit_inst is not None and hasattr(upbit_inst, "get_ohlcv"):
+        try:
+            df = upbit_inst.get_ohlcv(ticker, interval=interval, count=count)
+            if df is not None and not df.empty:
+                return df
+        except Exception:
+            pass
+    if pyupbit is not None:
+        try:
+            return pyupbit.get_ohlcv(ticker, interval=interval, count=count)
+        except Exception:
+            return None
+    return None
+
+
 def calculate_target_price(self, ticker, interval):
     """변동성 돌파 목표가 계산"""
     try:
-        df = pyupbit.get_ohlcv(ticker, interval=interval, count=2)
+        df = _fetch_ohlcv(self, ticker, interval=interval, count=2)
         if df is None or len(df) < 2:
             return None
 
@@ -35,7 +52,7 @@ def calculate_target_price(self, ticker, interval):
 def calculate_ma(self, ticker, interval, period=5):
     """이동평균 계산"""
     try:
-        df = pyupbit.get_ohlcv(ticker, interval=interval, count=period + 1)
+        df = _fetch_ohlcv(self, ticker, interval=interval, count=period + 1)
         if df is None or len(df) < period:
             return None
         return df["close"].rolling(window=period).mean().iloc[-1]
@@ -48,7 +65,7 @@ def calculate_atr(self, ticker, period=14):
     """ATR (Average True Range) 계산"""
     try:
         interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
-        df = pyupbit.get_ohlcv(ticker, interval=interval, count=period + 5)
+        df = _fetch_ohlcv(self, ticker, interval=interval, count=period + 5)
         if df is None or len(df) < period:
             return None
 

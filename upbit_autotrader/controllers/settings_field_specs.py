@@ -126,6 +126,10 @@ COMMON_FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("paper_seed_krw", "spin_paper_seed_krw", "spin", _cfg("DEFAULT_PAPER_SEED_KRW")),
     FieldSpec("paper_fee_bps", "spin_paper_fee_bps", "spin", _cfg("DEFAULT_PAPER_FEE_BPS")),
     FieldSpec("paper_slippage_bps", "spin_paper_slippage_bps", "spin", _cfg("DEFAULT_PAPER_SLIPPAGE_BPS")),
+    FieldSpec("use_native_upbit_client", "chk_use_native_upbit_client", "check", _cfg("DEFAULT_USE_NATIVE_UPBIT_CLIENT")),
+    FieldSpec("auto_recover_open_orders", "chk_auto_recover_open_orders", "check", _cfg("DEFAULT_AUTO_RECOVER_OPEN_ORDERS")),
+    FieldSpec("use_orderbook_guard", "chk_use_orderbook_guard", "check", _cfg("DEFAULT_USE_ORDERBOOK_GUARD")),
+    FieldSpec("max_orderbook_spread_bps", "spin_max_orderbook_spread_bps", "spin", _cfg("DEFAULT_MAX_ORDERBOOK_SPREAD_BPS")),
 )
 
 

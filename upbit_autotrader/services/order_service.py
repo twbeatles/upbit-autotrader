@@ -43,12 +43,14 @@ class UpbitOrderService:
         source: str = "",
         reserved_krw: float = 0.0,
         retry_count: int = 0,
+        identifier: str = "",
     ) -> None:
         now = datetime.datetime.now()
         lifecycle_state = self.STATE_SUBMITTED
         self.pending_orders[ticker] = {
             "side": side,
             "uuid": uuid,
+            "identifier": str(identifier or ""),
             "requested_at": now,
             "session_id": int(session_id or 0),
             "source": source or "",
@@ -78,6 +80,15 @@ class UpbitOrderService:
         self.pending_orders.pop(ticker, None)
         return True
 
+    def clear_pending_if_identifier(self, ticker: str, identifier: str) -> bool:
+        pending = self.pending_orders.get(ticker)
+        if not pending:
+            return False
+        if str(pending.get("identifier")) != str(identifier):
+            return False
+        self.pending_orders.pop(ticker, None)
+        return True
+
     def update_pending(self, ticker: str, **fields: Any) -> Optional[Dict[str, Any]]:
         pending = self.pending_orders.get(ticker)
         if not pending:
@@ -92,6 +103,14 @@ class UpbitOrderService:
     def get_pending_by_uuid(self, uuid: str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
         for ticker, pending in self.pending_orders.items():
             if str(pending.get("uuid")) == str(uuid):
+                return ticker, pending
+        return None, None
+
+    def get_pending_by_identifier(self, identifier: str) -> Tuple[Optional[str], Optional[Dict[str, Any]]]:
+        if not identifier:
+            return None, None
+        for ticker, pending in self.pending_orders.items():
+            if str(pending.get("identifier")) == str(identifier):
                 return ticker, pending
         return None, None
 

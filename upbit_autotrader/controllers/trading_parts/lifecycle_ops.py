@@ -331,6 +331,53 @@ def _ops_alert(self, level, message, key, cooldown: float | int = 10):
             pass
 
 
+def _recover_exchange_open_orders(self):
+    """
+    Check for live exchange open orders via GET /v1/orders/open on startup / reconcile
+    and register unknown ones to manual review / pending state.
+    """
+    _ensure_order_stability_state(self)
+    if self._is_paper_mode():
+        return 0
+    if not getattr(self, "is_connected", False) or not getattr(self, "upbit", None):
+        return 0
+
+    open_getter = getattr(self, "_api_get_open_orders", None)
+    if not callable(open_getter):
+        return 0
+
+    recovered_count = 0
+    try:
+        raw_open = open_getter()
+        open_orders = list(raw_open) if isinstance(raw_open, (list, tuple)) else []
+        for order in open_orders:
+            if not isinstance(order, dict):
+                continue
+            uuid_val = str(order.get("uuid") or "").strip()
+            market = str(order.get("market") or "").strip()
+            side = "BUY" if str(order.get("side", "")).lower() == "bid" else "SELL"
+            if not uuid_val or not market:
+                continue
+
+            # If order is already tracked in pending_orders, skip
+            if hasattr(self, "order_service") and self.order_service.has_pending(market):
+                pending = self.order_service.get_pending(market)
+                if str((pending or {}).get("uuid")) == uuid_val:
+                    continue
+
+            # Unrecognized open order on exchange
+            recovered_count += 1
+            reason = f"거래소 미체결 주문 감지 (state={order.get('state')})"
+            _register_manual_review(self, market, uuid_val, reason, order=order, extra={"auto_recovered": True})
+            if hasattr(self, "log"):
+                self.log(f"⚠️ [{market}] 거래소 미체결 주문 자동 감지 및 수동검토 등록 ({uuid_val[:8]}...)")
+    except Exception as e:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"거래소 미체결 주문 복구 확인 실패: {e}")
+
+    return recovered_count
+
+
 def _next_trading_session(self):
     _ensure_order_stability_state(self)
     self._active_session_id += 1
