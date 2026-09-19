@@ -62,8 +62,7 @@ class RateLimitState:
                 header = ""
         parsed = parse_remaining_req(header)
         sec = parsed.get("sec")
-        minute = parsed.get("min")
-        if not isinstance(sec, int) and not isinstance(minute, int):
+        if not isinstance(sec, int) and "min" not in parsed:
             return
 
         header_group = str(parsed.get("group") or "").strip()
@@ -71,20 +70,16 @@ class RateLimitState:
         self._remaining_by_group[group_key] = parsed
 
         base = float(self.min_interval_by_group.get(group_key, 0.0) or 0.0)
+        # Note: As of 2026-08-21 Upbit notice, 'min' field is officially deprecated and not used for rate limiting.
+        # Only 'sec' (per-second pocket remaining) drives adaptive pacing.
         if isinstance(sec, int):
             if sec <= 1:
-                self._adaptive_interval_by_group[group_key] = max(base, 0.6)
+                self._adaptive_interval_by_group[group_key] = max(base, 0.5)
             elif sec <= self.low_remaining_threshold:
-                self._adaptive_interval_by_group[group_key] = max(base, 0.3)
+                self._adaptive_interval_by_group[group_key] = max(base, 0.25)
             else:
                 current = float(self._adaptive_interval_by_group.get(group_key, base) or 0.0)
                 self._adaptive_interval_by_group[group_key] = max(base, current * self.penalty_decay)
-
-        if isinstance(minute, int) and minute <= 5:
-            self._adaptive_interval_by_group[group_key] = max(
-                float(self._adaptive_interval_by_group.get(group_key, base) or 0.0),
-                1.0,
-            )
 
     def penalize(self, group: str, seconds: float = 1.0) -> None:
         group = str(group or "default")

@@ -143,11 +143,11 @@ Upbit Pro Algo-Trader v3.3 기능 구현 및 아키텍처 관점 정밀 감사 �
 
 ## 5. Recommended Fix Plan
 
-| 단계 | 작업 내용 | 목표 및 기대 효과 |
-|---|---|---|
-| **1단계 (즉시 개선)** | • `price_thread.py`의 `_on_ws_my_order` direct handler 호출 제거 및 Qt Signal(`order_event_received`) 연결 방식으로 일원화<br>• `security.py`의 `ctypes.windll` 속성 접근 안전 가드 추가<br>• `README.md` 요구사항 블록에 `PyJWT`, `websocket-client` 추가 | 스레드 동시성 안전성 확보, 비-Windows 환경 크래시 방지, 문서 정합성 일치 |
-| **2단계 (안정성 강화)** | • `indicator_ops.py`에서 `self.upbit`의 `get_ohlcv` 우선 활용하도록 바인딩 개선<br>• `execution_flow_ops.py` 매수 진입 전 `orderbook_guard` 사전 점검 옵션 활성화 지원 | Quotation Rate Limit 피드백 일원화, 실시간 슬리피지 사전 방어 |
-| **3단계 (구조 고도화)** | • `myAsset` 실시간 자산 변동 이벤트를 `holdings_service` 및 UI 잔고 테이블에 즉시 반영<br>• 미체결 주문 일괄 취소(`cancel_orders_by_uuids`) UI 액션 버튼 연동 | 계좌 조회 REST 부하 0화, 비상 정지 시 일괄 주문 취소 편의성 증대 |
+| 단계 | 작업 내용 | 목표 및 기대 효과 | 상태 |
+|---|---|---|---|
+| **1단계 (즉시 개선)** | • `price_thread.py`의 `_on_ws_my_order` direct handler 호출 제거 및 Qt Signal(`order_event_received`) 연결 방식으로 일원화<br>• `security.py`의 `ctypes.windll` 속성 접근 안전 가드 추가<br>• `README.md` 요구사항 블록에 `PyJWT`, `websocket-client` 추가 | 스레드 동시성 안전성 확보, 비-Windows 환경 크래시 방지, 문서 정합성 일치 | **완료 (2026-09-19)** |
+| **2단계 (안정성 강화)** | • `indicator_ops.py`에서 `self.upbit`의 `get_ohlcv` 우선 활용하도록 바인딩 개선<br>• `execution_flow_ops.py` 매수 진입 전 `orderbook_guard` 사전 점검 옵션 활성화 지원 | Quotation Rate Limit 피드백 일원화, 실시간 슬리피지 사전 방어 | **완료 (2026-09-19)** |
+| **3단계 (구조 고도화)** | • `myAsset` 실시간 자산 변동 이벤트를 `holdings_service` 및 UI 잔고 테이블에 즉시 반영 (`_handle_ws_asset_event`)<br>• 미체결 주문 일괄 취소(`cancel_open_orders`, `DELETE /v1/orders/open`) 및 원자적 취소 후 재주문(`cancel_and_new_order`) 지원<br>• 2026-08-31 신규 Announcement WebSocket 스트림 연동 | 계좌 조회 REST 부하 0화, 비상 정지 시 일괄 주문 취소 속도 극대화, 실시간 공지/점검 대응 | **완료 (2026-09-19)** |
 
 ---
 

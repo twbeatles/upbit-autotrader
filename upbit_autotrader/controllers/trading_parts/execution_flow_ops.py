@@ -458,6 +458,22 @@ def execute_buy(self, ticker, curr_price):
     if not can_order:
         self.log(order_err)
         return
+
+    # Orderbook Spread & Depth Guard pre-check (optional safety gate)
+    use_ob_guard = bool(
+        getattr(self, "_use_orderbook_guard", lambda: getattr(Config, "DEFAULT_USE_ORDERBOOK_GUARD", False))()
+    )
+    if use_ob_guard and not self._is_paper_mode():
+        from upbit_autotrader.execution.orderbook_guard import analyze_orderbook_depth
+        max_spread_bps = float(
+            getattr(self, "_max_orderbook_spread_bps", lambda: getattr(Config, "DEFAULT_MAX_ORDERBOOK_SPREAD_BPS", 40.0))()
+        )
+        ob_list = self._api_get_orderbook(ticker, count=5) if hasattr(self, "_api_get_orderbook") else []
+        if ob_list and isinstance(ob_list, list) and isinstance(ob_list[0], dict):
+            ob_res = analyze_orderbook_depth(ob_list[0], notional_krw=bet_cash, side="BUY", max_spread_bps=max_spread_bps)
+            if not ob_res.is_safe:
+                self.log(f"[{ticker}] 호가창 가드 차단: {ob_res.reason}")
+                return
     default_fee_bps = float(getattr(Config, "DEFAULT_PAPER_FEE_BPS", 5.0))
     fee_buy_bps, fee_sell_bps = _extract_chance_fee_bps(chance, default_fee_bps)
     try:

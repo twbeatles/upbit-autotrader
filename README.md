@@ -34,8 +34,8 @@ Upbit Pro Algo-Trader는 전문 트레이더와 퀀트 투자자를 위한 다�
 
 ## 주요 특징
 
-- **초저지연 실시간 시세 및 체결 피드**: WebSocket 기반 실시간 호가/체결 데이터 및 Private 이벤트(`myOrder`, `myAsset`) 즉각 수신
-- **공식 최신 REST 클라이언트 내장**: SHA512 JWT 인증 서명, 엔드포인트 그룹별(quotation, exchange, order) 실시간 Rate Limit 추적 및 지수 백오프/재시도
+- **초저지연 실시간 시세 및 체결 피드**: WebSocket 기반 실시간 호가/체결 데이터, Private 이벤트(`myOrder`, `myAsset`), 및 최신 공지사항/점검 스트림(`announcement`) 즉각 수신
+- **공식 최신 REST 클라이언트 내장**: SHA512 JWT 인증 서명, 2026 규격 Rate Limit(주문 그룹 초당 12회 대응), 원자적 취소 후 재주문(`cancel_and_new`), 미체결 일괄 취소(`orders/open`), 포켓 API 지원 및 지수 백오프/재시도
 - **7대 퀀트 전략 & 앙상블 엔진**:
   - 변동성 돌파(Volatility Breakout), 돈치안 채널(Donchian Breakout), EMA 크로스 추세추종(EMA Cross Trend), 시계열 모멘텀(Time-Series Momentum), RSI 평균회귀(RSI Reversion), 볼린저 밴드 평균회귀(Bollinger Reversion), Z-Score 평균회귀(Z-Score Reversion)
   - 단일 전략 모드 및 가중 합산 앙상블(Ensemble) 모드 지원

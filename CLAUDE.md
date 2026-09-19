@@ -98,6 +98,7 @@ pre-commit run --all-files
 - `tests/test_security_cross_platform.py`
 - `tests/test_tick_rules.py`
 - `tests/test_order_api_extensions.py`
+- `tests/test_upbit_api_latest_spec.py`
 
 ## 작업 주의사항
 

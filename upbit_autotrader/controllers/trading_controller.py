@@ -106,6 +106,8 @@ class TraderTradingController(ControllerTypeBase):
     _get_paper_seed_krw = _account_ops._get_paper_seed_krw
     _ensure_paper_service_state = _account_ops._ensure_paper_service_state
     _seed_paper_balance_once = _account_ops._seed_paper_balance_once
+    _handle_ws_asset_event = _account_ops._handle_ws_asset_event
+    _handle_ws_announcement_event = _account_ops._handle_ws_announcement_event
 
     _place_buy_order = _order_api_ops._place_buy_order
     _place_sell_order = _order_api_ops._place_sell_order
@@ -115,6 +117,8 @@ class TraderTradingController(ControllerTypeBase):
     _api_get_balances = _order_api_ops._api_get_balances
     _api_get_order_chance = _order_api_ops._api_get_order_chance
     _api_cancel_order = _order_api_ops._api_cancel_order
+    _api_cancel_open_orders = _order_api_ops._api_cancel_open_orders
+    _api_cancel_and_new_order = _order_api_ops._api_cancel_and_new_order
     _api_buy_market_order = _order_api_ops._api_buy_market_order
     _api_sell_market_order = _order_api_ops._api_sell_market_order
     _safe_get_order = _order_api_ops._safe_get_order

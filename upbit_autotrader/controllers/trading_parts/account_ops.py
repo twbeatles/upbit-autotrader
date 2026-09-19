@@ -8,19 +8,53 @@ from upbit_autotrader.core.config import Config
 
 
 def _handle_ws_asset_event(self, data: dict):
-    """Handle real-time private myAsset WebSocket events."""
+    """Private WebSocket myAsset 실시간 자산 변동 이벤트 처리."""
     if not isinstance(data, dict):
         return
-    currency = str(data.get("currency") or "").upper()
-    balance_val = data.get("balance")
-    if currency == "KRW" and balance_val is not None:
-        try:
-            self.balance = float(balance_val)
-            if hasattr(self, "lbl_balance"):
-                paper_tag = " [PAPER]" if self._is_paper_mode() else ""
-                self.lbl_balance.setText(f"💰 주문가능금액: {self.balance:,.0f} 원{paper_tag}")
-        except Exception:
-            pass
+    try:
+        assets = data.get("assets")
+        if not isinstance(assets, list):
+            # Single asset structure fallback
+            assets = [data] if "currency" in data else []
+
+        for asset in assets:
+            if not isinstance(asset, dict):
+                continue
+            currency = str(asset.get("currency") or "").upper().strip()
+            if not currency:
+                continue
+
+            try:
+                bal = float(asset.get("balance", 0.0) or 0.0)
+                locked = float(asset.get("locked", 0.0) or 0.0)
+                avg_price = float(asset.get("avg_buy_price", 0.0) or 0.0)
+            except (TypeError, ValueError):
+                continue
+
+            if currency == "KRW":
+                self.balance = bal
+                if hasattr(self, "lbl_balance"):
+                    is_paper = bool(callable(getattr(self, "_is_paper_mode", None)) and self._is_paper_mode())
+                    paper_tag = " [PAPER]" if is_paper else ""
+                    self.lbl_balance.setText(f"💰 주문가능금액: {bal:,.0f} 원{paper_tag}")
+            else:
+                ticker = f"KRW-{currency}"
+                if hasattr(self, "universe") and ticker in self.universe:
+                    info = self.universe[ticker]
+                    total_qty = bal + locked
+                    info["qty"] = total_qty
+                    if avg_price > 0:
+                        info["buy_price"] = avg_price
+                    ui_items = info.get("ui_items", {})
+                    qty_item = ui_items.get("qty")
+                    if qty_item is not None:
+                        qty_item.setText(f"{total_qty:.8f}")
+                    bp_item = ui_items.get("buy_price")
+                    if bp_item is not None and avg_price > 0:
+                        bp_item.setText(f"{avg_price:,.0f}")
+    except Exception as exc:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"Error handling WebSocket asset event: {exc}")
 
 
 def get_balance(self):
@@ -325,3 +359,34 @@ def _seed_paper_balance_once(self):
         self._paper_seeded = True
     except Exception:
         return
+
+
+def _handle_ws_announcement_event(self, data: dict):
+    """Private WebSocket announcement 실시간 공지사항 수신 처리 (2026-08-31 신규 규격)."""
+    if not isinstance(data, dict):
+        return
+    try:
+        category = str(data.get("category") or "notice").lower()
+        title = str(data.get("title") or "")
+        event_type = str(data.get("event_type") or "CREATED").upper()
+        if not title:
+            return
+
+        tag = "신규공지" if event_type == "CREATED" else "공지갱신"
+        msg = f"📢 [업비트 {tag}/{category}] {title}"
+        if hasattr(self, "log"):
+            self.log(msg)
+        if hasattr(self, "logger"):
+            self.logger.info(f"WebSocket Announcement: {msg}")
+
+        # 서버 점검 등 매매에 치명적인 공지 발생 시 강조 경고
+        if category in ("maintenance", "점검"):
+            warn_msg = f"⚠️ [서버점검 주의] 업비트 시스템 점검 공지 수신: {title}"
+            if hasattr(self, "log"):
+                self.log(warn_msg)
+            if hasattr(self, "_ops_alert"):
+                self._ops_alert(level="warning", message=warn_msg, key="upbit_maintenance_notice", cooldown=30.0)
+    except Exception as exc:
+        if hasattr(self, "logger"):
+            self.logger.warning(f"Error handling WebSocket announcement event: {exc}")
+

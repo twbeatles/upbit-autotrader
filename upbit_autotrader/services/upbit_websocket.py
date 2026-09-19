@@ -14,6 +14,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import jwt
 
+from upbit_autotrader.core.config import Config
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -38,6 +40,8 @@ class UpbitWebSocketClient:
         on_ticker: Optional[Callable[[str, float, Dict[str, Any]], None]] = None,
         on_my_order: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_my_asset: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_announcement: Optional[Callable[[Dict[str, Any]], None]] = None,
+        announcement_categories: Optional[List[str]] = None,
         on_error: Optional[Callable[[Exception], None]] = None,
     ):
         self.access_key = str(access_key or "").strip()
@@ -46,6 +50,8 @@ class UpbitWebSocketClient:
         self.on_ticker = on_ticker
         self.on_my_order = on_my_order
         self.on_my_asset = on_my_asset
+        self.on_announcement = on_announcement
+        self.announcement_categories = list(announcement_categories if announcement_categories is not None else getattr(Config, "DEFAULT_WS_ANNOUNCEMENT_CATEGORIES", ["trade", "notice", "maintenance"]))
         self.on_error = on_error
 
         self._ws: Optional[Any] = None
@@ -91,6 +97,11 @@ class UpbitWebSocketClient:
         if self.access_key and self.secret_key:
             fields.append({"type": "myOrder", "codes": codes})
             fields.append({"type": "myAsset"})
+            if self.on_announcement is not None:
+                ann_field: Dict[str, Any] = {"type": "announcement", "include_body": False}
+                if self.announcement_categories:
+                    ann_field["categories"] = self.announcement_categories
+                fields.append(ann_field)
 
         fields.append({"format": "DEFAULT"})
         return json.dumps(fields)
@@ -195,6 +206,12 @@ class UpbitWebSocketClient:
                     self.on_my_asset(data)
                 except Exception as e:
                     logger.warning(f"Error in on_my_asset callback: {e}")
+        elif msg_type == "announcement":
+            if self.on_announcement:
+                try:
+                    self.on_announcement(data)
+                except Exception as e:
+                    logger.warning(f"Error in on_announcement callback: {e}")
 
     def _on_ws_error(self, ws: Any, error: Any) -> None:
         self._is_connected = False

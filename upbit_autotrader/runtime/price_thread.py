@@ -24,6 +24,7 @@ class PriceUpdateThread(QThread):
     price_updated = pyqtSignal(dict)
     order_event_received = pyqtSignal(dict)
     asset_event_received = pyqtSignal(dict)
+    announcement_event_received = pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,6 +46,10 @@ class PriceUpdateThread(QThread):
     def _on_ws_my_asset(self, data: dict):
         # Emit Qt Signal for real-time asset balance updates
         self.asset_event_received.emit(data)
+
+    def _on_ws_announcement(self, data: dict):
+        # Emit Qt Signal for real-time Upbit notice/maintenance/trade announcements
+        self.announcement_event_received.emit(data)
 
     def set_coins(self, coins):
         with self._coins_lock:
@@ -76,6 +81,7 @@ class PriceUpdateThread(QThread):
                 on_ticker=self._on_ws_ticker,
                 on_my_order=self._on_ws_my_order,
                 on_my_asset=self._on_ws_my_asset,
+                on_announcement=self._on_ws_announcement,
             )
             self._ws_client.start()
         except Exception as e:

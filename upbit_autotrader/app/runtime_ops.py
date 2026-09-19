@@ -19,6 +19,8 @@ def _create_price_thread(self):
         self.price_thread.order_event_received.connect(self._handle_ws_order_event)
     if hasattr(self, "_handle_ws_asset_event"):
         self.price_thread.asset_event_received.connect(self._handle_ws_asset_event)
+    if hasattr(self, "_handle_ws_announcement_event"):
+        self.price_thread.announcement_event_received.connect(self._handle_ws_announcement_event)
 
 
 def _restart_price_thread(self, coins):

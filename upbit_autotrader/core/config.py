@@ -229,7 +229,9 @@ class Config:
         "quotation_orderbook": 0.11,
         "exchange": 0.04,
         "exchange_default": 0.04,
-        "order": 0.13,
+        "order": 0.09,
+        "order-test": 0.13,
+        "order-cancel-all": 2.0,
         "default": 0.05,
     }
     API_BACKOFF_BASE_SEC = 0.4
@@ -239,6 +241,7 @@ class Config:
     DEFAULT_AUTO_RECOVER_OPEN_ORDERS = True
     DEFAULT_USE_ORDERBOOK_GUARD = False
     DEFAULT_MAX_ORDERBOOK_SPREAD_BPS = 40.0
+    DEFAULT_WS_ANNOUNCEMENT_CATEGORIES = ["trade", "notice", "maintenance"]
 
     MAX_LOG_LINES = 500
     INDICATOR_CACHE_TTL_BY_INTERVAL = {

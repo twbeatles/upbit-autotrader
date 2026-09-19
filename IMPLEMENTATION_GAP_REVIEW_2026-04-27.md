@@ -16,6 +16,12 @@
 - live 주문 복구 상태 저장 OFF 경고
 - `pyupbit` 선택 의존성 fallback과 pyright stub
 - UTF-8 문서 무결성 점검
+- Open API Rate Limit 주문 그룹 12 req/s 상향 및 deprecated `min` 필드 스로틀링 해소 (2026-08-21 규격)
+- Open API 요청 헤더 중복 전송 방지 및 DELETE 규격화 (2026-07-31 규격)
+- 신규 Announcement WebSocket 실시간 스트림 및 점검/상장 긴급 알림 연동 (2026-08-31 신규)
+- 원자적 취소 후 재주문(`cancel_and_new_order`) 및 미체결 일괄 취소(`cancel_open_orders`), 포켓 API 지원
+- Private WebSocket `myAsset` 실시간 잔고 테이블 즉각 반영 연동
+- Orderbook Guard(호가 스프레드/깊이) 실시간 매수 진입 파이프라인 안전 결합
 
 ## 현재 기준 문서
 
