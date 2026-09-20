@@ -22,6 +22,14 @@ upbit_autotrader/
   strategies/                  # engine, catalog, legacy strategy, meta signal
   risk/, execution/, market_regime/, runtime/
   analytics/, backtesting/, notifications/, ui/
+    backtesting/             # models, engine, strategies, registry (backtester.py는 shim)
+    ui/dialogs/              # styles, preset, help, settings, emergency
+    indicators/              # models, momentum, trend, volume, facade (indicators.py는 shim)
+    controllers/trading_parts/
+      execution/             # validation, ws_events, twap, reconcile, buy_flow, sell_flow (execution_flow_ops.py는 shim)
+      order_api/             # auth, placement, chance, query, cancel, retry (order_api_ops.py는 shim)
+    services/upbit/            # auth, transport, account, orders(placement/query/cancel), market (UpbitRestClient facade)
+    market_regime/providers/   # base, breadth, btc_trend, fear_greed, global, etf_flow, snapshot
 ```
 
 루트 실행 진입점은 `upbit_trader.py`만 유지합니다. 새 구현은 `upbit_autotrader.*` 경로에 추가하고, 이전 import 호환은 `legacy_wrappers/`에 둡니다.
@@ -51,7 +59,7 @@ upbit_autotrader/
 - `initial_balance`는 호환용으로 남기되 신규 리스크 계산의 주 기준으로 사용하지 않습니다.
 - `use_market_regime_filter`가 켜져 있으면 시장 레짐 점수가 기준 미만일 때 BUY를 차단합니다.
 - `fail_closed_on_stale_market_regime`이 켜져 있으면 핵심 레짐 데이터가 stale/error일 때 신규 진입을 차단합니다.
-- 시장 레짐 관련 코드는 `market_regime/engine.py`, `market_regime/providers.py`, `runtime/market_regime_thread.py`, `controllers/trading_parts/market_regime_ops.py`에 분리되어 있습니다.
+- 시장 레짐 관련 코드는 `market_regime/engine.py`, `market_regime/providers/` 패키지, `runtime/market_regime_thread.py`, `controllers/trading_parts/market_regime_ops.py`에 분리되어 있습니다.
 
 ## UI 및 설정
 
