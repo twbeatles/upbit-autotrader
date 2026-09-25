@@ -17,7 +17,7 @@ upbit_autotrader/
     history_controller.py
     batch_controller.py
     trading_parts/             # account, lifecycle, order, execution, signal, risk
-    ui_parts/                  # layout, dashboard, strategy, menu, preset, advanced tab
+    ui_parts/                  # layout, dashboard, strategy, trading-view, order-ticket, row-actions, menu, preset, advanced tab
   services/                    # settings, security, order, paper order, holdings, rate-limit
   strategies/                  # engine, catalog, legacy strategy, meta signal
   risk/, execution/, market_regime/, runtime/
@@ -28,7 +28,7 @@ upbit_autotrader/
     controllers/trading_parts/
       execution/             # validation, ws_events, twap, reconcile, buy_flow, sell_flow (execution_flow_ops.py는 shim)
       order_api/             # auth, placement, chance, query, cancel, retry (order_api_ops.py는 shim)
-    services/upbit/            # auth, transport, account, orders(placement/query/cancel), market (UpbitRestClient facade)
+    services/upbit/            # auth, transport, account(+deposits/withdraws), orders(+test), market(+ticks), websocket(+trade/orderbook) (UpbitRestClient facade)
     market_regime/providers/   # base, breadth, btc_trend, fear_greed, global, etf_flow, snapshot
 ```
 
@@ -85,6 +85,10 @@ pre-commit run --all-files
 - `tests/test_trader_surface_parity.py`
 - `tests/test_trading_parts_facade_parity.py`
 - `tests/test_ui_advanced_tab_surface.py`
+- `tests/test_trading_view.py`
+- `tests/test_order_ticket.py`
+- `tests/test_row_actions.py`
+- `tests/test_transfer_tab.py`
 
 주문/리스크/시장 레짐을 바꾸면 아래 테스트도 함께 확인합니다.
 
@@ -107,6 +111,7 @@ pre-commit run --all-files
 - `tests/test_tick_rules.py`
 - `tests/test_order_api_extensions.py`
 - `tests/test_upbit_api_latest_spec.py`
+- `tests/test_upbit_missing_endpoints.py`
 
 ## 작업 주의사항
 

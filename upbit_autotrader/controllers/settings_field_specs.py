@@ -130,6 +130,7 @@ COMMON_FIELD_SPECS: tuple[FieldSpec, ...] = (
     FieldSpec("auto_recover_open_orders", "chk_auto_recover_open_orders", "check", _cfg("DEFAULT_AUTO_RECOVER_OPEN_ORDERS")),
     FieldSpec("use_orderbook_guard", "chk_use_orderbook_guard", "check", _cfg("DEFAULT_USE_ORDERBOOK_GUARD")),
     FieldSpec("max_orderbook_spread_bps", "spin_max_orderbook_spread_bps", "spin", _cfg("DEFAULT_MAX_ORDERBOOK_SPREAD_BPS")),
+    FieldSpec("ticket_require_confirm", "chk_ticket_require_confirm", "check", _cfg("DEFAULT_TICKET_REQUIRE_CONFIRM")),
 )
 
 

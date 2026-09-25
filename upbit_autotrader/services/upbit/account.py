@@ -63,3 +63,57 @@ class UpbitAccountMixin:
             return []
         res = self._request("GET", f"/v1/pockets/{pocket_id}/balance", rate_group="exchange")
         return list(res) if isinstance(res, list) else []
+
+    def get_deposits(
+        self,
+        currency: Optional[str] = None,
+        limit: int = 100,
+        page: int = 1,
+        order_by: str = "desc",
+    ) -> List[Dict[str, Any]]:
+        """GET /v1/deposits - 입금 목록 조회 (읽기 전용)."""
+        params: Dict[str, Any] = {
+            "limit": max(1, min(100, int(limit))),
+            "page": max(1, int(page)),
+            "order_by": str(order_by or "desc").lower(),
+        }
+        if currency:
+            params["currency"] = str(currency).upper().replace("KRW-", "")
+        res = self._request("GET", "/v1/deposits", params=params, rate_group="exchange")
+        return list(res) if isinstance(res, list) else []
+
+    def get_withdraws(
+        self,
+        currency: Optional[str] = None,
+        limit: int = 100,
+        page: int = 1,
+        order_by: str = "desc",
+    ) -> List[Dict[str, Any]]:
+        """GET /v1/withdraws - 출금 목록 조회 (읽기 전용, 자동 출금 없음)."""
+        params: Dict[str, Any] = {
+            "limit": max(1, min(100, int(limit))),
+            "page": max(1, int(page)),
+            "order_by": str(order_by or "desc").lower(),
+        }
+        if currency:
+            params["currency"] = str(currency).upper().replace("KRW-", "")
+        res = self._request("GET", "/v1/withdraws", params=params, rate_group="exchange")
+        return list(res) if isinstance(res, list) else []
+
+    def get_withdraw_chance(self, currency: str) -> Optional[Dict[str, Any]]:
+        """GET /v1/withdraws/chance?currency={currency} - 출금 가능 정보 조회."""
+        cur = str(currency or "").upper().replace("KRW-", "").strip()
+        if not cur:
+            return None
+        return self._request(
+            "GET", "/v1/withdraws/chance", params={"currency": cur}, rate_group="exchange"
+        )
+
+    def get_deposit_address(self, currency: str) -> Optional[Dict[str, Any]]:
+        """GET /v1/deposit/address?currency={currency} - 입금 주소 조회 (읽기 전용)."""
+        cur = str(currency or "").upper().replace("KRW-", "").strip()
+        if not cur:
+            return None
+        return self._request(
+            "GET", "/v1/deposit/address", params={"currency": cur}, rate_group="exchange"
+        )

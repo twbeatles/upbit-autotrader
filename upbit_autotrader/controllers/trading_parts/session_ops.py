@@ -159,6 +159,12 @@ def start_trading(self):
                     'max_profit': self.table.item(row, 8),
                     'invest': self.table.item(row, 9),
                 }
+                attach_buttons = getattr(self, '_attach_row_trade_buttons', None)
+                if callable(attach_buttons):
+                    try:
+                        attach_buttons(row, coin)
+                    except Exception as e:
+                        self.log(f'[WARN] {coin} 행 버튼 생성 실패: {e}')
 
                 if holding_qty > 0 and self.strategy:
                     self.strategy.set_holding_start(coin)

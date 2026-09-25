@@ -20,6 +20,7 @@ from upbit_autotrader.controllers.trading_parts import (
     signal_ops as _signal_ops,
     strategy_config_ops as _strategy_config_ops,
 )
+from upbit_autotrader.controllers.ui_parts import row_action_ops as _row_action_ops
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.market_regime import build_neutral_market_regime_output
 from upbit_autotrader.risk.portfolio_risk import RiskLimitConfig, build_portfolio_risk_snapshot, evaluate_risk_limits
@@ -111,6 +112,9 @@ class TraderTradingController(ControllerTypeBase):
 
     _place_buy_order = _order_api_ops._place_buy_order
     _place_sell_order = _order_api_ops._place_sell_order
+    _attach_row_trade_buttons = _row_action_ops.attach_row_trade_buttons
+    row_quick_buy = _row_action_ops.row_quick_buy
+    row_quick_sell = _row_action_ops.row_quick_sell
     _safe_log_order_error = _order_api_ops._safe_log_order_error
     _api_get_order = _order_api_ops._api_get_order
     _api_get_balance = _order_api_ops._api_get_balance

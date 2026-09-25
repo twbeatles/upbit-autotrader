@@ -158,6 +158,56 @@ class UpbitMarketMixin:
         res = self._request("GET", "/v1/candles/months", params=params, rate_group="quotation_candle", auth=False)
         return list(res) if isinstance(res, list) else []
 
+    def get_tickers(
+        self,
+        markets,
+    ):
+        """GET /v1/ticker - 종목 티커 상세 목록 조회 (등락률·고저가 포함, 증권앱 관심종목용)."""
+        if not markets:
+            return []
+        market_str = ",".join(markets) if isinstance(markets, list) else str(markets).strip()
+        if not market_str:
+            return []
+        res = self._request(
+            "GET",
+            "/v1/ticker",
+            params={"markets": market_str},
+            rate_group="quotation_ticker",
+            auth=False,
+        )
+        return list(res) if isinstance(res, list) else []
+
+    def get_recent_trades(
+        self,
+        market,
+        count=20,
+        to=None,
+        cursor=None,
+        days_ago=None,
+    ):
+        """GET /v1/trades/ticks - 최근 체결 내역 조회 (count 1~500)."""
+        market_str = str(market or "").strip()
+        if not market_str:
+            return []
+        params = {
+            "market": market_str,
+            "count": max(1, min(500, int(count))),
+        }
+        if to:
+            params["to"] = str(to)
+        if cursor:
+            params["cursor"] = str(cursor)
+        if days_ago is not None:
+            params["daysAgo"] = max(0, min(7, int(days_ago)))
+        res = self._request(
+            "GET",
+            "/v1/trades/ticks",
+            params=params,
+            rate_group="quotation",
+            auth=False,
+        )
+        return list(res) if isinstance(res, list) else []
+
     def get_ohlcv(
         self,
         ticker: str,

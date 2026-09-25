@@ -46,10 +46,12 @@ def init_ui(self):
 
 def create_tab_widget(self):
     tab_widget = QTabWidget()
+    tab_widget.addTab(self.create_trading_view(), "📈 트레이딩")
     tab_widget.addTab(self.create_strategy_tab(), "⚙️ 전략 설정")
     tab_widget.addTab(self.create_advanced_tab(), "🔬 고급 설정")
     tab_widget.addTab(self.create_statistics_tab(), "📊 거래 통계")
     tab_widget.addTab(self.create_history_tab(), "📝 거래 내역")
+    tab_widget.addTab(self.create_transfer_tab(), "💳 입출금")
     tab_widget.addTab(self.create_ops_tab(), "🛠️ 운영/수동검토")
     return tab_widget
 
@@ -59,7 +61,7 @@ def create_splitter(self):
     splitter.setChildrenCollapsible(False)
 
     self.table = QTableWidget()
-    cols = ["코인명", "현재가", "목표가", "MA(5)", "상태", "보유수량", "매입가", "수익률", "최고수익률", "투자금"]
+    cols = ["코인명", "현재가", "목표가", "MA(5)", "상태", "보유수량", "매입가", "수익률", "최고수익률", "투자금", "매수", "매도"]
     self.table.setColumnCount(len(cols))
     self.table.setHorizontalHeaderLabels(cols)
     header = self.table.horizontalHeader()

@@ -8,6 +8,8 @@ from upbit_autotrader.controllers.ui_parts import (
     menu_tray_ops as _menu_tray_ops,
     preset_ops as _preset_ops,
     strategy_tab_ops as _strategy_tab_ops,
+    order_ticket_ops as _order_ticket_ops,
+    trading_view_ops as _trading_view_ops,
 )
 from upbit_autotrader.controllers.ui_sections import build_advanced_tab, build_ops_tab
 from upbit_autotrader.core.config import Config
@@ -43,6 +45,8 @@ class TraderUIController(ControllerTypeBase):
     create_dashboard = _dashboard_ops.create_dashboard
     create_tab_widget = _layout_ops.create_tab_widget
     create_strategy_tab = _strategy_tab_ops.create_strategy_tab
+    create_trading_view = _trading_view_ops.build_trading_view
+    create_order_ticket = _order_ticket_ops.build_order_ticket
     create_statistics_tab = _dashboard_ops.create_statistics_tab
     create_splitter = _layout_ops.create_splitter
     create_statusbar = _dashboard_ops.create_statusbar

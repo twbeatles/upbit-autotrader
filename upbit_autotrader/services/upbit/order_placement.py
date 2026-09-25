@@ -89,6 +89,33 @@ class UpbitOrderPlacementMixin:
 
         return self._request("POST", "/v1/orders", json_data=body, rate_group="order")
 
+    def test_order(
+        self,
+        market,
+        side,
+        volume=None,
+        price=None,
+        ord_type="limit",
+        identifier=None,
+        time_in_force=None,
+    ):
+        """POST /v1/order/test - 주문 테스트 (실제 체결 없음, 티켓 dry-run 검증용)."""
+        ot = str(ord_type).lower()
+        body = {
+            "market": str(market),
+            "side": str(side).lower(),
+            "ord_type": ot,
+        }
+        if volume is not None:
+            body["volume"] = str(volume)
+        if price is not None:
+            body["price"] = str(price)
+        if identifier:
+            body["identifier"] = str(identifier).strip()
+        if time_in_force:
+            body["time_in_force"] = str(time_in_force).lower()
+        return self._request("POST", "/v1/order/test", json_data=body, rate_group="order-test")
+
     def buy_market_order(
         self,
         ticker: str,

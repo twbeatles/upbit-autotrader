@@ -1,4 +1,4 @@
-﻿import datetime
+import datetime
 import json
 import logging
 import os
@@ -11,8 +11,10 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -37,6 +39,20 @@ except ImportError:
     volatility_breakout_strategy = cast(Any, None)
     get_strategy_registry = cast(Any, None)
     BACKTESTER_AVAILABLE = False
+
+
+
+def _merge_transfers(deposits, withdraws):
+    """입금/출금 목록을 시간 내림차순으로 병합 (읽기 전용 표시용)."""
+    merged = []
+    for item in deposits or []:
+        if isinstance(item, dict):
+            merged.append({"side": "deposit", "raw": item})
+    for item in withdraws or []:
+        if isinstance(item, dict):
+            merged.append({"side": "withdraw", "raw": item})
+    merged.sort(key=lambda e: str(e["raw"].get("created_at") or ""), reverse=True)
+    return merged
 
 
 class TraderHistoryController(ControllerTypeBase):
@@ -141,6 +157,90 @@ class TraderHistoryController(ControllerTypeBase):
         for record in self.trade_history:
             self._add_history_row(record)
         self.lbl_history_count.setText(f"📝 총 {len(self.trade_history)}건의 거래 기록")
+
+    def create_transfer_tab(self):
+        """입출금 내역 탭 (읽기 전용 조회, 자동 출금 없음)"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setSpacing(10)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("통화:"))
+        self.input_transfer_currency = QLineEdit()
+        self.input_transfer_currency.setPlaceholderText("예: BTC (비우면 전체)")
+        filter_layout.addWidget(self.input_transfer_currency)
+        filter_layout.addWidget(QLabel("건수:"))
+        self.spin_transfer_limit = QSpinBox()
+        self.spin_transfer_limit.setRange(1, 100)
+        self.spin_transfer_limit.setValue(20)
+        filter_layout.addWidget(self.spin_transfer_limit)
+        btn_refresh = QPushButton("🔄 조회")
+        btn_refresh.setToolTip("입금/출금 목록을 거래소에서 조회합니다. (읽기 전용)")
+        btn_refresh.clicked.connect(self.refresh_transfer_history)
+        filter_layout.addWidget(btn_refresh)
+        filter_layout.addStretch(1)
+        layout.addLayout(filter_layout)
+
+        self.lbl_transfer_status = QLabel("조회 버튼을 눌러 입출금 내역을 불러오세요.")
+        layout.addWidget(self.lbl_transfer_status)
+
+        self.transfer_table = QTableWidget()
+        transfer_cols = ["시간", "종류", "통화", "금액", "상태", "TXID"]
+        self.transfer_table.setColumnCount(len(transfer_cols))
+        self.transfer_table.setHorizontalHeaderLabels(transfer_cols)
+        transfer_header = self.transfer_table.horizontalHeader()
+        if transfer_header is not None:
+            transfer_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.transfer_table.setAlternatingRowColors(True)
+        self.transfer_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.transfer_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        layout.addWidget(self.transfer_table)
+        return widget
+
+    def refresh_transfer_history(self):
+        """입출금 목록 조회 후 테이블 갱신."""
+        upbit = getattr(self, "upbit", None)
+        deposits_fn = getattr(upbit, "get_deposits", None)
+        withdraws_fn = getattr(upbit, "get_withdraws", None)
+        if not callable(deposits_fn) or not callable(withdraws_fn):
+            self.lbl_transfer_status.setText("API 연결 후 조회할 수 있습니다.")
+            return
+        currency_widget = getattr(self, "input_transfer_currency", None)
+        currency = ""
+        if currency_widget is not None and hasattr(currency_widget, "text"):
+            currency = str(currency_widget.text()).strip().upper()
+        limit_widget = getattr(self, "spin_transfer_limit", None)
+        limit = 20
+        if limit_widget is not None and hasattr(limit_widget, "value"):
+            limit = int(limit_widget.value())
+        try:
+            raw_deposits: Any = deposits_fn(currency=currency or None, limit=limit)
+            raw_withdraws: Any = withdraws_fn(currency=currency or None, limit=limit)
+            deposits = list(raw_deposits or [])
+            withdraws = list(raw_withdraws or [])
+        except Exception as e:
+            self.lbl_transfer_status.setText(f"조회 실패: {e}")
+            return
+        self.transfer_table.setRowCount(0)
+        for entry in _merge_transfers(deposits, withdraws):
+            raw = entry["raw"]
+            row = self.transfer_table.rowCount()
+            self.transfer_table.insertRow(row)
+            created = str(raw.get("created_at") or "")[:16].replace("T", " ")
+            self.transfer_table.setItem(row, 0, QTableWidgetItem(created or "-"))
+            kind_item = QTableWidgetItem("📥 입금" if entry["side"] == "deposit" else "📤 출금")
+            kind_item.setForeground(QColor("#e63946" if entry["side"] == "deposit" else "#4361ee"))
+            self.transfer_table.setItem(row, 1, kind_item)
+            self.transfer_table.setItem(row, 2, QTableWidgetItem(str(raw.get("currency") or "-")))
+            try:
+                amount_text = f"{float(raw.get('amount', 0.0) or 0.0):.8f}".rstrip("0").rstrip(".")
+            except (TypeError, ValueError):
+                amount_text = str(raw.get("amount") or "-")
+            self.transfer_table.setItem(row, 3, QTableWidgetItem(amount_text or "-"))
+            self.transfer_table.setItem(row, 4, QTableWidgetItem(str(raw.get("status") or raw.get("state") or "-")))
+            self.transfer_table.setItem(row, 5, QTableWidgetItem(str(raw.get("txid") or raw.get("tx_id") or "-")))
+        self.lbl_transfer_status.setText(f"입금 {len(deposits)}건 · 출금 {len(withdraws)}건")
 
     def clear_today_history(self):
         """오늘의 거래 기록 삭제"""

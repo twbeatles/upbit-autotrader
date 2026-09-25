@@ -235,6 +235,12 @@ def _ensure_universe_row(self, ticker):
                 "max_profit": self.table.item(row, 8),
                 "invest": self.table.item(row, 9),
             }
+            attach_buttons = getattr(self, "_attach_row_trade_buttons", None)
+            if callable(attach_buttons):
+                try:
+                    attach_buttons(row, ticker)
+                except Exception:
+                    pass
     return info
 
 

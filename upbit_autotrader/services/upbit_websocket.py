@@ -40,6 +40,8 @@ class UpbitWebSocketClient:
         on_ticker: Optional[Callable[[str, float, Dict[str, Any]], None]] = None,
         on_my_order: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_my_asset: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_trade: Optional[Callable[[Dict[str, Any]], None]] = None,
+        on_orderbook: Optional[Callable[[Dict[str, Any]], None]] = None,
         on_announcement: Optional[Callable[[Dict[str, Any]], None]] = None,
         announcement_categories: Optional[List[str]] = None,
         on_error: Optional[Callable[[Exception], None]] = None,
@@ -50,6 +52,8 @@ class UpbitWebSocketClient:
         self.on_ticker = on_ticker
         self.on_my_order = on_my_order
         self.on_my_asset = on_my_asset
+        self.on_trade = on_trade
+        self.on_orderbook = on_orderbook
         self.on_announcement = on_announcement
         self.announcement_categories = list(announcement_categories if announcement_categories is not None else getattr(Config, "DEFAULT_WS_ANNOUNCEMENT_CATEGORIES", ["trade", "notice", "maintenance"]))
         self.on_error = on_error
@@ -92,6 +96,10 @@ class UpbitWebSocketClient:
 
         # Ticker subscription
         fields.append({"type": "ticker", "codes": codes})
+        if self.on_trade is not None:
+            fields.append({"type": "trade", "codes": codes})
+        if self.on_orderbook is not None:
+            fields.append({"type": "orderbook", "codes": codes})
 
         # Private streams if keys available
         if self.access_key and self.secret_key:
@@ -200,6 +208,18 @@ class UpbitWebSocketClient:
                     self.on_my_order(data)
                 except Exception as e:
                     logger.warning(f"Error in on_my_order callback: {e}")
+        elif msg_type == "trade":
+            if self.on_trade:
+                try:
+                    self.on_trade(data)
+                except Exception as e:
+                    logger.warning(f"Error in on_trade callback: {e}")
+        elif msg_type == "orderbook":
+            if self.on_orderbook:
+                try:
+                    self.on_orderbook(data)
+                except Exception as e:
+                    logger.warning(f"Error in on_orderbook callback: {e}")
         elif msg_type == "myasset":
             if self.on_my_asset:
                 try:

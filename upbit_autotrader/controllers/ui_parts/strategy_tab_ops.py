@@ -105,6 +105,14 @@ def create_strategy_tab(self):
     self.btn_stop.clicked.connect(self.stop_trading)
     self.btn_stop.setEnabled(False)
 
+    ticket = None
+    try:
+        from upbit_autotrader.controllers.ui_parts import order_ticket_ops as _ticket_ops
+        ticket = _ticket_ops.build_order_ticket(self)
+    except Exception:
+        ticket = None
+    if ticket is not None:
+        layout.addWidget(ticket, 5, 0, 1, 6)
     btn_layout.addWidget(self.btn_save)
     btn_layout.addStretch(1)
     btn_layout.addWidget(self.btn_start)

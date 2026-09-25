@@ -240,6 +240,7 @@ class Config:
     DEFAULT_USE_NATIVE_UPBIT_CLIENT = True
     DEFAULT_AUTO_RECOVER_OPEN_ORDERS = True
     DEFAULT_USE_ORDERBOOK_GUARD = False
+    DEFAULT_TICKET_REQUIRE_CONFIRM = True
     DEFAULT_MAX_ORDERBOOK_SPREAD_BPS = 40.0
     DEFAULT_WS_ANNOUNCEMENT_CATEGORIES = ["trade", "notice", "maintenance"]
 
@@ -372,6 +373,8 @@ class Config:
         "auto_recover_open_orders": "시작 시 거래소에 잔존하는 미체결 주문을 감지하여 수동검토 큐에 자동 등록합니다.",
         "use_orderbook_guard": "매수 전 호가창 스프레드 및 잔량 깊이를 사전 점검하여 슬리피지를 방어합니다.",
         "max_orderbook_spread_bps": "허용 가능한 최대 호가창 스프레드(bps)입니다. 초과 시 매수를 보류합니다.",
+        "order_ticket": "단일 종목 수동 주문 티켓입니다. 시장가/지정가/최유리를 지원합니다.",
+        "ticket_confirm": "체크 시 티켓 주문 전 확인 창을 표시합니다. LIVE에서는 항상 확인합니다.",
     }
 
     HELP_CONTENT = {
