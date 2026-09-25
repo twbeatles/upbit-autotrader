@@ -6,8 +6,8 @@ drives chart + orderbook + trades + ticket symbol.
 """
 from typing import Any
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QPainter, QPen
+from PyQt6.QtCore import QPointF, Qt
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QComboBox,
     QGroupBox,
@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -45,7 +46,8 @@ class PriceChartWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._series: list = []
-        self.setMinimumHeight(220)
+        self.setMinimumSize(200, 220)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def set_series(self, prices) -> int:
         clean = []
@@ -65,29 +67,45 @@ class PriceChartWidget(QWidget):
 
     def paintEvent(self, a0) -> None:
         painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.fillRect(self.rect(), QColor("#101020"))
         if len(self._series) < 2:
             painter.setPen(QPen(QColor("#888888")))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "차트 데이터 없음")
             return
-        width = max(1, self.width() - 20)
-        height = max(1, self.height() - 40)
         low = min(self._series)
         high = max(self._series)
         span = (high - low) or 1.0
-        rising = self._series[-1] >= self._series[0]
-        painter.setPen(QPen(QColor(UP_COLOR if rising else DOWN_COLOR), 2))
-        points = []
+        metrics = painter.fontMetrics()
+        high_text = f"{high:,.0f}"
+        low_text = f"{low:,.0f}"
+        gutter = (
+            max(10, metrics.horizontalAdvance(high_text), metrics.horizontalAdvance(low_text)) + 16
+        )
+        top_pad = metrics.ascent() + 10
+        bottom_pad = metrics.descent() + 10
+        plot_w = max(1.0, float(self.width() - gutter - 8))
+        plot_h = max(1.0, float(self.height() - top_pad - bottom_pad))
         count = len(self._series)
+        path = QPainterPath()
         for idx, value in enumerate(self._series):
-            x = 10 + width * idx / (count - 1)
-            y = 20 + height * (1.0 - (value - low) / span)
-            points.append((x, y))
-        for (x1, y1), (x2, y2) in zip(points, points[1:]):
-            painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+            x = gutter + plot_w * idx / (count - 1)
+            y = top_pad + plot_h * (1.0 - (value - low) / span)
+            point = QPointF(x, y)
+            if idx == 0:
+                path.moveTo(point)
+            else:
+                path.lineTo(point)
+        rising = self._series[-1] >= self._series[0]
+        pen = QPen(QColor(UP_COLOR if rising else DOWN_COLOR))
+        pen.setWidthF(2.0)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.drawPath(path)
         painter.setPen(QPen(QColor("#bbbbbb")))
-        painter.drawText(10, 15, f"{high:,.0f}")
-        painter.drawText(10, self.height() - 8, f"{low:,.0f}")
+        painter.drawText(8, top_pad - 4, high_text)
+        painter.drawText(8, self.height() - 4, low_text)
 
 
 def _trading_markets(self) -> list:
@@ -119,6 +137,7 @@ def build_trading_view(self) -> QWidget:
 
     panes = QSplitter(Qt.Orientation.Horizontal)
     panes.setChildrenCollapsible(False)
+    panes.setHandleWidth(6)
 
     watch_group = QGroupBox("⭐ 관심종목")
     watch_layout = QVBoxLayout(watch_group)
@@ -127,6 +146,7 @@ def build_trading_view(self) -> QWidget:
         lambda item: select_trading_symbol(self, str(item.data(Qt.ItemDataRole.UserRole) or ""))
     )
     watch_layout.addWidget(self.list_trading_watchlist)
+    watch_group.setMinimumWidth(150)
     panes.addWidget(watch_group)
 
     center = QWidget()
@@ -146,6 +166,7 @@ def build_trading_view(self) -> QWidget:
     center_layout.addWidget(self.chart_trading, 1)
     self.lbl_trading_status = QLabel("대기 중")
     center_layout.addWidget(self.lbl_trading_status)
+    center.setMinimumWidth(260)
     panes.addWidget(center)
 
     right = QWidget()
@@ -159,17 +180,19 @@ def build_trading_view(self) -> QWidget:
     if ob_header is not None:
         ob_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
     self.table_trading_orderbook.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-    self.table_trading_orderbook.setMaximumHeight(220)
-    right_layout.addWidget(self.table_trading_orderbook)
+    self.table_trading_orderbook.setMinimumHeight(120)
+    right_layout.addWidget(self.table_trading_orderbook, 3)
     right_layout.addWidget(QLabel("⚡ 최근 체결"))
     self.list_trading_trades = QListWidget()
-    self.list_trading_trades.setMaximumHeight(140)
-    right_layout.addWidget(self.list_trading_trades)
+    self.list_trading_trades.setMinimumHeight(80)
+    right_layout.addWidget(self.list_trading_trades, 2)
+    right.setMinimumWidth(200)
     panes.addWidget(right)
 
     panes.setStretchFactor(0, 1)
     panes.setStretchFactor(1, 2)
     panes.setStretchFactor(2, 1)
+    panes.setSizes([220, 560, 260])
     layout.addWidget(panes, 1)
 
     try:

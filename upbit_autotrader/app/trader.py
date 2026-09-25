@@ -11,6 +11,7 @@ try:
 except ImportError:
     pyupbit = None  # type: ignore[assignment]
 
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
 from upbit_autotrader.app import bootstrap_ops as _bootstrap_ops, runtime_ops as _runtime_ops
@@ -47,6 +48,12 @@ class UpbitProTrader(
 
 
 def main():
+    # Fractional Windows scaling (125%/150%) snaps to integer factors by
+    # default, which blurs custom-painted widgets. PassThrough keeps the
+    # real scale factor so the chart renders crisply on HiDPI displays.
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+    )
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     trader = UpbitProTrader()

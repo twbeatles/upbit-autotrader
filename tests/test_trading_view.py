@@ -3,7 +3,7 @@ import os
 from types import SimpleNamespace
 from typing import Any
 
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtWidgets import QApplication, QSplitter
 
 from upbit_autotrader.controllers.ui_parts import trading_view_ops
 from upbit_autotrader.controllers.ui_parts.trading_view_ops import PriceChartWidget
@@ -153,3 +153,44 @@ def test_price_chart_filters_and_paints():
     chart.set_series([])
     pixmap = chart.grab()
     assert pixmap.width() > 0
+
+
+def test_price_chart_paints_at_multiple_window_sizes():
+    """Chart must paint cleanly at 1080p and HiDPI window sizes."""
+    _app()
+    chart = PriceChartWidget()
+    assert chart.set_series([100.0 + i * 0.5 for i in range(120)]) == 120
+    for width, height in [(320, 220), (640, 400), (960, 540), (1280, 720)]:
+        chart.resize(width, height)
+        pixmap = chart.grab()
+        assert not pixmap.isNull()
+        assert pixmap.width() == width
+        assert pixmap.height() == height
+
+
+def test_price_chart_paints_degenerate_series_and_tiny_sizes():
+    """Single-point/empty/huge series and tiny widgets must not break painting."""
+    _app()
+    chart = PriceChartWidget()
+    chart.resize(10, 10)
+    assert chart.set_series([42.0]) == 1
+    assert not chart.grab().isNull()
+    chart.set_series([])
+    assert not chart.grab().isNull()
+    assert chart.set_series([100.0] * 5000) == 5000
+    chart.resize(800, 600)
+    assert not chart.grab().isNull()
+
+
+def test_trading_view_layout_has_dpi_safe_constraints():
+    """Splitter panes keep minimum widths; chart stays expandable."""
+    _app()
+    holder = _holder_with_upbit()
+    assert holder.chart_trading.minimumWidth() >= 200
+    assert holder.chart_trading.minimumHeight() >= 200
+    panes = holder.widget.findChild(QSplitter)
+    assert panes is not None
+    assert panes.handleWidth() >= 4
+    assert panes.count() == 3
+    for index in range(panes.count()):
+        assert panes.widget(index).minimumWidth() > 0

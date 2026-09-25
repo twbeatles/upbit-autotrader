@@ -67,6 +67,7 @@ upbit_autotrader/
 - settings key 추가 시 `controllers/settings_field_specs.py`에 반드시 FieldSpec을 추가합니다.
 - tooltip은 `Config.TOOLTIPS`에 추가합니다.
 - `ui_controller.py`와 `trading_controller.py`는 facade 역할을 유지합니다.
+- 차트 커스텀 페인팅은 float 경로 + 안티앨리어싱 + 폰트 메트릭 기반 여백을 사용하고, `app/trader.py`의 `main()` PassThrough 스케일 정책을 유지합니다.
 
 ## 검증
 
