@@ -50,10 +50,28 @@ class TraderUIController(ControllerTypeBase):
     create_statistics_tab = _dashboard_ops.create_statistics_tab
     create_splitter = _layout_ops.create_splitter
     create_statusbar = _dashboard_ops.create_statusbar
+    refresh_table_empty_state = _layout_ops.refresh_table_empty_state
+    table_state_label = _layout_ops.table_state_label
 
     def init_ui(self):
         self._dark_stylesheet = DARK_STYLESHEET
         return _layout_ops.init_ui(self)
+
+    def notify_info(self, title, message=""):
+        from upbit_autotrader.ui.components.infobar import notify as _notify
+        return _notify(self, title, message, "info")
+
+    def notify_success(self, title, message=""):
+        from upbit_autotrader.ui.components.infobar import notify as _notify
+        return _notify(self, title, message, "success")
+
+    def notify_warning(self, title, message=""):
+        from upbit_autotrader.ui.components.infobar import notify as _notify
+        return _notify(self, title, message, "warning")
+
+    def notify_error(self, title, message=""):
+        from upbit_autotrader.ui.components.infobar import notify as _notify
+        return _notify(self, title, message, "error")
 
     def create_ops_tab(self):
         return build_ops_tab(self)

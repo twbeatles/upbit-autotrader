@@ -14,6 +14,23 @@ def bind_runtime(**kwargs):
     globals().update(kwargs)
 
 
+def _mark_status(self, kind: str) -> None:
+    try:
+        from upbit_autotrader.ui.components.status_badge import set_status_badge
+        set_status_badge(self.status_trading, kind)
+    except Exception:
+        pass
+
+
+def _refresh_table_state(self) -> None:
+    refresh = getattr(self, "refresh_table_empty_state", None)
+    if callable(refresh):
+        try:
+            refresh()
+        except Exception:
+            pass
+
+
 
 def start_trading(self):
     """매매 시작"""
@@ -85,7 +102,7 @@ def start_trading(self):
     self.btn_start.setEnabled(False)
     self.btn_stop.setEnabled(True)
     self.status_trading.setText("● 분석 중")
-    self.status_trading.setStyleSheet("color: #00b4d8;")
+    _mark_status(self, "info")
     
     candle_interval = Config.CANDLE_INTERVALS[self.combo_candle.currentText()]
     holdings_map = self._build_holdings_map(account_holdings)
@@ -177,6 +194,7 @@ def start_trading(self):
                 self.logger.error(f"{coin} 초기화 실패: {e}")
     finally:
         self.table.setUpdatesEnabled(True)
+        _refresh_table_state(self)
     if self.universe and self._enable_account_wide_sync():
         self._sync_account_holdings_to_universe(account_holdings=account_holdings, include_external=True)
     if self.universe:
@@ -191,7 +209,7 @@ def start_trading(self):
             self._restart_market_regime_thread()
         
         self.status_trading.setText("● 매매 중")
-        self.status_trading.setStyleSheet("color: #00b894;")
+        _mark_status(self, "success")
         self.status_realtime.setText(f"실시간: {len(self.universe)}종목 감시")
         
         self.log(f"🚀 자동매매 시작 (총 {len(self.universe)} 코인)")
@@ -214,7 +232,7 @@ def stop_trading(self):
         self.refresh_trade_action_buttons()
     self.btn_stop.setEnabled(False)
     self.status_trading.setText("● 중지됨")
-    self.status_trading.setStyleSheet("color: #e63946;")
+    _mark_status(self, "error")
     self.status_realtime.setText("실시간: 비활성")
     
     self.log("⏹️ 매매가 중지되었습니다")

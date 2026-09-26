@@ -31,6 +31,7 @@ hiddenimports = [
     "jwt",
     "pandas",
     "numpy",
+    "darkdetect",
 
     # PyQt6 (explicit so modulegraph doesn't miss subpackages used indirectly)
     "PyQt6",

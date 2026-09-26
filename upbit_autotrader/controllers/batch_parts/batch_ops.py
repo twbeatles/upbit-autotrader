@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, cast
+from upbit_autotrader.ui.components.infobar import notify_or_fallback as _notify_or_fallback
 
 # Runtime bindings injected by batch_controller facade
 QDialog = cast(Any, None)
@@ -28,7 +29,7 @@ def execute_batch_sell(self):
     # 보유 코인 조회
     holdings = self.get_account_holdings()
     if not holdings:
-        QMessageBox.information(self, "알림", "매도할 코인이 없습니다.")
+        _notify_or_fallback(self, "info", "알림", "매도할 코인이 없습니다.", fallback=lambda: QMessageBox.information(self, "알림", "매도할 코인이 없습니다."))
         return
     
     # 보유 목록 문자열 생성
@@ -52,7 +53,7 @@ def execute_batch_sell(self):
         f"매도할 코인 개수 '{len(holdings)}'를 입력하세요:")
     
     if not ok or text.strip() != str(len(holdings)):
-        QMessageBox.information(self, "취소", "일괄 매도가 취소되었습니다.")
+        _notify_or_fallback(self, "info", "취소", "일괄 매도가 취소되었습니다.", fallback=lambda: QMessageBox.information(self, "취소", "일괄 매도가 취소되었습니다."))
         return
     
     # 일괄 매도 실행
@@ -198,7 +199,7 @@ def execute_batch_buy(self):
         f"매수할 코인 개수 '{len(coins)}'를 입력하세요:")
     
     if not ok or text.strip() != str(len(coins)):
-        QMessageBox.information(self, "취소", "일괄 매수가 취소되었습니다.")
+        _notify_or_fallback(self, "info", "취소", "일괄 매수가 취소되었습니다.", fallback=lambda: QMessageBox.information(self, "취소", "일괄 매수가 취소되었습니다."))
         return
     
     # 일괄 매수 실행

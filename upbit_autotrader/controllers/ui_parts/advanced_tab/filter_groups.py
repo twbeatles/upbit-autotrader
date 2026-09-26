@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_rsi_group(self):
-    group = QGroupBox("📈 RSI 필터")
+    group = QGroupBox("RSI 필터")
     layout = QGridLayout()
     self.chk_use_rsi = QCheckBox("RSI 필터 사용")
     self.chk_use_rsi.setChecked(Config.DEFAULT_USE_RSI)
@@ -26,7 +26,7 @@ def build_rsi_group(self):
 
 
 def build_macd_group(self):
-    group = QGroupBox("📉 MACD 필터")
+    group = QGroupBox("MACD 필터")
     layout = QGridLayout()
     self.chk_use_macd = QCheckBox("MACD 필터 사용 (골든크로스 확인)")
     self.chk_use_macd.setChecked(Config.DEFAULT_USE_MACD)
@@ -37,7 +37,7 @@ def build_macd_group(self):
 
 
 def build_volume_group(self):
-    group = QGroupBox("📊 거래량 필터")
+    group = QGroupBox("거래량 필터")
     layout = QGridLayout()
     self.chk_use_volume = QCheckBox("거래량 필터 사용")
     self.chk_use_volume.setChecked(Config.DEFAULT_USE_VOLUME)

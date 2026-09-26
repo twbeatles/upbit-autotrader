@@ -26,6 +26,7 @@ from PyQt6.QtWidgets import (
 )
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.ui import design_tokens as tokens
 
 CHART_TIMEFRAMES = (
     ("5분", "minutes", 5),
@@ -38,6 +39,19 @@ CHART_TIMEFRAMES = (
 
 UP_COLOR = "#e63946"
 DOWN_COLOR = "#4361ee"
+
+
+def _chart_palette(widget) -> dict:
+    try:
+        from upbit_autotrader.ui.theme import is_dark_mode
+        dark = bool(is_dark_mode())
+    except Exception:
+        dark = True
+    try:
+        widget._chart_dark = dark
+    except Exception:
+        pass
+    return tokens.chart_colors(dark)
 
 
 class PriceChartWidget(QWidget):
@@ -68,9 +82,10 @@ class PriceChartWidget(QWidget):
     def paintEvent(self, a0) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.fillRect(self.rect(), QColor("#101020"))
+        chart_pal = _chart_palette(self)
+        painter.fillRect(self.rect(), QColor(chart_pal["background"]))
         if len(self._series) < 2:
-            painter.setPen(QPen(QColor("#888888")))
+            painter.setPen(QPen(QColor(chart_pal["grid"])))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "차트 데이터 없음")
             return
         low = min(self._series)
@@ -103,7 +118,7 @@ class PriceChartWidget(QWidget):
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         painter.setPen(pen)
         painter.drawPath(path)
-        painter.setPen(QPen(QColor("#bbbbbb")))
+        painter.setPen(QPen(QColor(chart_pal["text"])))
         painter.drawText(8, top_pad - 4, high_text)
         painter.drawText(8, self.height() - 4, low_text)
 
@@ -121,15 +136,15 @@ def _trading_markets(self) -> list:
 def build_trading_view(self) -> QWidget:
     widget = QWidget()
     layout = QVBoxLayout(widget)
-    layout.setSpacing(8)
-    layout.setContentsMargins(12, 12, 12, 12)
+    layout.setSpacing(tokens.SPACE_XS)
+    layout.setContentsMargins(tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM, tokens.SPACE_SM)
 
     header = QHBoxLayout()
     self.lbl_trading_symbol = QLabel("관심종목을 선택하세요")
-    self.lbl_trading_symbol.setStyleSheet("font-size: 16px; font-weight: bold;")
+    symbol_font = self.lbl_trading_symbol.font(); symbol_font.setPointSize(tokens.FONT_SECTION_TITLE); symbol_font.setBold(True); self.lbl_trading_symbol.setFont(symbol_font)
     header.addWidget(self.lbl_trading_symbol)
     header.addStretch(1)
-    btn_refresh = QPushButton("🔄 새로고침")
+    btn_refresh = QPushButton("새로고침")
     btn_refresh.setToolTip("관심종목·차트·호가·체결을 모두 갱신합니다.")
     btn_refresh.clicked.connect(lambda: refresh_trading_all(self))
     header.addWidget(btn_refresh)
@@ -139,7 +154,7 @@ def build_trading_view(self) -> QWidget:
     panes.setChildrenCollapsible(False)
     panes.setHandleWidth(6)
 
-    watch_group = QGroupBox("⭐ 관심종목")
+    watch_group = QGroupBox("관심종목")
     watch_layout = QVBoxLayout(watch_group)
     self.list_trading_watchlist = QListWidget()
     self.list_trading_watchlist.itemClicked.connect(
@@ -153,7 +168,7 @@ def build_trading_view(self) -> QWidget:
     center_layout = QVBoxLayout(center)
     center_layout.setContentsMargins(0, 0, 0, 0)
     chart_bar = QHBoxLayout()
-    chart_bar.addWidget(QLabel("📈 차트"))
+    chart_bar.addWidget(QLabel("차트"))
     self.combo_trading_timeframe = QComboBox()
     for label, _kind, _unit in CHART_TIMEFRAMES:
         self.combo_trading_timeframe.addItem(label)
@@ -172,7 +187,7 @@ def build_trading_view(self) -> QWidget:
     right = QWidget()
     right_layout = QVBoxLayout(right)
     right_layout.setContentsMargins(0, 0, 0, 0)
-    right_layout.addWidget(QLabel("📕/📘 호가"))
+    right_layout.addWidget(QLabel("호가"))
     self.table_trading_orderbook = QTableWidget()
     self.table_trading_orderbook.setColumnCount(2)
     self.table_trading_orderbook.setHorizontalHeaderLabels(["가격", "잔량"])
@@ -182,7 +197,7 @@ def build_trading_view(self) -> QWidget:
     self.table_trading_orderbook.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
     self.table_trading_orderbook.setMinimumHeight(120)
     right_layout.addWidget(self.table_trading_orderbook, 3)
-    right_layout.addWidget(QLabel("⚡ 최근 체결"))
+    right_layout.addWidget(QLabel("최근 체결"))
     self.list_trading_trades = QListWidget()
     self.list_trading_trades.setMinimumHeight(80)
     right_layout.addWidget(self.list_trading_trades, 2)

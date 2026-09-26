@@ -32,6 +32,8 @@ from upbit_autotrader.core.config import Config
 
 
 from .styles import DARK_STYLESHEET
+from upbit_autotrader.ui import design_tokens as tokens
+from upbit_autotrader.ui.theme import is_dark_mode
 
 class PresetManagerDialog(QDialog):
     """Manage strategy presets."""
@@ -60,7 +62,7 @@ class PresetManagerDialog(QDialog):
 
         self.detail_label = QLabel("Select a preset to view details.")
         self.detail_label.setWordWrap(True)
-        self.detail_label.setStyleSheet("padding: 8px; background: #1e293b; border-radius: 6px;")
+        self.detail_label.setStyleSheet(f"padding: {tokens.SPACE_XS}px; background: {tokens.palette(is_dark_mode())['surface_alt']}; border-radius: 6px;")
         list_layout.addWidget(self.detail_label)
 
         group_list.setLayout(list_layout)

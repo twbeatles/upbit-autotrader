@@ -6,7 +6,7 @@ def build_legacy_advanced_groups(self):
     if getattr(self, "strategy", None) is None:
         return groups
 
-    group_adv_risk = QGroupBox("🚀 고급 리스크 관리 (v3.0)")
+    group_adv_risk = QGroupBox("고급 리스크 관리 (v3.0)")
     adv_risk_layout = QGridLayout()
     self.chk_use_cooldown = QCheckBox("재진입 쿨다운 사용")
     self.chk_use_cooldown.setToolTip("매도 후 일정 시간 동안 동일 코인 재매수 방지\n휩쏘에 휘둘리지 않도록 보호")
@@ -32,7 +32,7 @@ def build_legacy_advanced_groups(self):
     group_adv_risk.setLayout(adv_risk_layout)
     groups.append(group_adv_risk)
 
-    group_adv_algo = QGroupBox("🧠 고급 알고리즘 (v3.0)")
+    group_adv_algo = QGroupBox("고급 알고리즘 (v3.0)")
     adv_algo_layout = QGridLayout()
     self.chk_use_mtf = QCheckBox("다중 시간프레임(MTF) 분석")
     self.chk_use_mtf.setToolTip("일봉과 단기봉 추세 일치 시에만 매수")
@@ -51,22 +51,11 @@ def build_legacy_advanced_groups(self):
     group_adv_algo.setLayout(adv_algo_layout)
     groups.append(group_adv_algo)
 
-    group_emergency = QGroupBox("🚨 긴급 조치")
+    group_emergency = QGroupBox("긴급 조치")
     emergency_layout = QHBoxLayout()
-    self.btn_emergency_close = QPushButton("🚨 전량 긴급 청산")
-    self.btn_emergency_close.setStyleSheet(
-        """
-            QPushButton {
-                background-color: #e63946;
-                font-weight: bold;
-                font-size: 14px;
-                padding: 15px 30px;
-            }
-            QPushButton:hover {
-                background-color: #d62839;
-            }
-        """
-    )
+    self.btn_emergency_close = QPushButton("전량 긴급 청산")
+    self.btn_emergency_close.setProperty("destructive", True)
+    self.btn_emergency_close.setMinimumHeight(44)
     self.btn_emergency_close.clicked.connect(self.show_emergency_dialog)
     self.btn_emergency_close.setToolTip("모든 보유 코인을 시장가로 즉시 매도합니다")
     emergency_layout.addWidget(self.btn_emergency_close)

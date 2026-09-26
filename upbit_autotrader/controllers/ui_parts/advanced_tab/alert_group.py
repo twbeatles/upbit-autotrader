@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_alert_group(self):
-    group = QGroupBox("🔔 운영 알림 채널")
+    group = QGroupBox("운영 알림 채널")
     layout = QGridLayout()
     self.chk_enable_discord_alerts = QCheckBox("Discord 알림 사용")
     self.chk_enable_discord_alerts.setChecked(Config.DEFAULT_ENABLE_DISCORD_ALERTS)

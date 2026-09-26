@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_execution_group(self):
-    group = QGroupBox("⚙️ 실행 모델 / TWAP")
+    group = QGroupBox("실행 모델 / TWAP")
     layout = QGridLayout()
 
     self.chk_use_execution_model = QCheckBox("실행 모델 사용")

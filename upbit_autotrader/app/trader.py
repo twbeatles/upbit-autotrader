@@ -20,6 +20,7 @@ from upbit_autotrader.controllers.history_controller import TraderHistoryControl
 from upbit_autotrader.controllers.settings_controller import TraderSettingsController
 from upbit_autotrader.controllers.trading_controller import TraderTradingController
 from upbit_autotrader.controllers.ui_controller import TraderUIController
+from upbit_autotrader.ui.theme import configure_main_window, setup_app_theme
 
 
 class UpbitProTrader(
@@ -56,7 +57,9 @@ def main():
     )
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    setup_app_theme(app)
     trader = UpbitProTrader()
+    configure_main_window(trader)
     trader.show()
     return app.exec()
 

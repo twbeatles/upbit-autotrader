@@ -24,6 +24,7 @@ upbit_autotrader/
   analytics/, backtesting/, notifications/, ui/
     backtesting/             # models, engine, strategies, registry (backtester.py는 shim)
     ui/dialogs/              # styles, preset, help, settings, emergency
+    ui/                      # design_tokens, theme, components (Fluent shell per DESKTOP_UI_DESIGN_RULES.md)
     indicators/              # models, momentum, trend, volume, facade (indicators.py는 shim)
     controllers/trading_parts/
       execution/             # validation, ws_events, twap, reconcile, buy_flow, sell_flow (execution_flow_ops.py는 shim)
@@ -68,6 +69,8 @@ upbit_autotrader/
 - tooltip은 `Config.TOOLTIPS`에 추가합니다.
 - `ui_controller.py`와 `trading_controller.py`는 facade 역할을 유지합니다.
 - 차트 커스텀 페인팅은 float 경로 + 안티앨리어싱 + 폰트 메트릭 기반 여백을 사용하고, `app/trader.py`의 `main()` PassThrough 스케일 정책을 유지합니다.
+- UI는 PyQt6 바인딩을 유지하고 `ui/design_tokens.py` + `ui/theme.py` + `ui/components/` 기반 Fluent 스타일을 적용합니다 (페이지별 inline QSS·emoji 아이콘 금지, `DESKTOP_UI_DESIGN_RULES.md`가 설계 계약).
+- 결과 피드백은 `notify_*`/InfoBar를 우선하고, modal `QMessageBox`는 확인·삭제 등 차단형에만 사용합니다.
 
 ## 검증
 

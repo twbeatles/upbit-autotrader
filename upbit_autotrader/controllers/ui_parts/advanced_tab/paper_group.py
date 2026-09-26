@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_paper_group(self):
-    group = QGroupBox("🧪 페이퍼 트레이딩")
+    group = QGroupBox("페이퍼 트레이딩")
     layout = QGridLayout()
     self.chk_paper_trading = QCheckBox("페이퍼 트레이딩 사용")
     self.chk_paper_trading.setChecked(Config.DEFAULT_PAPER_TRADING)

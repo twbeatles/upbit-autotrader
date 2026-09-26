@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_sizing_group(self):
-    group = QGroupBox("📐 확장 리스크/사이징")
+    group = QGroupBox("확장 리스크/사이징")
     layout = QGridLayout()
 
     self.chk_use_risk_budget_sizing = QCheckBox("리스크 예산 기반 사이징 사용")

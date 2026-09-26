@@ -10,6 +10,7 @@ import uuid
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
 from upbit_autotrader.services.rate_limit import is_rate_limit_error
+from upbit_autotrader.ui.components.status_badge import set_status_badge
 from upbit_autotrader.services.upbit_client import UpbitRestClient
 
 try:
@@ -17,6 +18,17 @@ try:
 except ImportError:
     pyupbit = pyupbit_fallback
 
+
+
+def _set_login_busy(self, busy: bool) -> None:
+    btn = getattr(self, "btn_login", None)
+    if btn is None:
+        return
+    try:
+        btn.setEnabled(not busy)
+        btn.setText("접속 중..." if busy else "시스템 접속")
+    except Exception:
+        pass
 
 
 def login(self):
@@ -29,7 +41,8 @@ def login(self):
 
     self.log("🔄 업비트 API 연결 시도 중...")
     self.lbl_connection.setText("● 연결 중...")
-    self.lbl_connection.setStyleSheet("color: #ffc107; font-weight: bold;")
+    set_status_badge(self.lbl_connection, "warning")
+    _set_login_busy(self, True)
 
     try:
         self._ensure_order_stability_state()
@@ -53,17 +66,19 @@ def login(self):
         self._seed_paper_balance_once()
         self.lbl_balance.setText(f"💰 주문가능금액: {float(balance):,.0f} 원")
         self.lbl_connection.setText("● 연결됨")
-        self.lbl_connection.setStyleSheet("color: #00b894; font-weight: bold;")
+        set_status_badge(self.lbl_connection, "success")
         if hasattr(self, "refresh_trade_action_buttons"):
             self.refresh_trade_action_buttons()
         self.log(f"✅ 업비트 API 연결 성공 (잔고: {float(balance):,.0f}원)")
         self.logger.info(f"API 연결 성공, 잔고: {float(balance):,.0f}원")
+        _set_login_busy(self, False)
     except Exception as e:
         self.is_connected = False
         self.lbl_connection.setText("● 연결 실패")
-        self.lbl_connection.setStyleSheet("color: #e63946; font-weight: bold;")
+        set_status_badge(self.lbl_connection, "error")
         self.log(f"❌ API 연결 실패: {e}")
         self.logger.error(f"API 연결 실패: {e}")
         if hasattr(self, "refresh_trade_action_buttons"):
             self.refresh_trade_action_buttons()
         QMessageBox.critical(self, "오류", f"API 연결에 실패했습니다.\n{e}")
+        _set_login_busy(self, False)

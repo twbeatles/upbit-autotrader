@@ -5,7 +5,7 @@ from upbit_autotrader.strategies.catalog import STRATEGY_CATALOG, get_default_ac
 
 
 def build_strategy_engine_group(self):
-    group = QGroupBox("🧩 전략 엔진 (Single / Ensemble)")
+    group = QGroupBox("전략 엔진 (Single / Ensemble)")
     layout = QGridLayout()
 
     self.chk_use_strategy_engine = QCheckBox("전략 엔진 사용")

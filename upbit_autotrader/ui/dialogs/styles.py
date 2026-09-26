@@ -30,8 +30,7 @@ from PyQt6.QtWidgets import (
 from upbit_autotrader.core.config import Config
 
 
-
-DARK_STYLESHEET = """
+_LEGACY_DARK_STYLESHEET = """
 QWidget {
     background-color: #0f172a;
     color: #e2e8f0;
@@ -70,3 +69,10 @@ QPushButton:hover:!disabled {
     background-color: #2563eb;
 }
 """
+
+try:
+    from upbit_autotrader.ui.theme import build_stylesheet as _build_stylesheet
+
+    DARK_STYLESHEET = _build_stylesheet(dark=True)
+except Exception:
+    DARK_STYLESHEET = _LEGACY_DARK_STYLESHEET

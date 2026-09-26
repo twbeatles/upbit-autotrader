@@ -19,18 +19,20 @@ from PyQt6.QtWidgets import (
 )
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.ui import design_tokens as tokens
+from upbit_autotrader.ui.components.status_badge import set_status_badge
 
 
 PRESET_PCTS = (10, 25, 50, 100)
 
 
 def build_order_ticket(self) -> QWidget:
-    group = QGroupBox("⚡ 주문 티켓 (단일 종목)")
+    group = QGroupBox("주문 티켓 (단일 종목)")
     layout = QVBoxLayout(group)
-    layout.setSpacing(8)
+    layout.setSpacing(tokens.SPACE_XS)
 
     top = QGridLayout()
-    top.setSpacing(8)
+    top.setSpacing(tokens.SPACE_XS)
 
     top.addWidget(QLabel("종목:"), 0, 0)
     self.combo_ticket_symbol = QComboBox()
@@ -49,12 +51,14 @@ def build_order_ticket(self) -> QWidget:
     top.addWidget(self.combo_ticket_type, 0, 3)
 
     self.lbl_ticket_mode = QLabel("LIVE")
-    self.lbl_ticket_mode.setStyleSheet("font-weight: bold;")
+    mode_font = self.lbl_ticket_mode.font()
+    mode_font.setBold(True)
+    self.lbl_ticket_mode.setFont(mode_font)
     top.addWidget(self.lbl_ticket_mode, 0, 4)
     layout.addLayout(top)
 
     mid = QGridLayout()
-    mid.setSpacing(8)
+    mid.setSpacing(tokens.SPACE_XS)
     mid.addWidget(QLabel("가격(KRW):"), 0, 0)
     self.spin_ticket_price = QDoubleSpinBox()
     self.spin_ticket_price.setRange(0, 1000000000)
@@ -71,7 +75,7 @@ def build_order_ticket(self) -> QWidget:
     layout.addLayout(mid)
 
     preset_row = QHBoxLayout()
-    preset_row.setSpacing(6)
+    preset_row.setSpacing(tokens.SPACE_XS)
     preset_row.addWidget(QLabel("비중:"))
     for pct in PRESET_PCTS:
         btn = QPushButton(f"{pct}%")
@@ -87,19 +91,15 @@ def build_order_ticket(self) -> QWidget:
     layout.addWidget(self.chk_ticket_require_confirm)
 
     btn_row = QHBoxLayout()
-    btn_row.setSpacing(8)
-    self.btn_ticket_dryrun = QPushButton("🧪 주문 검증")
+    btn_row.setSpacing(tokens.SPACE_XS)
+    self.btn_ticket_dryrun = QPushButton("주문 검증")
     self.btn_ticket_dryrun.setToolTip("POST /v1/order/test 호출로 실제 체결 없이 검증합니다.")
     self.btn_ticket_dryrun.clicked.connect(lambda: ticket_dry_run(self))
-    self.btn_ticket_buy = QPushButton("📈 매수")
-    self.btn_ticket_buy.setStyleSheet(
-        "QPushButton { background-color: #c0392b; color: white; font-weight: bold; }"
-    )
+    self.btn_ticket_buy = QPushButton("매수")
+    self.btn_ticket_buy.setProperty("tradeBuy", True)
     self.btn_ticket_buy.clicked.connect(lambda: submit_ticket_order(self, "BUY"))
-    self.btn_ticket_sell = QPushButton("📉 매도")
-    self.btn_ticket_sell.setStyleSheet(
-        "QPushButton { background-color: #2471a3; color: white; font-weight: bold; }"
-    )
+    self.btn_ticket_sell = QPushButton("매도")
+    self.btn_ticket_sell.setProperty("tradeSell", True)
     self.btn_ticket_sell.clicked.connect(lambda: submit_ticket_order(self, "SELL"))
     btn_row.addWidget(self.btn_ticket_dryrun)
     btn_row.addStretch(1)
@@ -118,9 +118,7 @@ def refresh_ticket_mode_badge(self) -> None:
     label = getattr(self, "lbl_ticket_mode", None)
     if label is not None:
         label.setText("PAPER" if is_paper else "LIVE")
-        label.setStyleSheet(
-            "font-weight: bold; color: %s;" % ("#27ae60" if is_paper else "#c0392b")
-        )
+        set_status_badge(label, "success" if is_paper else "error")
 
 
 def _ticket_values(self):

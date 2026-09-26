@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
 )
 
 from upbit_autotrader.core.config import Config
+from upbit_autotrader.ui.components.infobar import notify_or_fallback as _notify_or_fallback
 from upbit_autotrader.controllers._type_support import ControllerTypeBase
 
 try:
@@ -264,7 +265,7 @@ class TraderHistoryController(ControllerTypeBase):
     def export_history(self):
         """거래 기록 내보내기"""
         if not self.trade_history:
-            QMessageBox.information(self, "알림", "내보낼 거래 기록이 없습니다.")
+            _notify_or_fallback(self, "info", "알림", "내보낼 거래 기록이 없습니다.", fallback=lambda: QMessageBox.information(self, "알림", "내보낼 거래 기록이 없습니다."))
             return
         
         filename = f"trade_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
@@ -283,7 +284,7 @@ class TraderHistoryController(ControllerTypeBase):
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
                 writer.writeheader()
                 writer.writerows(self.trade_history)
-            QMessageBox.information(self, "완료", f"거래 기록이 {filename}에 저장되었습니다.")
+            _notify_or_fallback(self, "success", "완료", f"거래 기록이 {filename}에 저장되었습니다.", fallback=lambda: QMessageBox.information(self, "완료", f"거래 기록이 {filename}에 저장되었습니다."))
             self.log(f"💾 거래 기록 내보내기: {filename}")
         except Exception as e:
             QMessageBox.critical(self, "오류", f"내보내기 실패: {e}")
@@ -376,7 +377,7 @@ class TraderHistoryController(ControllerTypeBase):
         """거래 내역 CSV 내보내기"""
         try:
             if not self.trade_history:
-                QMessageBox.information(self, "알림", "내보낼 거래 내역이 없습니다.")
+                _notify_or_fallback(self, "info", "알림", "내보낼 거래 내역이 없습니다.", fallback=lambda: QMessageBox.information(self, "알림", "내보낼 거래 내역이 없습니다."))
                 return
             
             filename = f"trade_history_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"

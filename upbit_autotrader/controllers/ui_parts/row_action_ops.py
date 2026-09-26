@@ -19,11 +19,11 @@ def attach_row_trade_buttons(self, row: int, ticker: str) -> bool:
     if not ticker:
         return False
     btn_buy = QPushButton("매수")
-    btn_buy.setStyleSheet("QPushButton { background-color: #c0392b; color: white; }")
+    btn_buy.setProperty("tradeBuy", True)
     btn_buy.setToolTip(f"{ticker} 티켓 매수 (확인 게이트 적용)")
     btn_buy.clicked.connect(lambda _=False, t=ticker: row_quick_buy(self, t))
     btn_sell = QPushButton("매도")
-    btn_sell.setStyleSheet("QPushButton { background-color: #2471a3; color: white; }")
+    btn_sell.setProperty("tradeSell", True)
     btn_sell.setToolTip(f"{ticker} 보유수량 티켓 매도 (확인 게이트 적용)")
     btn_sell.clicked.connect(lambda _=False, t=ticker: row_quick_sell(self, t))
     try:

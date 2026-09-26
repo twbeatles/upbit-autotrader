@@ -63,21 +63,21 @@ def test_build_advanced_tab_preserves_group_order_and_widget_surface():
             titles.append(cast(Any, child).title())
 
     assert titles == [
-        "📈 RSI 필터",
-        "📉 MACD 필터",
-        "📊 거래량 필터",
-        "🛡️ 리스크 관리",
-        "🧩 전략 엔진 (Single / Ensemble)",
-        "🧪 페이퍼 트레이딩",
-        "📐 확장 리스크/사이징",
-        "⚙️ 실행 모델 / TWAP",
-        "🌐 시장 레짐 / 외부 신호",
-        "🧠 메타 시그널 / 가중치 리밸런싱",
-        "🔔 운영 알림 채널",
-        "🚀 고급 리스크 관리 (v3.0)",
-        "🧠 고급 알고리즘 (v3.0)",
-        "🚨 긴급 조치",
-        "📋 전략 프리셋",
+        "RSI 필터",
+        "MACD 필터",
+        "거래량 필터",
+        "리스크 관리",
+        "전략 엔진 (Single / Ensemble)",
+        "페이퍼 트레이딩",
+        "확장 리스크/사이징",
+        "실행 모델 / TWAP",
+        "시장 레짐 / 외부 신호",
+        "메타 시그널 / 가중치 리밸런싱",
+        "운영 알림 채널",
+        "고급 리스크 관리 (v3.0)",
+        "고급 알고리즘 (v3.0)",
+        "긴급 조치",
+        "전략 프리셋",
     ]
 
     required_attrs = [

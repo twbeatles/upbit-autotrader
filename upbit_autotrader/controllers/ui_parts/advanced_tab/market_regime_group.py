@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_market_regime_group(self):
-    group = QGroupBox("🌐 시장 레짐 / 외부 신호")
+    group = QGroupBox("시장 레짐 / 외부 신호")
     layout = QGridLayout()
 
     self.chk_use_market_regime_filter = QCheckBox("시장 레짐 필터 사용")

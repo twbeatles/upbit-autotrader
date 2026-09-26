@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any, cast
+from upbit_autotrader.ui.components.infobar import notify_or_fallback as _notify_or_fallback
 
 # Runtime bindings injected by trading_controller facade
 Config = cast(Any, None)
@@ -116,7 +117,7 @@ def refresh_manual_review_table(self):
 def requery_selected_manual_review(self):
     key = self._selected_manual_review_key()
     if not key:
-        QMessageBox.information(self, "알림", "재조회할 수동검토 항목을 선택해주세요.")
+        _notify_or_fallback(self, "warning", "알림", "재조회할 수동검토 항목을 선택해주세요.", fallback=lambda: QMessageBox.information(self, "알림", "재조회할 수동검토 항목을 선택해주세요."))
         return
     payload = dict(getattr(self, "_manual_review_queue", {}).get(key, {}) or {})
     if not payload:
@@ -168,7 +169,7 @@ def requery_selected_manual_review(self):
 def resolve_selected_manual_review(self):
     key = self._selected_manual_review_key()
     if not key:
-        QMessageBox.information(self, "알림", "해제할 수동검토 항목을 선택해주세요.")
+        _notify_or_fallback(self, "warning", "알림", "해제할 수동검토 항목을 선택해주세요.", fallback=lambda: QMessageBox.information(self, "알림", "해제할 수동검토 항목을 선택해주세요."))
         return
     payload = dict(getattr(self, "_manual_review_queue", {}).get(key, {}) or {})
     if not payload:

@@ -32,6 +32,7 @@ from upbit_autotrader.core.config import Config
 
 
 from .styles import DARK_STYLESHEET
+from upbit_autotrader.ui.components.status_badge import set_status_badge
 
 class EmergencyCloseDialog(QDialog):
     """Confirm emergency close-all operation."""
@@ -50,7 +51,7 @@ class EmergencyCloseDialog(QDialog):
         layout.setSpacing(12)
 
         warning = QLabel("All holdings will be sold with market orders immediately.")
-        warning.setStyleSheet("color: #f87171; font-weight: bold;")
+        set_status_badge(warning, "error")
         warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(warning)
 
@@ -85,7 +86,7 @@ class EmergencyCloseDialog(QDialog):
         btn_layout.addStretch(1)
 
         self.btn_confirm = QPushButton("Execute")
-        self.btn_confirm.setStyleSheet("background-color: #dc2626; font-weight: bold;")
+        self.btn_confirm.setProperty("destructive", True)
         self.btn_confirm.setEnabled(False)
         self.btn_confirm.clicked.connect(self.accept)
         btn_layout.addWidget(self.btn_confirm)

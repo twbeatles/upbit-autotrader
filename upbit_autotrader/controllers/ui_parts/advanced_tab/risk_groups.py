@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_risk_group(self):
-    group = QGroupBox("🛡️ 리스크 관리")
+    group = QGroupBox("리스크 관리")
     layout = QGridLayout()
 
     self.chk_use_risk = QCheckBox("리스크 관리 사용")

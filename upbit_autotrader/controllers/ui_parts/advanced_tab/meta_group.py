@@ -4,7 +4,7 @@ from upbit_autotrader.core.config import Config
 
 
 def build_meta_group(self):
-    group = QGroupBox("🧠 메타 시그널 / 가중치 리밸런싱")
+    group = QGroupBox("메타 시그널 / 가중치 리밸런싱")
     layout = QGridLayout()
 
     self.chk_use_meta_signal = QCheckBox("메타 시그널 게이트 사용")
