@@ -7,6 +7,8 @@ numpy>=1.24.0
 
 # GUI
 PyQt6>=6.4.0
+PyQt6-Fluent-Widgets>=1.6
+PyQt6-Frameless-Window>=0.8
 darkdetect>=0.8.0
 
 # Network & Security

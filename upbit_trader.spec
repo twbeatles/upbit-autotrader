@@ -17,7 +17,11 @@ Output:
 """
 
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_data_files,
+    collect_submodules,
+    copy_metadata,
+)
 
 block_cipher = None
 
@@ -56,11 +60,32 @@ hiddenimports = [
 hiddenimports += collect_submodules("upbit_autotrader")
 hiddenimports += collect_submodules("legacy_wrappers")
 
+# Fluent widgets (same-Qt-binding PyQt6 edition, mirroring the reference
+# frozen recipe): resource files plus every submodule except the unused
+# multimedia/webengine paths.
+hiddenimports += [
+    name
+    for name in collect_submodules("qfluentwidgets")
+    if "multimedia" not in name
+]
+hiddenimports += [
+    name
+    for name in collect_submodules("qframelesswindow")
+    if "webengine" not in name
+]
+
+_fluent_metadata = []
+for _pkg in ("PyQt6-Fluent-Widgets", "PyQt6-Frameless-Window", "qfluentwidgets"):
+    try:
+        _fluent_metadata += copy_metadata(_pkg)
+    except Exception:
+        pass
+
 # NOTE:
 # - Do not bundle local .py files as data; PyInstaller packages them as modules.
 # - Runtime JSON/log files (settings/history/reconciliation/logs) remain external user data.
 # - typings/ is for local pyright only and is intentionally not bundled.
-datas = []
+datas = _fluent_metadata + collect_data_files("qfluentwidgets", include_py_files=False)
 
 a = Analysis(
     ["upbit_trader.py"],

@@ -29,21 +29,42 @@ from upbit_autotrader.ui import design_tokens as tokens
 from upbit_autotrader.ui import navigation
 from upbit_autotrader.ui.components.empty_state import EmptyState
 from upbit_autotrader.ui.navigation import NavigationItemPosition
-from upbit_autotrader.ui.theme import configure_main_window
+from upbit_autotrader.ui.theme import configure_fluent_window, configure_main_window
 
 # Navigation pages: (factory method, text label, standard icon, rail position).
 # Factories stay late-bound so pages keep building through the controller.
 # Mirrors the reference MSFluentWindow layout: trading pages up top, the
 # auxiliary operations page pinned to the bottom.
+# Pages: (factory, label, fallback QStyle icon, reference Fluent icon, rail position).
+NAV_LABELS = ("트레이딩", "전략 설정", "고급 설정", "거래 통계", "거래 내역", "입출금", "운영/수동검토")
 TAB_DEFS = (
-    ("create_trading_view", "트레이딩", "SP_ComputerIcon", NavigationItemPosition.TOP),
-    ("create_strategy_tab", "전략 설정", "SP_FileDialogDetailedView", NavigationItemPosition.TOP),
-    ("create_advanced_tab", "고급 설정", "SP_FileDialogContentsView", NavigationItemPosition.TOP),
-    ("create_statistics_tab", "거래 통계", "SP_FileDialogInfoView", NavigationItemPosition.TOP),
-    ("create_history_tab", "거래 내역", "SP_FileDialogListView", NavigationItemPosition.TOP),
-    ("create_transfer_tab", "입출금", "SP_DialogSaveButton", NavigationItemPosition.TOP),
-    ("create_ops_tab", "운영/수동검토", "SP_ToolBarHorizontalExtensionButton", NavigationItemPosition.BOTTOM),
+    ("create_trading_view", "트레이딩", "SP_ComputerIcon", "HOME", NavigationItemPosition.TOP),
+    ("create_strategy_tab", "전략 설정", "SP_FileDialogDetailedView", "ROBOT", NavigationItemPosition.TOP),
+    ("create_advanced_tab", "고급 설정", "SP_FileDialogContentsView", "SETTING", NavigationItemPosition.TOP),
+    ("create_statistics_tab", "거래 통계", "SP_FileDialogInfoView", "PIE_SINGLE", NavigationItemPosition.TOP),
+    ("create_history_tab", "거래 내역", "SP_FileDialogListView", "HISTORY", NavigationItemPosition.TOP),
+    ("create_transfer_tab", "입출금", "SP_DialogSaveButton", "SAVE", NavigationItemPosition.TOP),
+    ("create_ops_tab", "운영/수동검토", "SP_ToolBarHorizontalExtensionButton", "COMMAND_PROMPT", NavigationItemPosition.BOTTOM),
 )
+
+
+def _fluent_window_base():
+    """Reference window class (None when the Fluent dependency is missing)."""
+    try:
+        from qfluentwidgets import FluentWindow
+        return FluentWindow
+    except ImportError:
+        pass
+    try:
+        from qfluentwidgets import MSFluentWindow
+        return MSFluentWindow
+    except ImportError:
+        return None
+
+
+def _is_fluent_window(host) -> bool:
+    base = _fluent_window_base()
+    return base is not None and isinstance(host, base)
 
 TABLE_COLUMNS = [
     "코인명",
@@ -94,49 +115,114 @@ def _tab_icon(widget: QWidget, name: str):
 
 
 def init_ui(self):
+    """Assemble the main window (reference MSFluentWindow flow when available).
+
+    With the Fluent dependency the window itself is the navigation shell and
+    pages register through ``addSubInterface`` exactly like the reference
+    main window; without it we fall back to the native rail container.
+    """
     self.setWindowTitle("Upbit Pro Algo-Trader v2.7 [24H 코인 자동매매]")
     configure_main_window(self)
+    configure_fluent_window(self)
 
-    central_widget = QWidget()
-    self.setCentralWidget(central_widget)
+    if _is_fluent_window(self):
+        _register_pages(self, fluent=True)
+        try:
+            self.navigationInterface.setExpandWidth(200)
+            self.navigationInterface.expand()
+        except Exception:
+            pass
+    else:
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
 
-    body = QHBoxLayout(central_widget)
-    body.setContentsMargins(0, 0, 0, 0)
-    body.setSpacing(0)
+        body = QHBoxLayout(central_widget)
+        body.setContentsMargins(0, 0, 0, 0)
+        body.setSpacing(0)
 
-    rail = navigation.FluentNavRail(central_widget)
-    stack = QStackedWidget(central_widget)
-    stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-    self.nav_shell = navigation.NavigationShell(rail, stack)
-    _register_pages(self, self.nav_shell)
-    body.addWidget(rail, 0)
+        rail = navigation.FluentNavRail(central_widget)
+        stack = QStackedWidget(central_widget)
+        stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.nav_shell = navigation.NavigationShell(rail, stack)
+        _register_pages(self, fluent=False)
+        body.addWidget(rail, 0)
 
-    right = QWidget(central_widget)
-    right_layout = QVBoxLayout(right)
-    right_layout.setSpacing(tokens.SECTION_GAP)
-    right_layout.setContentsMargins(
-        tokens.PAGE_MARGIN, tokens.SPACE_MD, tokens.PAGE_MARGIN, tokens.PAGE_MARGIN
-    )
-
-    dashboard = self.create_dashboard()
-    dashboard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    right_layout.addWidget(dashboard, 0)
-    right_layout.addWidget(stack, 1)
-    body.addWidget(right, 1)
+        right = QWidget(central_widget)
+        right_layout = QVBoxLayout(right)
+        right_layout.setSpacing(tokens.SECTION_GAP)
+        right_layout.setContentsMargins(
+            tokens.PAGE_MARGIN, tokens.SPACE_MD, tokens.PAGE_MARGIN, tokens.PAGE_MARGIN
+        )
+        dashboard = self.create_dashboard()
+        dashboard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        right_layout.addWidget(dashboard, 0)
+        right_layout.addWidget(stack, 1)
+        body.addWidget(right, 1)
 
     self.create_statusbar()
     self.refresh_trade_action_buttons()
     self.refresh_table_empty_state()
 
 
-def _register_pages(self, shell) -> None:
-    """Register every legacy page on the nav shell (legacy order kept).
+def _build_trading_page(self, view: QWidget) -> QWidget:
+    """Trading page: dashboard + scrollable view + monitoring splitter.
 
-    The trading page owns the holdings/log splitter underneath the trading
-    view; every other page scrolls inside its own scroll area, mirroring
-    the reference scrollable pages.
+    The view keeps its natural height inside a scroll area and the
+    holdings/log splitter owns a fixed minimum below it, so dense ticket
+    controls can never be crushed into each other on short windows.
     """
-    for factory_name, label, icon_name, position in TAB_DEFS:
+    page = QWidget()
+    layout = QVBoxLayout(page)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(tokens.SECTION_GAP)
+
+    dashboard = self.create_dashboard()
+    dashboard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+    layout.addWidget(dashboard, 0)
+
+    splitter = QSplitter(Qt.Orientation.Vertical)
+    splitter.setChildrenCollapsible(False)
+
+    view_scroll = navigation.wrap_scrollable(view)
+    view_scroll.setMinimumHeight(360)
+    splitter.addWidget(view_scroll)
+
+    monitor = self.create_splitter()
+    monitor.setMinimumHeight(280)
+    splitter.addWidget(monitor)
+    splitter.setStretchFactor(0, 3)
+    splitter.setStretchFactor(1, 2)
+    splitter.setSizes([560, 340])
+    layout.addWidget(splitter, 1)
+    return page
+
+
+def _register_pages(self, shell=None, fluent: bool = False) -> None:
+    """Register every legacy page (legacy order kept).
+
+    ``fluent=True`` registers on the MSFluentWindow itself through
+    ``addSubInterface`` (reference call shape); otherwise on the native
+    fallback shell stored at ``self.nav_shell``.
+    """
+    try:
+        from qfluentwidgets import FluentIcon as FIF
+        from qfluentwidgets import NavigationItemPosition as FluentPosition
+    except ImportError:
+        FIF = None  # type: ignore[assignment]
+        FluentPosition = None  # type: ignore[assignment]
+
+    already: set[str] = set()
+    if fluent:
+        try:
+            already = {
+                self.stackedWidget.widget(i).objectName()
+                for i in range(self.stackedWidget.count())
+            }
+        except Exception:
+            already = set()
+    for factory_name, label, icon_name, fif_name, position in TAB_DEFS:
+        if factory_name in already:
+            continue
         factory = getattr(self, factory_name, None)
         if not callable(factory):
             continue
@@ -144,29 +230,36 @@ def _register_pages(self, shell) -> None:
         if not isinstance(page, QWidget):
             continue
         if factory_name == "create_trading_view":
-            trading_page = QWidget()
-            trading_layout = QVBoxLayout(trading_page)
-            trading_layout.setContentsMargins(0, 0, 0, 0)
-            trading_layout.setSpacing(tokens.SECTION_GAP)
-            page.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            trading_layout.addWidget(page, 0)
-            trading_layout.addWidget(self.create_splitter(), 1)
-            page = trading_page
+            page = _build_trading_page(self, page)
         else:
             page = navigation.wrap_scrollable(page)
-        icon = _tab_icon(shell.stack, icon_name)
-        shell.addSubInterface(page, icon, label, position, key=factory_name)
+        page.setObjectName(factory_name)
+        if fluent and FIF is not None and FluentPosition is not None:
+            fluent_pos = (
+                FluentPosition.BOTTOM
+                if position == NavigationItemPosition.BOTTOM
+                else FluentPosition.TOP
+            )
+            # NOTE: the 4th positional arg is the selected icon in the
+            # reference API, so position must stay a keyword argument.
+            self.addSubInterface(page, getattr(FIF, fif_name), label, position=fluent_pos)
+        else:
+            target = shell if shell is not None else getattr(self, "nav_shell", None)
+            if target is None:
+                continue
+            icon = _tab_icon(target.stack, icon_name)
+            target.addSubInterface(page, icon, label, position, key=factory_name)
 
 
 def create_navigation(self):
-    """Build a standalone nav-shell container (tests/diagnostics entry).
+    """Build a standalone native nav-shell container (tests/diagnostics entry).
 
     Returns the ``(rail | page stack)`` widget and stores the controller
     on ``self.nav_shell``; the live window uses ``init_ui`` instead.
     """
     container, shell = navigation.create_shell()
     self.nav_shell = shell
-    _register_pages(self, shell)
+    _register_pages(self, shell=shell, fluent=False)
     return container
 
 

@@ -16,7 +16,7 @@ def bind_runtime(**kwargs):
 
 
 def create_menu_bar(self):
-    menubar = self.menuBar()
+    menubar = self.menuBar() if hasattr(self, 'menuBar') else None
     if menubar is None:
         return
 

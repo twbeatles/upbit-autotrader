@@ -14,6 +14,20 @@ except ImportError:
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
+try:
+    # NOTE: FluentWindow (labeled expandable rail) rather than the
+    # reference MSFluentWindow (compact icon bar): seven text pages need
+    # readable labels. The navigation API is identical.
+    from qfluentwidgets import FluentWindow as _FluentBase
+    FLUENT_AVAILABLE = True
+except ImportError:  # pragma: no cover - graceful degradation path
+    try:
+        from qfluentwidgets import MSFluentWindow as _FluentBase  # type: ignore[no-redef]
+        FLUENT_AVAILABLE = True
+    except ImportError:
+        _FluentBase = QMainWindow
+        FLUENT_AVAILABLE = False
+
 from upbit_autotrader.app import bootstrap_ops as _bootstrap_ops, runtime_ops as _runtime_ops
 from upbit_autotrader.controllers.batch_controller import TraderBatchController
 from upbit_autotrader.controllers.history_controller import TraderHistoryController
@@ -29,7 +43,7 @@ class UpbitProTrader(
     TraderHistoryController,
     TraderTradingController,
     TraderBatchController,
-    QMainWindow,
+    _FluentBase,  # type: ignore[misc]
 ):
     setup_logging = _bootstrap_ops.setup_logging
     setup_timers = _bootstrap_ops.setup_timers

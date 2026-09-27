@@ -57,21 +57,39 @@ class TraderUIController(ControllerTypeBase):
         self._dark_stylesheet = DARK_STYLESHEET
         return _layout_ops.init_ui(self)
 
+    def _notify_fluent(self, kind, title, message=""):
+        """Reference-style InfoBar; native banner when Fluent is missing."""
+        try:
+            from qfluentwidgets import InfoBar, InfoBarPosition
+
+            show = {
+                "info": InfoBar.info,
+                "success": InfoBar.success,
+                "warning": InfoBar.warning,
+                "error": InfoBar.error,
+            }[kind]
+            return show(
+                title,
+                message,
+                parent=self,
+                position=InfoBarPosition.TOP,
+                duration=6000,
+            )
+        except Exception:
+            from upbit_autotrader.ui.components.infobar import notify as _notify
+            return _notify(self, title, message, kind)
+
     def notify_info(self, title, message=""):
-        from upbit_autotrader.ui.components.infobar import notify as _notify
-        return _notify(self, title, message, "info")
+        return self._notify_fluent("info", title, message)
 
     def notify_success(self, title, message=""):
-        from upbit_autotrader.ui.components.infobar import notify as _notify
-        return _notify(self, title, message, "success")
+        return self._notify_fluent("success", title, message)
 
     def notify_warning(self, title, message=""):
-        from upbit_autotrader.ui.components.infobar import notify as _notify
-        return _notify(self, title, message, "warning")
+        return self._notify_fluent("warning", title, message)
 
     def notify_error(self, title, message=""):
-        from upbit_autotrader.ui.components.infobar import notify as _notify
-        return _notify(self, title, message, "error")
+        return self._notify_fluent("error", title, message)
 
     def create_ops_tab(self):
         return build_ops_tab(self)

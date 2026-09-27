@@ -219,6 +219,12 @@ def sync_system_theme() -> None:
     if not isinstance(app, QApplication):
         return
     use_dark = is_dark_mode()
+    try:
+        from qfluentwidgets import Theme, setTheme
+
+        setTheme(Theme.DARK if use_dark else Theme.LIGHT)
+    except Exception:
+        pass
     sheet = build_stylesheet(use_dark)
     for widget in QApplication.topLevelWidgets():
         try:
@@ -247,9 +253,36 @@ def _install_theme_watcher(app: Any) -> None:
 
 
 def setup_app_theme(app: Any) -> None:
-    """Call once from ``main()`` right after creating the QApplication."""
+    """Call once from ``main()`` right after creating the QApplication.
+
+    Mirrors the reference (srtgo ``ktrain.gui.theme.setup_app_theme``):
+    the Fluent theme follows the OS setting while the token stylesheet
+    below keeps native widgets readable in both modes.
+    """
+    try:
+        from qfluentwidgets import Theme, setTheme, setThemeColor
+
+        setTheme(Theme.AUTO)
+        setThemeColor(tokens.ACCENT)
+    except Exception:
+        pass
     apply_theme(app, dark=is_dark_mode())
     _install_theme_watcher(app)
+    sync_system_theme()
+
+
+def configure_fluent_window(window: Any) -> None:
+    """FluentWindow polish (mirrors the reference Mica workaround).
+
+    The Mica backdrop breaks custom-painted widgets (price chart), so it
+    stays off and the token stylesheet owns the background.
+    """
+    set_mica = getattr(window, "setMicaEffectEnabled", None)
+    if callable(set_mica):
+        try:
+            set_mica(False)
+        except Exception:
+            pass
 
 
 def configure_main_window(window: Any) -> None:

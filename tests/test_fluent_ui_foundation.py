@@ -4,6 +4,8 @@ Covers design tokens, the central theme stylesheet, reusable components,
 and the main-window shell (tabs keep every legacy page, inline QSS and
 emoji icons are gone, the holdings table owns an empty state).
 """
+
+import pytest
 import os
 
 from PyQt6.QtWidgets import QApplication, QMainWindow
@@ -185,14 +187,18 @@ def _is_emoji(ch: str) -> bool:
     )
 
 
-def test_nav_shell_keeps_all_legacy_pages_without_emoji():
+def test_fluent_shell_registers_all_legacy_pages_without_emoji():
+    pytest.importorskip("qfluentwidgets")
     _app()
-    host = _page_host()
-    host.create_splitter = lambda: layout_ops.create_splitter(host)
-    container = layout_ops.create_navigation(host)
-    assert container is not None
-    shell = host.nav_shell
-    assert shell.keys() == [
+    from upbit_autotrader.app.trader import UpbitProTrader
+
+    trader = UpbitProTrader()
+    assert list(layout_ops.NAV_LABELS) == ["트레이딩", "전략 설정", "고급 설정", "거래 통계", "거래 내역", "입출금", "운영/수동검토"]
+    for label in layout_ops.NAV_LABELS:
+        assert not any(_is_emoji(ch) for ch in label), label
+    assert trader.stackedWidget.count() == 7
+    names = [trader.stackedWidget.widget(i).objectName() for i in range(7)]
+    assert names == [
         "create_trading_view",
         "create_strategy_tab",
         "create_advanced_tab",
@@ -201,21 +207,10 @@ def test_nav_shell_keeps_all_legacy_pages_without_emoji():
         "create_transfer_tab",
         "create_ops_tab",
     ]
-    labels = [shell.rail.button(key).text() for key in shell.keys()]
-    assert labels == ["트레이딩", "전략 설정", "고급 설정", "거래 통계", "거래 내역", "입출금", "운영/수동검토"]
-    for label in labels:
-        assert not any(_is_emoji(ch) for ch in label), label
-    assert shell.stack.count() == 7
-    # reference parity: the auxiliary ops page is pinned to the rail bottom
-    assert shell.rail._bottom_box.count() == 1
-    assert shell.rail._top_box.count() == 6
-    shell.switch_to("create_history_tab")
-    assert shell.stack.currentWidget() is shell.page("create_history_tab")
-    assert shell.rail.button("create_history_tab").isChecked()
-    shell.switchTo("create_trading_view")
-    assert shell.stack.currentWidget() is shell.page("create_trading_view")
-    assert shell.rail.button("create_trading_view").isChecked()
-    assert not shell.rail.button("create_history_tab").isChecked()
+    trader.switchTo(trader.stackedWidget.widget(3))
+    assert trader.stackedWidget.currentIndex() == 3
+    trader.switchTo(trader.stackedWidget.widget(0))
+    assert trader.stackedWidget.currentIndex() == 0
 
 
 

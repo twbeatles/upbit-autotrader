@@ -24,14 +24,14 @@ def create_dashboard(self):
     layout_dash.addWidget(QLabel("Access:"))
     self.input_access = QLineEdit()
     self.input_access.setEchoMode(QLineEdit.EchoMode.Password)
-    self.input_access.setMinimumWidth(150)
+    self.input_access.setMinimumWidth(120)
     self.input_access.setPlaceholderText("Access Key")
     layout_dash.addWidget(self.input_access)
 
     layout_dash.addWidget(QLabel("Secret:"))
     self.input_secret = QLineEdit()
     self.input_secret.setEchoMode(QLineEdit.EchoMode.Password)
-    self.input_secret.setMinimumWidth(150)
+    self.input_secret.setMinimumWidth(120)
     self.input_secret.setPlaceholderText("Secret Key")
     layout_dash.addWidget(self.input_secret)
 
@@ -44,7 +44,7 @@ def create_dashboard(self):
         )
     except Exception:
         pass
-    self.btn_login.setMinimumSize(120, tokens.CONTROL_HEIGHT_MD)
+    self.btn_login.setMinimumSize(100, tokens.CONTROL_HEIGHT_MD)
     self.btn_login.clicked.connect(self.login)
     layout_dash.addWidget(self.btn_login)
 
@@ -103,6 +103,86 @@ def create_statistics_tab(self):
 
 
 def create_statusbar(self):
+    # init_ui may run more than once (bootstrap + explicit calls): never
+    # build a second bar, which would squeeze the content sideways.
+    if getattr(self, "statusbar", None) is not None and getattr(self, "status_time", None) is not None:
+        return
+    # MSFluentWindow is QWidget-based (no QMainWindow status bar): the same
+    # live labels dock into a slim footer strip under the window content.
+    if not hasattr(self, "statusBar"):
+        strip = QWidget()
+        strip.setObjectName("statusStrip")
+        row = QHBoxLayout(strip)
+        row.setContentsMargins(tokens.SPACE_MD, tokens.SPACE_XS, tokens.SPACE_MD, tokens.SPACE_XS)
+        row.setSpacing(tokens.SPACE_XS)
+        self.status_time = QLabel()
+        row.addWidget(self.status_time)
+        row.addWidget(QLabel(" | "))
+        self.status_trading = QLabel("대기 중")
+        set_status_badge(self.status_trading, "warning")
+        row.addWidget(self.status_trading)
+        row.addWidget(QLabel(" | "))
+        self.status_realtime = QLabel("실시간: 비활성")
+        row.addWidget(self.status_realtime)
+        row.addWidget(QLabel(" | "))
+        self.status_market_regime = QLabel("MR: neutral 50.0")
+        row.addWidget(self.status_market_regime)
+        row.addStretch(1)
+        row.addWidget(QLabel("Upbit Pro Algo-Trader v2.7"))
+        # Fluent windows nest the page stack inside an inner horizontal box
+        # (rail | stack): wrap the stack and the strip in a vertical column
+        # so the strip docks under the content instead of squeezing it.
+        placed = False
+        try:
+            from PyQt6.QtWidgets import QVBoxLayout
+
+            def _host_of(layout, widget):
+                try:
+                    if layout.indexOf(widget) >= 0:
+                        return layout
+                except Exception:
+                    return None
+                for i in range(layout.count()):
+                    try:
+                        sub = layout.itemAt(i).layout()
+                    except Exception:
+                        sub = None
+                    if sub is not None:
+                        found = _host_of(sub, widget)
+                        if found is not None:
+                            return found
+                return None
+
+            stack = getattr(self, "stackedWidget", None)
+            root_layout = self.layout()
+            host_layout = (
+                _host_of(root_layout, stack)
+                if stack is not None and root_layout is not None
+                else None
+            )
+            if stack is not None and host_layout is not None:
+                index = host_layout.indexOf(stack)
+                host_layout.removeWidget(stack)
+                column = QWidget()
+                column_layout = QVBoxLayout(column)
+                column_layout.setContentsMargins(0, 0, 0, 0)
+                column_layout.setSpacing(0)
+                column_layout.addWidget(stack, 1)
+                column_layout.addWidget(strip, 0)
+                try:
+                    host_layout.insertWidget(index, column, 1)
+                except TypeError:
+                    host_layout.insertWidget(index, column)
+                placed = True
+        except Exception:
+            placed = False
+        if not placed:
+            fallback = self.layout()
+            if fallback is not None:
+                fallback.addWidget(strip)
+        self.statusbar = strip
+        return
+
     self.statusbar = self.statusBar()
     if self.statusbar is None:
         return
