@@ -37,8 +37,8 @@ CHART_TIMEFRAMES = (
     ("주봉", "weeks", 0),
 )
 
-UP_COLOR = "#e63946"
-DOWN_COLOR = "#4361ee"
+UP_COLOR = tokens.TRADE_BUY
+DOWN_COLOR = tokens.TRADE_SELL
 
 
 def _chart_palette(widget) -> dict:

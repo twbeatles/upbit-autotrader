@@ -101,7 +101,7 @@ def refresh_manual_review_table(self):
                     item.setBackground(QColor("#fff1b8"))
             self._ops_alert(
                 level="warning",
-                message=f"⚠️ [{ticker or uuid}] 수동검토 큐 에이징 경고 ({age_text})",
+                message=f"[{ticker or uuid}] 수동검토 큐 에이징 경고 ({age_text})",
                 key=f"manual_review_aging:{key}",
                 cooldown=60,
             )
@@ -109,9 +109,9 @@ def refresh_manual_review_table(self):
     label = getattr(self, "lbl_manual_review_count", None)
     if label is not None:
         if overdue_count > 0:
-            label.setText(f"🧾 수동검토 큐 {len(rows)}건 (지연 {overdue_count}건)")
+            label.setText(f"수동검토 큐 {len(rows)}건 (지연 {overdue_count}건)")
         else:
-            label.setText(f"🧾 수동검토 큐 {len(rows)}건")
+            label.setText(f"수동검토 큐 {len(rows)}건")
 
 
 def requery_selected_manual_review(self):

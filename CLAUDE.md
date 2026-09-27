@@ -89,6 +89,7 @@ pre-commit run --all-files
 - `tests/test_trader_surface_parity.py`
 - `tests/test_trading_parts_facade_parity.py`
 - `tests/test_ui_advanced_tab_surface.py`
+- `tests/test_ui_design_rules.py`
 - `tests/test_trading_view.py`
 - `tests/test_order_ticket.py`
 - `tests/test_row_actions.py`

@@ -310,7 +310,7 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
                         self.table.setItem(row, 9, invest_item)
                         info.setdefault("ui_items", {})["invest"] = invest_item
                     invest_item.setText(f"{merged_invest:,.0f}")
-                    self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
+                    self.set_table_item(row, 4, "보유중", "#00b4d8")
 
                 fee_krw = float(order.get("paid_fee", 0.0) or 0.0) if order else 0.0
                 ref_price = float((info or {}).get("current", avg_price) or avg_price)
@@ -351,7 +351,7 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
             else:
                 if info:
                     info["state"] = "감시중"
-                    self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+                    self.set_table_item(info["row"], 4, "감시중", "#00b894")
                 self.log(f"⚠️ [{ticker}] 매수 체결 정보가 유효하지 않습니다(수량/금액 0). 상태를 감시중으로 복원합니다.")
             if callable(clear_pending_if_uuid):
                 clear_pending_if_uuid(ticker, uuid)
@@ -370,7 +370,7 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
             info = self.universe.get(ticker)
             if info:
                 info["state"] = "감시중"
-                self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+                self.set_table_item(info["row"], 4, "감시중", "#00b894")
             self.log(f"⚠️ [{ticker}] 매수 주문 취소됨")
             if callable(clear_pending_if_uuid):
                 clear_pending_if_uuid(ticker, uuid)
@@ -392,7 +392,7 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
                 info = self.universe.get(ticker)
                 if info:
                     info["state"] = "체결확인실패"
-                    self.set_table_item(info["row"], 4, "❓ 확인필요", "#ffc107")
+                    self.set_table_item(info["row"], 4, "확인필요", "#ffc107")
                 if callable(resolve_timeout_pending):
                     resolved = resolve_timeout_pending(ticker=ticker, pending=pending, reason="buy_execution_timeout")
                 else:
@@ -406,7 +406,7 @@ def check_buy_execution(self, ticker, uuid, retry_count=0, session_id=None):
                 if not resolved and callable(ops_alert):
                     ops_alert(
                         level="warning",
-                        message=f"⚠️ [{ticker}] 매수 주문 타임아웃 unresolved - 수동검토 필요",
+                        message=f"[{ticker}] 매수 주문 타임아웃 unresolved - 수동검토 필요",
                         key=f"buy_timeout_unresolved:{uuid}",
                         cooldown=30,
                     )

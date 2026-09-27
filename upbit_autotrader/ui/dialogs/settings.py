@@ -30,9 +30,6 @@ from PyQt6.QtWidgets import (
 from upbit_autotrader.core.config import Config
 
 
-
-from .styles import DARK_STYLESHEET
-
 class SettingsDialog(QDialog):
     """System settings dialog."""
 
@@ -44,7 +41,7 @@ class SettingsDialog(QDialog):
     def init_ui(self) -> None:
         self.setWindowTitle("System Settings")
         self.setFixedSize(560, 420)
-        self.setStyleSheet(DARK_STYLESHEET)
+
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)

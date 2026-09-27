@@ -63,6 +63,7 @@ Upbit Pro Algo-Trader는 전문 트레이더와 퀀트 투자자를 위한 다�
   - ⚡ 주문 티켓: 시장가/지정가/최유리, 비중 프리셋, `order/test` 사전검증, LIVE 강제 확인 게이트
   - 보유 테이블 행별 매수/매도 퀵 버튼, 입출금 내역 조회 탭 (읽기 전용)
   - Fluent 셸: 7개 탭 내비게이션 + OS 다크/라이트 테마 연동, 작업 결과는 비차단 InfoBar 알림
+  - 테마 일관성: 다이얼로그·통계 카드·차트 색상은 중앙 테마(`ui/theme.py` + `design_tokens.py`)를 따르며, 위젯 표시 문자열에는 이모지를 사용하지 않음
 - **보안 및 알림**:
   - Windows DPAPI 기반 API Key 암호화 보관 (`upbit_settings.json` schema v2)
   - 체결 및 시스템 이벤트를 위한 Discord 웹훅 연동 및 Windows 트레이 알림
@@ -351,6 +352,7 @@ python -m pytest -q
 # 주요 검증 테스트
 python -m pytest tests/test_docs_references.py
 python -m pytest tests/test_text_integrity.py
+python -m pytest tests/test_ui_design_rules.py
 python -m pytest tests/test_order_stability.py
 python -m pytest tests/test_market_regime_engine.py
 ```

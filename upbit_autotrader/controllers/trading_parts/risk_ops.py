@@ -130,14 +130,14 @@ def check_risk_limits(self):
         loss_rate = float(snapshot.get("loss_rate", 0.0) or 0.0)
         self._ops_alert(
             level="warning",
-            message=f"🛑 일일 손실 한도 도달! ({loss_rate:.2f}%)",
+            message=f"일일 손실 한도 도달! ({loss_rate:.2f}%)",
             key="risk_limit:daily_loss",
             cooldown=20,
         )
     if not allowed and reasons:
         self._ops_alert(
             level="warning",
-            message=f"⚠️ 리스크 제한으로 진입 보류 ({', '.join(reasons[:2])})",
+            message=f"리스크 제한으로 진입 보류 ({', '.join(reasons[:2])})",
             key=f"risk_limit:{'|'.join(reasons)}",
             cooldown=10,
         )

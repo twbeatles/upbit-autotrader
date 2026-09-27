@@ -164,9 +164,9 @@ def start_trading(self):
                 self.table.setItem(row, 8, QTableWidgetItem("-"))
                 self.table.setItem(row, 9, QTableWidgetItem(f"{invest_amt:,.0f}" if invest_amt > 0 else "-"))
                 if holding_qty > 0:
-                    self.set_table_item(row, 4, "💼 보유중", "#00b4d8")
+                    self.set_table_item(row, 4, "보유중", "#00b4d8")
                 else:
-                    self.set_table_item(row, 4, "👀 감시중", "#00b894")
+                    self.set_table_item(row, 4, "감시중", "#00b894")
                 self.universe[coin]['ui_items'] = {
                     'price': self.table.item(row, 1),
                     'state': self.table.item(row, 4),

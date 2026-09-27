@@ -14,20 +14,6 @@ from PyQt6.QtWidgets import (
 
 from upbit_autotrader.ui import design_tokens as tokens
 from upbit_autotrader.ui.components.status_badge import set_status_badge
-from upbit_autotrader.ui.theme import is_dark_mode
-
-
-def _stat_card_style() -> str:
-    c = tokens.palette(is_dark_mode())
-    return (
-        "QLabel {"
-        f" background-color: {c['surface']};"
-        f" border: 1px solid {c['border']};"
-        f" border-radius: {tokens.CARD_RADIUS}px;"
-        f" padding: {tokens.SPACE_MD}px;"
-        f" font-size: {tokens.FONT_BODY}px;"
-        "}"
-    )
 
 
 def create_dashboard(self):
@@ -89,25 +75,23 @@ def create_statistics_tab(self):
         tokens.PAGE_MARGIN, tokens.PAGE_MARGIN, tokens.PAGE_MARGIN, tokens.PAGE_MARGIN
     )
 
-    stat_style = _stat_card_style()
-
     self.stat_trades = QLabel("총 거래 횟수\n0 회")
-    self.stat_trades.setStyleSheet(stat_style)
+    self.stat_trades.setProperty("statCard", True)
     self.stat_trades.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(self.stat_trades, 0, 0)
 
     self.stat_winrate = QLabel("승률\n0.0 %")
-    self.stat_winrate.setStyleSheet(stat_style)
+    self.stat_winrate.setProperty("statCard", True)
     self.stat_winrate.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(self.stat_winrate, 0, 1)
 
     self.stat_profit = QLabel("총 실현손익\n0 원")
-    self.stat_profit.setStyleSheet(stat_style)
+    self.stat_profit.setProperty("statCard", True)
     self.stat_profit.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(self.stat_profit, 0, 2)
 
     self.stat_holdings = QLabel("보유 종목\n0 개")
-    self.stat_holdings.setStyleSheet(stat_style)
+    self.stat_holdings.setProperty("statCard", True)
     self.stat_holdings.setAlignment(Qt.AlignmentFlag.AlignCenter)
     layout.addWidget(self.stat_holdings, 0, 3)
 

@@ -104,7 +104,7 @@ def apply_preset_values(self, preset):
         self.spin_price_feed_stale_sec.setValue(int(preset["price_feed_stale_sec"]))
 
     name = preset.get("name", "사용자 정의")
-    self.lbl_current_preset.setText(f"✅ 현재 프리셋: {name}")
+    self.lbl_current_preset.setText(f"현재 프리셋: {name}")
     self.log(f"📋 {name} 프리셋 적용됨")
     self.refresh_trade_action_buttons()
 

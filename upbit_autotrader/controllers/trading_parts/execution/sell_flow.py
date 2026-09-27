@@ -237,7 +237,7 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
             self.trade_count += 1
             if profit > 0:
                 self.win_count += 1
-            self.lbl_total_profit.setText(f"📈 당일 실현손익: {self.total_realized_profit:,.0f}원")
+            self.lbl_total_profit.setText(f"당일 실현손익: {self.total_realized_profit:,.0f}원")
             qty_item = info.get("ui_items", {}).get("qty")
             if qty_item is None:
                 qty_item = QTableWidgetItem("-")
@@ -300,7 +300,7 @@ def _check_partial_sell_execution(self, ticker, uuid, qty, reason, level=None, r
                 if not resolved:
                     self._ops_alert(
                         level="warning",
-                        message=f"⚠️ [{ticker}] 분할매도 타임아웃 unresolved - 수동검토 필요",
+                        message=f"[{ticker}] 분할매도 타임아웃 unresolved - 수동검토 필요",
                         key=f"partial_timeout_unresolved:{uuid}",
                         cooldown=30,
                     )
@@ -382,7 +382,7 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
             )
             if executed_volume <= 0 or sell_amount <= 0:
                 info["state"] = "보유중"
-                self.set_table_item(info["row"], 4, "💼 보유중", "#00b4d8")
+                self.set_table_item(info["row"], 4, "보유중", "#00b4d8")
                 self.log(f"⚠️ [{ticker}] 매도 체결 정보가 유효하지 않습니다.")
                 if callable(clear_pending_if_uuid):
                     clear_pending_if_uuid(ticker, uuid)
@@ -406,7 +406,7 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
             self.trade_count += 1
             if profit > 0:
                 self.win_count += 1
-            self.lbl_total_profit.setText(f"📈 당일 실현손익: {self.total_realized_profit:,.0f}원")
+            self.lbl_total_profit.setText(f"당일 실현손익: {self.total_realized_profit:,.0f}원")
             info["qty"] = remaining_qty
             if terminal_full_exit:
                 info["state"] = "감시중"
@@ -415,12 +415,12 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
                 info["high_since_buy"] = 0
                 info["max_profit_rate"] = 0.0
                 info["partial_sold"] = []
-                self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+                self.set_table_item(info["row"], 4, "감시중", "#00b894")
             else:
                 info["state"] = "보유중"
                 info["invest_amt"] = max(0.0, buy_amount)
                 info["buy_price"] = (info["invest_amt"] / remaining_qty) if remaining_qty > 0 else 0.0
-                self.set_table_item(info["row"], 4, "💼 보유중", "#00b4d8")
+                self.set_table_item(info["row"], 4, "보유중", "#00b4d8")
             qty_item = info.get("ui_items", {}).get("qty")
             if qty_item is not None:
                 qty_item.setText("0.00000000" if terminal_full_exit else f"{remaining_qty:.8f}")
@@ -511,7 +511,7 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
             info = self.universe.get(ticker)
             if info and info["qty"] > 0:
                 info["state"] = "보유중"
-                self.set_table_item(info["row"], 4, "💼 보유중", "#00b4d8")
+                self.set_table_item(info["row"], 4, "보유중", "#00b4d8")
             if callable(clear_pending_if_uuid):
                 clear_pending_if_uuid(ticker, uuid)
             else:
@@ -527,7 +527,7 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
                 info = self.universe.get(ticker)
                 if info:
                     info["state"] = "체결확인실패"
-                    self.set_table_item(info["row"], 4, "❓ 확인필요", "#ffc107")
+                    self.set_table_item(info["row"], 4, "확인필요", "#ffc107")
                 if callable(resolve_timeout_pending):
                     resolved = resolve_timeout_pending(ticker=ticker, pending=pending, reason="sell_execution_timeout")
                 else:
@@ -539,7 +539,7 @@ def check_sell_execution(self, ticker, uuid, reason, retry_count=0, session_id=N
                 if not resolved and callable(ops_alert):
                     ops_alert(
                         level="warning",
-                        message=f"⚠️ [{ticker}] 매도 주문 타임아웃 unresolved - 수동검토 필요",
+                        message=f"[{ticker}] 매도 주문 타임아웃 unresolved - 수동검토 필요",
                         key=f"sell_timeout_unresolved:{uuid}",
                         cooldown=30,
                     )

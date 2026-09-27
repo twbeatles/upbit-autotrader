@@ -236,7 +236,7 @@ def _register_manual_review(self, ticker, uuid, reason, order=None, extra=None):
     _ops_alert(
         self,
         level="warning",
-        message=f"⚠️ [{ticker}] 수동검토 큐 적재: {reason}",
+        message=f"[{ticker}] 수동검토 큐 적재: {reason}",
         key=f"manual_review:{ticker}:{key}",
         cooldown=30,
     )
@@ -275,7 +275,7 @@ def _register_orphan_event(self, ticker, uuid, side, state, session_id, source):
     _ops_alert(
         self,
         level="warning",
-        message=f"⚠️ [{ticker}] 세션 불일치 orphan 이벤트 감지 ({state})",
+        message=f"[{ticker}] 세션 불일치 orphan 이벤트 감지 ({state})",
         key=f"orphan:{event['uuid']}:{event['active_session_id']}",
         cooldown=20,
     )

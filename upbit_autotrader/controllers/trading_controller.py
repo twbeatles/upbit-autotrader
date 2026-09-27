@@ -359,12 +359,12 @@ class TraderTradingController(ControllerTypeBase):
         item.setForeground(QColor("#1a1a2e"))
 
     def _update_statistics(self):
-        self.stat_trades.setText(f"📊 총 거래 횟수\n{self.trade_count} 회")
+        self.stat_trades.setText(f"총 거래 횟수\n{self.trade_count} 회")
         winrate = (self.win_count / self.trade_count * 100) if self.trade_count > 0 else 0
-        self.stat_winrate.setText(f"🎯 승률\n{winrate:.1f} %")
-        self.stat_profit.setText(f"💰 총 실현손익\n{self.total_realized_profit:,.0f} 원")
+        self.stat_winrate.setText(f"승률\n{winrate:.1f} %")
+        self.stat_profit.setText(f"총 실현손익\n{self.total_realized_profit:,.0f} 원")
         holdings = int(self._get_risk_snapshot(force=False).get("holdings_count", 0) or 0)
-        self.stat_holdings.setText(f"📦 보유 종목\n{holdings} 개")
+        self.stat_holdings.setText(f"보유 종목\n{holdings} 개")
 
     def reset_statistics(self):
         reply = QMessageBox.question(
@@ -379,7 +379,7 @@ class TraderTradingController(ControllerTypeBase):
             self.trade_count = 0
             self.win_count = 0
             self._update_statistics()
-            self.lbl_total_profit.setText("📈 당일 실현손익: 0 원")
+            self.lbl_total_profit.setText("당일 실현손익: 0 원")
             self.log("🔄 통계 초기화됨")
 
     def log(self, msg):

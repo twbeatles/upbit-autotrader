@@ -30,8 +30,6 @@ from PyQt6.QtWidgets import (
 from upbit_autotrader.core.config import Config
 
 
-
-from .styles import DARK_STYLESHEET
 from upbit_autotrader.ui.components.status_badge import set_status_badge
 
 class EmergencyCloseDialog(QDialog):
@@ -45,7 +43,7 @@ class EmergencyCloseDialog(QDialog):
     def init_ui(self) -> None:
         self.setWindowTitle("Emergency Close")
         self.setFixedSize(520, 420)
-        self.setStyleSheet(DARK_STYLESHEET)
+
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)

@@ -27,12 +27,7 @@ from PyQt6.QtWidgets import (
 )
 
 from upbit_autotrader.core.config import Config
-
-try:
-    from upbit_autotrader.ui.dialogs import DARK_STYLESHEET
-except Exception:
-    DARK_STYLESHEET = ""
-
+from upbit_autotrader.ui.components.infobar import notify_or_fallback
 
 class PresetManagerDialog(QDialog):
     def __init__(self, parent=None, current_values: Dict[str, Any] | None = None):
@@ -45,7 +40,6 @@ class PresetManagerDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle("Preset Manager")
         self.setFixedSize(700, 600)
-        self.setStyleSheet(DARK_STYLESHEET)
 
         layout = QVBoxLayout(self)
 
@@ -140,15 +134,26 @@ class PresetManagerDialog(QDialog):
         )
         self.detail_label.setText(details)
 
+    def _feedback(self, kind, title, message, modal_fallback):
+        """Non-modal InfoBar feedback; modal dialog only when headless."""
+        host = self.parent() if self.parent() is not None else self
+        notify_or_fallback(host, kind, title, message, fallback=modal_fallback)
+
     def save_current_preset(self):
         name = self.input_name.text().strip()
         if not name:
-            QMessageBox.warning(self, "Warning", "Please enter preset name.")
+            self._feedback(
+                "warning", "Warning", "Please enter preset name.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Please enter preset name."),
+            )
             return
 
         key = "custom_" + re.sub(r"\s+", "_", name.lower())
         if key in Config.DEFAULT_PRESETS:
-            QMessageBox.warning(self, "Warning", "Name conflicts with default preset.")
+            self._feedback(
+                "warning", "Warning", "Name conflicts with default preset.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Name conflicts with default preset."),
+            )
             return
 
         self.presets[key] = {
@@ -159,7 +164,10 @@ class PresetManagerDialog(QDialog):
         self.save_presets_to_file()
         self.refresh_preset_list()
         self.input_name.clear()
-        QMessageBox.information(self, "Saved", f"Preset '{name}' saved.")
+        self._feedback(
+            "success", "Saved", f"Preset '{name}' saved.",
+            modal_fallback=lambda: QMessageBox.information(self, "Saved", f"Preset '{name}' saved."),
+        )
 
     def delete_preset(self):
         item = self.preset_list.currentItem()
@@ -168,7 +176,10 @@ class PresetManagerDialog(QDialog):
 
         key = item.data(Qt.ItemDataRole.UserRole)
         if key in Config.DEFAULT_PRESETS:
-            QMessageBox.warning(self, "Warning", "Default presets cannot be deleted.")
+            self._feedback(
+                "warning", "Warning", "Default presets cannot be deleted.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Default presets cannot be deleted."),
+            )
             return
 
         reply = QMessageBox.question(
@@ -186,7 +197,10 @@ class PresetManagerDialog(QDialog):
     def apply_preset(self):
         item = self.preset_list.currentItem()
         if not item:
-            QMessageBox.warning(self, "Warning", "Select preset to apply.")
+            self._feedback(
+                "warning", "Warning", "Select preset to apply.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Select preset to apply."),
+            )
             return
 
         key = item.data(Qt.ItemDataRole.UserRole)
@@ -205,7 +219,6 @@ class HelpDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle("Help")
         self.setFixedSize(800, 700)
-        self.setStyleSheet(DARK_STYLESHEET)
 
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
@@ -263,7 +276,6 @@ class SettingsDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle("System Settings")
         self.setFixedSize(550, 400)
-        self.setStyleSheet(DARK_STYLESHEET)
 
         layout = QVBoxLayout(self)
 

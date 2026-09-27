@@ -75,4 +75,22 @@ try:
 
     DARK_STYLESHEET = _build_stylesheet(dark=True)
 except Exception:
+    _build_stylesheet = None  # type: ignore[assignment]
     DARK_STYLESHEET = _LEGACY_DARK_STYLESHEET
+
+
+def dialog_stylesheet() -> str:
+    """Theme-aware dialog stylesheet (follows the OS light/dark mode).
+
+    Dialogs must not pin the dark variant: the global theme in
+    ``upbit_autotrader.ui.theme`` already styles every top-level widget,
+    so new code should rely on it and call this only for standalone use.
+    """
+    if _build_stylesheet is not None:
+        try:
+            from upbit_autotrader.ui.theme import is_dark_mode
+
+            return _build_stylesheet(dark=is_dark_mode())
+        except Exception:
+            pass
+    return DARK_STYLESHEET

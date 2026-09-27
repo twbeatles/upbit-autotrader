@@ -96,7 +96,7 @@ def _resolve_timeout_pending(self, ticker, pending, reason):
     if callable(ops_alert):
         ops_alert(
             level="warning",
-            message=f"⚠️ [{ticker}] 주문 타임아웃 감지 - 취소/재조회 시도",
+            message=f"[{ticker}] 주문 타임아웃 감지 - 취소/재조회 시도",
             key=f"timeout:{uuid}",
             cooldown=15,
         )

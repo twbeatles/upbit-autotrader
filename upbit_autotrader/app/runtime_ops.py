@@ -84,7 +84,7 @@ def on_timer_tick(self):
         if stale_limit > 0 and last_tick_ts > 0 and (time.time() - last_tick_ts) > stale_limit:
             self._ops_alert(
                 level="warning",
-                message=f"⚠️ 가격 피드 stale 감지 ({stale_limit:.0f}초 초과)",
+                message=f"가격 피드 stale 감지 ({stale_limit:.0f}초 초과)",
                 key="price_feed_stale",
                 cooldown=max(5.0, stale_limit / 2.0),
             )
@@ -93,9 +93,9 @@ def on_timer_tick(self):
                 if hasattr(self, "_restart_price_thread"):
                     try:
                         self._restart_price_thread(list(getattr(self, "universe", {}).keys()))
-                        self._ops_alert(level="info", message="🔄 가격 피드 스레드 재시작 시도", key="price_feed_restart", cooldown=10)
+                        self._ops_alert(level="info", message="가격 피드 스레드 재시작 시도", key="price_feed_restart", cooldown=10)
                     except Exception as e:
-                        self._ops_alert(level="error", message=f"❌ 가격 피드 스레드 재시작 실패: {e}", key="price_feed_restart_error", cooldown=20)
+                        self._ops_alert(level="error", message=f"가격 피드 스레드 재시작 실패: {e}", key="price_feed_restart_error", cooldown=20)
 
 
 def _reset_daily_stats(self):
@@ -103,7 +103,7 @@ def _reset_daily_stats(self):
     self.total_realized_profit = 0
     self.trade_count = 0
     self.win_count = 0
-    self.lbl_total_profit.setText("📈 당일 실현손익: 0원")
+    self.lbl_total_profit.setText("당일 실현손익: 0원")
     self._update_statistics()
     self.log("📅 일일 통계 초기화 (자정)")
     self.logger.info("일일 통계 초기화")

@@ -64,7 +64,7 @@ def login(self):
         self.initial_balance = float(balance)
         self._paper_seeded = False
         self._seed_paper_balance_once()
-        self.lbl_balance.setText(f"💰 주문가능금액: {float(balance):,.0f} 원")
+        self.lbl_balance.setText(f"주문가능금액: {float(balance):,.0f} 원")
         self.lbl_connection.setText("● 연결됨")
         set_status_badge(self.lbl_connection, "success")
         if hasattr(self, "refresh_trade_action_buttons"):

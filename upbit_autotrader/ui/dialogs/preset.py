@@ -30,10 +30,7 @@ from PyQt6.QtWidgets import (
 from upbit_autotrader.core.config import Config
 
 
-
-from .styles import DARK_STYLESHEET
-from upbit_autotrader.ui import design_tokens as tokens
-from upbit_autotrader.ui.theme import is_dark_mode
+from upbit_autotrader.ui.components.infobar import notify_or_fallback
 
 class PresetManagerDialog(QDialog):
     """Manage strategy presets."""
@@ -48,7 +45,7 @@ class PresetManagerDialog(QDialog):
     def init_ui(self) -> None:
         self.setWindowTitle("Preset Manager")
         self.setFixedSize(700, 600)
-        self.setStyleSheet(DARK_STYLESHEET)
+
 
         layout = QVBoxLayout(self)
         layout.setSpacing(12)
@@ -62,7 +59,7 @@ class PresetManagerDialog(QDialog):
 
         self.detail_label = QLabel("Select a preset to view details.")
         self.detail_label.setWordWrap(True)
-        self.detail_label.setStyleSheet(f"padding: {tokens.SPACE_XS}px; background: {tokens.palette(is_dark_mode())['surface_alt']}; border-radius: 6px;")
+
         list_layout.addWidget(self.detail_label)
 
         group_list.setLayout(list_layout)
@@ -163,15 +160,26 @@ class PresetManagerDialog(QDialog):
         ]
         self.detail_label.setText("<br>".join(lines))
 
+    def _feedback(self, kind: str, title: str, message: str, modal_fallback) -> None:
+        """Non-modal InfoBar feedback; modal dialog only when headless."""
+        host = self.parent() if self.parent() is not None else self
+        notify_or_fallback(host, kind, title, message, fallback=modal_fallback)
+
     def save_current_preset(self) -> None:
         name = self.input_name.text().strip()
         if not name:
-            QMessageBox.warning(self, "Warning", "Please enter a preset name.")
+            self._feedback(
+                "warning", "Warning", "Please enter a preset name.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Please enter a preset name."),
+            )
             return
 
         key = "custom_" + re.sub(r"\s+", "_", name.lower())
         if key in Config.DEFAULT_PRESETS:
-            QMessageBox.warning(self, "Warning", "This name conflicts with default preset key.")
+            self._feedback(
+                "warning", "Warning", "This name conflicts with default preset key.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "This name conflicts with default preset key."),
+            )
             return
 
         self.presets[key] = {
@@ -182,7 +190,10 @@ class PresetManagerDialog(QDialog):
         self.save_presets_to_file()
         self.refresh_preset_list()
         self.input_name.clear()
-        QMessageBox.information(self, "Saved", f"Preset '{name}' saved.")
+        self._feedback(
+            "success", "Saved", f"Preset '{name}' saved.",
+            modal_fallback=lambda: QMessageBox.information(self, "Saved", f"Preset '{name}' saved."),
+        )
 
     def delete_preset(self) -> None:
         item = self.preset_list.currentItem()
@@ -191,7 +202,10 @@ class PresetManagerDialog(QDialog):
 
         key = item.data(Qt.ItemDataRole.UserRole)
         if key in Config.DEFAULT_PRESETS:
-            QMessageBox.warning(self, "Warning", "Default presets cannot be deleted.")
+            self._feedback(
+                "warning", "Warning", "Default presets cannot be deleted.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Default presets cannot be deleted."),
+            )
             return
 
         name = self.presets.get(key, {}).get("name", key)
@@ -212,7 +226,10 @@ class PresetManagerDialog(QDialog):
     def apply_preset(self) -> None:
         item = self.preset_list.currentItem()
         if not item:
-            QMessageBox.warning(self, "Warning", "Select a preset to apply.")
+            self._feedback(
+                "warning", "Warning", "Select a preset to apply.",
+                modal_fallback=lambda: QMessageBox.warning(self, "Warning", "Select a preset to apply."),
+            )
             return
 
         key = item.data(Qt.ItemDataRole.UserRole)

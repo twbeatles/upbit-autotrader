@@ -163,6 +163,13 @@ QStatusBar {{
     color: {c['text_secondary']};
     font-size: {tokens.FONT_SECONDARY}px;
 }}
+QLabel[statCard="true"] {{
+    background-color: {c['surface']};
+    border: 1px solid {c['border']};
+    border-radius: {tokens.CARD_RADIUS}px;
+    padding: {tokens.SPACE_MD}px;
+    font-size: {tokens.FONT_BODY}px;
+}}
 QToolTip {{
     background-color: {c['surface']};
     color: {c['text_primary']};

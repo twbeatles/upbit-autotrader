@@ -36,7 +36,7 @@ def _handle_ws_asset_event(self, data: dict):
                 if hasattr(self, "lbl_balance"):
                     is_paper = bool(callable(getattr(self, "_is_paper_mode", None)) and self._is_paper_mode())
                     paper_tag = " [PAPER]" if is_paper else ""
-                    self.lbl_balance.setText(f"💰 주문가능금액: {bal:,.0f} 원{paper_tag}")
+                    self.lbl_balance.setText(f"주문가능금액: {bal:,.0f} 원{paper_tag}")
             else:
                 ticker = f"KRW-{currency}"
                 if hasattr(self, "universe") and ticker in self.universe:
@@ -64,7 +64,7 @@ def get_balance(self):
         if svc is None:
             return
         self.balance = float(svc.get_krw_balance())
-        self.lbl_balance.setText(f"💰 주문가능금액: {self.balance:,.0f} 원 [PAPER]")
+        self.lbl_balance.setText(f"주문가능금액: {self.balance:,.0f} 원 [PAPER]")
         return
 
     if not self.upbit:
@@ -75,7 +75,7 @@ def get_balance(self):
             self.logger.warning("잔고 조회 결과가 None입니다.")
             return
         self.balance = float(balance)
-        self.lbl_balance.setText(f"💰 주문가능금액: {self.balance:,.0f} 원")
+        self.lbl_balance.setText(f"주문가능금액: {self.balance:,.0f} 원")
     except Exception as e:
         self.logger.error(f"잔고 조회 실패: {e}")
 
@@ -220,7 +220,7 @@ def _ensure_universe_row(self, ticker):
             self.table.setItem(row, 1, QTableWidgetItem("-"))
             self.table.setItem(row, 2, QTableWidgetItem("-"))
             self.table.setItem(row, 3, QTableWidgetItem("-"))
-            self.set_table_item(row, 4, "👀 감시중", "#00b894")
+            self.set_table_item(row, 4, "감시중", "#00b894")
             self.table.setItem(row, 5, QTableWidgetItem("0.00000000"))
             self.table.setItem(row, 6, QTableWidgetItem("-"))
             self.table.setItem(row, 7, QTableWidgetItem("-"))
@@ -264,10 +264,10 @@ def _sync_account_holdings_to_universe(self, account_holdings=None, include_exte
             info["state"] = "보유중"
             info["high_since_buy"] = max(current, buy_price)
             info.setdefault("partial_sold", [])
-            self.set_table_item(info["row"], 4, "💼 보유중", "#00b4d8")
+            self.set_table_item(info["row"], 4, "보유중", "#00b4d8")
         else:
             info["state"] = "감시중"
-            self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+            self.set_table_item(info["row"], 4, "감시중", "#00b894")
         ui_items = info.get("ui_items", {})
         qty_item = ui_items.get("qty")
         if qty_item is None and hasattr(self, "table"):
@@ -307,7 +307,7 @@ def _sync_account_holdings_to_universe(self, account_holdings=None, include_exte
             info["max_profit_rate"] = 0.0
             info["partial_sold"] = []
             info["state"] = "감시중"
-            self.set_table_item(info["row"], 4, "👀 감시중", "#00b894")
+            self.set_table_item(info["row"], 4, "감시중", "#00b894")
     self._risk_snapshot_cache = {"ts": 0.0, "value": None}
 
 

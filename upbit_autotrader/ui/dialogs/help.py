@@ -30,9 +30,6 @@ from PyQt6.QtWidgets import (
 from upbit_autotrader.core.config import Config
 
 
-
-from .styles import DARK_STYLESHEET
-
 class HelpDialog(QDialog):
     """Simple tabbed help dialog using Config.HELP_CONTENT markdown text."""
 
@@ -43,7 +40,7 @@ class HelpDialog(QDialog):
     def init_ui(self) -> None:
         self.setWindowTitle("Help")
         self.setFixedSize(800, 700)
-        self.setStyleSheet(DARK_STYLESHEET)
+
 
         layout = QVBoxLayout(self)
         tabs = QTabWidget()

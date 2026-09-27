@@ -157,7 +157,7 @@ class TraderHistoryController(ControllerTypeBase):
         """기존 거래 기록을 테이블에 로드"""
         for record in self.trade_history:
             self._add_history_row(record)
-        self.lbl_history_count.setText(f"📝 총 {len(self.trade_history)}건의 거래 기록")
+        self.lbl_history_count.setText(f"총 {len(self.trade_history)}건의 거래 기록")
 
     def create_transfer_tab(self):
         """입출금 내역 탭 (읽기 전용 조회, 자동 출금 없음)"""
