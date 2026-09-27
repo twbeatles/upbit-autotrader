@@ -7,7 +7,7 @@ from unittest.mock import patch
 REQUIRED_METHODS = [
     "init_ui",
     "create_dashboard",
-    "create_tab_widget",
+    "create_navigation",
     "create_strategy_tab",
     "create_advanced_tab",
     "create_statistics_tab",

@@ -6,7 +6,7 @@ emoji icons are gone, the holdings table owns an empty state).
 """
 import os
 
-from PyQt6.QtWidgets import QApplication, QMainWindow, QTabWidget
+from PyQt6.QtWidgets import QApplication, QMainWindow
 
 from upbit_autotrader.controllers import ui_parts as _ui_parts
 from upbit_autotrader.controllers.ui_parts import layout_ops
@@ -185,14 +185,39 @@ def _is_emoji(ch: str) -> bool:
     )
 
 
-def test_tab_shell_keeps_all_legacy_pages_without_emoji():
+def test_nav_shell_keeps_all_legacy_pages_without_emoji():
+    _app()
     host = _page_host()
-    widget = layout_ops.create_tab_widget(host)
-    assert isinstance(widget, QTabWidget)
-    labels = [widget.tabText(i) for i in range(widget.count())]
+    host.create_splitter = lambda: layout_ops.create_splitter(host)
+    container = layout_ops.create_navigation(host)
+    assert container is not None
+    shell = host.nav_shell
+    assert shell.keys() == [
+        "create_trading_view",
+        "create_strategy_tab",
+        "create_advanced_tab",
+        "create_statistics_tab",
+        "create_history_tab",
+        "create_transfer_tab",
+        "create_ops_tab",
+    ]
+    labels = [shell.rail.button(key).text() for key in shell.keys()]
     assert labels == ["트레이딩", "전략 설정", "고급 설정", "거래 통계", "거래 내역", "입출금", "운영/수동검토"]
     for label in labels:
         assert not any(_is_emoji(ch) for ch in label), label
+    assert shell.stack.count() == 7
+    # reference parity: the auxiliary ops page is pinned to the rail bottom
+    assert shell.rail._bottom_box.count() == 1
+    assert shell.rail._top_box.count() == 6
+    shell.switch_to("create_history_tab")
+    assert shell.stack.currentWidget() is shell.page("create_history_tab")
+    assert shell.rail.button("create_history_tab").isChecked()
+    shell.switchTo("create_trading_view")
+    assert shell.stack.currentWidget() is shell.page("create_trading_view")
+    assert shell.rail.button("create_trading_view").isChecked()
+    assert not shell.rail.button("create_history_tab").isChecked()
+
+
 
 
 def test_splitter_table_owns_empty_state_overlay():
@@ -215,6 +240,7 @@ def test_no_inline_hex_stylesheet_in_migrated_shell():
     offenders = []
     for rel in (
         "upbit_autotrader/controllers/ui_parts/layout_ops.py",
+        "upbit_autotrader/ui/navigation.py",
         "upbit_autotrader/controllers/ui_parts/dashboard_ops.py",
         "upbit_autotrader/controllers/ui_parts/strategy_tab_ops.py",
         "upbit_autotrader/controllers/ui_parts/row_action_ops.py",

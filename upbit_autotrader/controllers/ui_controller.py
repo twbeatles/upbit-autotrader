@@ -43,7 +43,7 @@ except ImportError:
 
 class TraderUIController(ControllerTypeBase):
     create_dashboard = _dashboard_ops.create_dashboard
-    create_tab_widget = _layout_ops.create_tab_widget
+    create_navigation = _layout_ops.create_navigation
     create_strategy_tab = _strategy_tab_ops.create_strategy_tab
     create_trading_view = _trading_view_ops.build_trading_view
     create_order_ticket = _order_ticket_ops.build_order_ticket

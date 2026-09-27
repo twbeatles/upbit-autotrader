@@ -24,7 +24,7 @@ upbit_autotrader/
   analytics/, backtesting/, notifications/, ui/
     backtesting/             # models, engine, strategies, registry (backtester.py는 shim)
     ui/dialogs/              # styles, preset, help, settings, emergency
-    ui/                      # design_tokens, theme, components (Fluent shell per DESKTOP_UI_DESIGN_RULES.md)
+    ui/                      # design_tokens, theme, navigation (ktrain-style nav shell), components (Fluent shell per DESKTOP_UI_DESIGN_RULES.md)
     indicators/              # models, momentum, trend, volume, facade (indicators.py는 shim)
     controllers/trading_parts/
       execution/             # validation, ws_events, twap, reconcile, buy_flow, sell_flow (execution_flow_ops.py는 shim)

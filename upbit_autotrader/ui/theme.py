@@ -158,6 +158,29 @@ QHeaderView::section {{
     border: none;
     padding: {tokens.SPACE_XS}px;
 }}
+QWidget#navRail {{
+    background-color: {c['surface']};
+    border-right: 1px solid {c['border']};
+}}
+QPushButton[navItem="true"] {{
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    text-align: left;
+    padding: {tokens.SPACE_XS}px {tokens.SPACE_SM}px;
+    color: {c['text_secondary']};
+    font-size: {tokens.FONT_BODY}px;
+}}
+QPushButton[navItem="true"]:hover {{
+    background-color: {c['surface_alt']};
+    color: {c['text_primary']};
+}}
+QPushButton[navItem="true"][navSelected="true"] {{
+    background-color: {c['surface_alt']};
+    color: {c['primary']};
+    font-weight: 600;
+    border-left: 3px solid {c['primary']};
+}}
 QStatusBar {{
     background-color: {c['surface']};
     color: {c['text_secondary']};

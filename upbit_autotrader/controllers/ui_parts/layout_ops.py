@@ -1,4 +1,4 @@
-"""Main-window shell: dashboard + navigation tabs + holdings/log splitter.
+"""Main-window shell: dashboard + Fluent navigation rail + holdings/log splitter.
 
 Fluent-style shell rules applied (DESKTOP_UI_DESIGN_RULES.md):
 - spacing/margins come from design tokens (4/8/12/16/24/32 scale only)
@@ -10,15 +10,14 @@ Fluent-style shell rules applied (DESKTOP_UI_DESIGN_RULES.md):
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
+    QHBoxLayout,
     QHeaderView,
     QLabel,
-    QScrollArea,
     QSizePolicy,
     QSplitter,
     QStackedWidget,
     QStyle,
     QStyledItemDelegate,
-    QTabWidget,
     QTableWidget,
     QTextEdit,
     QVBoxLayout,
@@ -27,19 +26,23 @@ from PyQt6.QtWidgets import (
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.ui import design_tokens as tokens
+from upbit_autotrader.ui import navigation
 from upbit_autotrader.ui.components.empty_state import EmptyState
+from upbit_autotrader.ui.navigation import NavigationItemPosition
 from upbit_autotrader.ui.theme import configure_main_window
 
-# Navigation pages: (factory method, text label, standard icon).
+# Navigation pages: (factory method, text label, standard icon, rail position).
 # Factories stay late-bound so pages keep building through the controller.
+# Mirrors the reference MSFluentWindow layout: trading pages up top, the
+# auxiliary operations page pinned to the bottom.
 TAB_DEFS = (
-    ("create_trading_view", "트레이딩", "SP_ComputerIcon"),
-    ("create_strategy_tab", "전략 설정", "SP_FileDialogDetailedView"),
-    ("create_advanced_tab", "고급 설정", "SP_FileDialogContentsView"),
-    ("create_statistics_tab", "거래 통계", "SP_FileDialogInfoView"),
-    ("create_history_tab", "거래 내역", "SP_FileDialogListView"),
-    ("create_transfer_tab", "입출금", "SP_DialogSaveButton"),
-    ("create_ops_tab", "운영/수동검토", "SP_ToolBarHorizontalExtensionButton"),
+    ("create_trading_view", "트레이딩", "SP_ComputerIcon", NavigationItemPosition.TOP),
+    ("create_strategy_tab", "전략 설정", "SP_FileDialogDetailedView", NavigationItemPosition.TOP),
+    ("create_advanced_tab", "고급 설정", "SP_FileDialogContentsView", NavigationItemPosition.TOP),
+    ("create_statistics_tab", "거래 통계", "SP_FileDialogInfoView", NavigationItemPosition.TOP),
+    ("create_history_tab", "거래 내역", "SP_FileDialogListView", NavigationItemPosition.TOP),
+    ("create_transfer_tab", "입출금", "SP_DialogSaveButton", NavigationItemPosition.TOP),
+    ("create_ops_tab", "운영/수동검토", "SP_ToolBarHorizontalExtensionButton", NavigationItemPosition.BOTTOM),
 )
 
 TABLE_COLUMNS = [
@@ -97,55 +100,74 @@ def init_ui(self):
     central_widget = QWidget()
     self.setCentralWidget(central_widget)
 
-    scroll_area = QScrollArea()
-    scroll_area.setWidgetResizable(True)
-    scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
-    scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-    scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+    body = QHBoxLayout(central_widget)
+    body.setContentsMargins(0, 0, 0, 0)
+    body.setSpacing(0)
 
-    scroll_content = QWidget()
-    content_layout = QVBoxLayout(scroll_content)
-    content_layout.setSpacing(tokens.SECTION_GAP)
-    content_layout.setContentsMargins(
+    rail = navigation.FluentNavRail(central_widget)
+    stack = QStackedWidget(central_widget)
+    stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+    self.nav_shell = navigation.NavigationShell(rail, stack)
+    _register_pages(self, self.nav_shell)
+    body.addWidget(rail, 0)
+
+    right = QWidget(central_widget)
+    right_layout = QVBoxLayout(right)
+    right_layout.setSpacing(tokens.SECTION_GAP)
+    right_layout.setContentsMargins(
         tokens.PAGE_MARGIN, tokens.SPACE_MD, tokens.PAGE_MARGIN, tokens.PAGE_MARGIN
     )
 
     dashboard = self.create_dashboard()
     dashboard.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
-    content_layout.addWidget(dashboard, 0)
-
-    self.tab_widget = self.create_tab_widget()
-    self.tab_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-    content_layout.addWidget(self.tab_widget, 0)
-    content_layout.addWidget(self.create_splitter(), 1)
-
-    scroll_area.setWidget(scroll_content)
-
-    main_layout = QVBoxLayout(central_widget)
-    main_layout.setContentsMargins(0, 0, 0, 0)
-    main_layout.addWidget(scroll_area)
+    right_layout.addWidget(dashboard, 0)
+    right_layout.addWidget(stack, 1)
+    body.addWidget(right, 1)
 
     self.create_statusbar()
     self.refresh_trade_action_buttons()
     self.refresh_table_empty_state()
 
 
-def create_tab_widget(self):
-    tab_widget = QTabWidget()
-    tab_widget.setDocumentMode(True)
-    for factory_name, label, icon_name in TAB_DEFS:
+def _register_pages(self, shell) -> None:
+    """Register every legacy page on the nav shell (legacy order kept).
+
+    The trading page owns the holdings/log splitter underneath the trading
+    view; every other page scrolls inside its own scroll area, mirroring
+    the reference scrollable pages.
+    """
+    for factory_name, label, icon_name, position in TAB_DEFS:
         factory = getattr(self, factory_name, None)
         if not callable(factory):
             continue
         page = factory()
         if not isinstance(page, QWidget):
             continue
-        icon = _tab_icon(tab_widget, icon_name)
-        if icon is not None:
-            tab_widget.addTab(page, icon, label)
+        if factory_name == "create_trading_view":
+            trading_page = QWidget()
+            trading_layout = QVBoxLayout(trading_page)
+            trading_layout.setContentsMargins(0, 0, 0, 0)
+            trading_layout.setSpacing(tokens.SECTION_GAP)
+            page.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+            trading_layout.addWidget(page, 0)
+            trading_layout.addWidget(self.create_splitter(), 1)
+            page = trading_page
         else:
-            tab_widget.addTab(page, label)
-    return tab_widget
+            page = navigation.wrap_scrollable(page)
+        icon = _tab_icon(shell.stack, icon_name)
+        shell.addSubInterface(page, icon, label, position, key=factory_name)
+
+
+def create_navigation(self):
+    """Build a standalone nav-shell container (tests/diagnostics entry).
+
+    Returns the ``(rail | page stack)`` widget and stores the controller
+    on ``self.nav_shell``; the live window uses ``init_ui`` instead.
+    """
+    container, shell = navigation.create_shell()
+    self.nav_shell = shell
+    _register_pages(self, shell)
+    return container
 
 
 def create_splitter(self):

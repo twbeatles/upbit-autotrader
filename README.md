@@ -62,7 +62,7 @@ Upbit Pro Algo-Trader는 전문 트레이더와 퀀트 투자자를 위한 다�
   - 🖥️ HiDPI 대응 차트: 125%/150% 배율에서도 선명한 렌더링, 1080p 이상 다양한 해상도 적응형 레이아웃
   - ⚡ 주문 티켓: 시장가/지정가/최유리, 비중 프리셋, `order/test` 사전검증, LIVE 강제 확인 게이트
   - 보유 테이블 행별 매수/매도 퀵 버튼, 입출금 내역 조회 탭 (읽기 전용)
-  - Fluent 셸: 7개 탭 내비게이션 + OS 다크/라이트 테마 연동, 작업 결과는 비차단 InfoBar 알림
+  - Fluent 셸: 참고 UI(ktrain `MSFluentWindow`)식 사이드 내비게이션(상단 트레이딩 6종 + 하단 운영) + OS 다크/라이트 테마 연동, 작업 결과는 비차단 InfoBar 알림
   - 테마 일관성: 다이얼로그·통계 카드·차트 색상은 중앙 테마(`ui/theme.py` + `design_tokens.py`)를 따르며, 위젯 표시 문자열에는 이모지를 사용하지 않음
 - **보안 및 알림**:
   - Windows DPAPI 기반 API Key 암호화 보관 (`upbit_settings.json` schema v2)
