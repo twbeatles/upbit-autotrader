@@ -165,7 +165,7 @@ class Config:
 
     DEFAULT_ENABLE_DISCORD_ALERTS = False
     DEFAULT_DISCORD_WEBHOOK = ""
-    DEFAULT_PERSIST_RECONCILIATION_STATE = False
+    DEFAULT_PERSIST_RECONCILIATION_STATE = True
 
     # ---------------------------------------------------------------------
     # Paper trading

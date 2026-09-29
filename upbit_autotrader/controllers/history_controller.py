@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.ui.components.infobar import notify_or_fallback as _notify_or_fallback
+from upbit_autotrader.ui.file_opener import open_local_path
 from upbit_autotrader.controllers._type_support import ControllerTypeBase
 
 try:
@@ -85,7 +86,12 @@ class TraderHistoryController(ControllerTypeBase):
         if not hasattr(self, "_history_dirty"):
             self._history_dirty = False
         if not hasattr(self, "_history_flush_timer"):
-            timer = QTimer(self)
+            try:
+                timer = QTimer(self)
+            except TypeError:
+                # Qt base may not be fully constructed yet (e.g. in tests);
+                # fall back to an unparented timer owned by the event loop.
+                timer = QTimer()
             timer.setSingleShot(True)
             timer.timeout.connect(self._flush_trade_history)
             self._history_flush_timer = timer
@@ -99,12 +105,22 @@ class TraderHistoryController(ControllerTypeBase):
         self._ensure_history_flush_state()
         if not self._history_dirty:
             return
-        self._save_trade_history_now()
-        self._history_dirty = False
+        if self._save_trade_history_now():
+            self._history_dirty = False
 
     def _save_trade_history_now(self):
-        with open(Config.TRADE_HISTORY_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.trade_history, f, ensure_ascii=False, indent=2)
+        from upbit_autotrader.services.atomic_file import write_json_atomic
+
+        ok = write_json_atomic(Config.TRADE_HISTORY_FILE, self.trade_history)
+        if not ok:
+            # Keep dirty so the next flush (or closeEvent) retries instead
+            # of silently losing trades.
+            self._history_dirty = True
+            try:
+                self.log("[ERROR] 거래 히스토리 저장 실패 (다음 flush에서 재시도)")
+            except Exception:
+                pass
+        return ok
 
     def create_history_tab(self):
         """거래 내역 탭 (v2.5 신규)"""
@@ -301,7 +317,8 @@ class TraderHistoryController(ControllerTypeBase):
             analytics.generate_report_html(output_path)
             
             self.log(f"📊 거래 분석 리포트 생성: {output_path}")
-            os.startfile(output_path)
+            if not open_local_path(output_path):
+                self.log(f"[WARN] 리포트 자동 열기 실패: {output_path}")
         except Exception as e:
             self.log(f"[ERROR] 분석 리포트 생성 실패: {e}")
             QMessageBox.critical(self, "오류", f"리포트 생성 실패: {e}")
@@ -368,7 +385,8 @@ class TraderHistoryController(ControllerTypeBase):
             engine.generate_report(result, output_path)
             
             self.log(f"🧪 [{strategy_label}] 백테스트 완료: 수익률 {result.total_return:.2f}%, 승률 {result.win_rate:.1f}%")
-            os.startfile(output_path)
+            if not open_local_path(output_path):
+                self.log(f"[WARN] 리포트 자동 열기 실패: {output_path}")
         except Exception as e:
             self.log(f"[ERROR] 백테스트 실패: {e}")
             QMessageBox.critical(self, "오류", f"백테스트 실패: {e}")
@@ -398,7 +416,9 @@ class TraderHistoryController(ControllerTypeBase):
                 writer.writerows(self.trade_history)
             
             self.log(f"💾 거래 내역 내보내기: {filename}")
-            os.startfile(os.path.dirname(os.path.abspath(filename)) or '.')
+            folder = os.path.dirname(os.path.abspath(filename)) or '.'
+            if not open_local_path(folder):
+                self.log(f"[WARN] 폴더 자동 열기 실패: {folder}")
         except Exception as e:
             self.log(f"[ERROR] 내보내기 실패: {e}")
             QMessageBox.critical(self, "오류", f"내보내기 실패: {e}")
@@ -411,8 +431,14 @@ class TraderHistoryController(ControllerTypeBase):
                 with open(Config.TRADE_HISTORY_FILE, 'r', encoding='utf-8') as f:
                     self.trade_history = json.load(f)
         except Exception as e:
+            try:
+                stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup = f"{Config.TRADE_HISTORY_FILE}.corrupt-{stamp}.bak"
+                os.replace(Config.TRADE_HISTORY_FILE, backup)
+                logging.error(f"거래 히스토리 손상 → {backup}에 보존 후 초기화: {e}")
+            except Exception:
+                logging.error(f"거래 히스토리 로드 실패: {e}")
             self.trade_history = []
-            logging.error(f"거래 히스토리 로드 실패: {e}")
 
     def save_trade_history(self):
         """거래 히스토리 저장 (v2.5 신규)"""
@@ -420,8 +446,8 @@ class TraderHistoryController(ControllerTypeBase):
         try:
             if self._history_flush_timer.isActive():
                 self._history_flush_timer.stop()
-            self._save_trade_history_now()
-            self._history_dirty = False
+            if self._save_trade_history_now():
+                self._history_dirty = False
         except Exception as e:
             self.logger.error(f"거래 히스토리 저장 실패: {e}")
 

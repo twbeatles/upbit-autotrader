@@ -112,6 +112,9 @@ class TraderTradingController(ControllerTypeBase):
 
     _place_buy_order = _order_api_ops._place_buy_order
     _place_sell_order = _order_api_ops._place_sell_order
+    _place_best_buy_order = _order_api_ops._place_best_buy_order
+    _place_best_sell_order = _order_api_ops._place_best_sell_order
+    _validate_live_order_request = _execution_flow_ops._validate_live_order_request
     _attach_row_trade_buttons = _row_action_ops.attach_row_trade_buttons
     row_quick_buy = _row_action_ops.row_quick_buy
     row_quick_sell = _row_action_ops.row_quick_sell

@@ -97,12 +97,10 @@ class PresetManagerDialog(QDialog):
         return presets
 
     def save_presets_to_file(self):
+        from upbit_autotrader.services.atomic_file import write_json_atomic
+
         user_presets = {k: v for k, v in self.presets.items() if k not in Config.DEFAULT_PRESETS}
-        try:
-            with open(Config.PRESETS_FILE, "w", encoding="utf-8") as f:
-                json.dump(user_presets, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+        write_json_atomic(Config.PRESETS_FILE, user_presets)
 
     def refresh_preset_list(self):
         self.preset_list.clear()

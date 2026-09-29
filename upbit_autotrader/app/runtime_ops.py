@@ -134,8 +134,9 @@ def closeEvent(self, a0: Optional[QCloseEvent]):
     if hasattr(self, "_flush_trade_history"):
         self._flush_trade_history()
     self.save_trade_history()
-    if hasattr(self, "_reconcile_pending_orders"):
-        self._reconcile_pending_orders(force=True)
+    # NOTE: no network re-query here -- closeEvent must not block on API
+    # retries. Pending states are persisted below and re-reconciled on the
+    # next startup (see start_trading).
     if hasattr(self, "_persist_reconciliation_state"):
         self._persist_reconciliation_state(force=True)
     try:
@@ -145,8 +146,18 @@ def closeEvent(self, a0: Optional[QCloseEvent]):
         pass
 
     _stop_market_regime_thread(self)
-    self.price_thread.stop()
-    self.price_thread.wait(2000)
-    self.tray_icon.hide()
+    price_thread = getattr(self, "price_thread", None)
+    if price_thread is not None:
+        try:
+            price_thread.stop()
+            price_thread.wait(2000)
+        except Exception:
+            pass
+    tray_icon = getattr(self, "tray_icon", None)
+    if tray_icon is not None:
+        try:
+            tray_icon.hide()
+        except Exception:
+            pass
     self.logger.info("프로그램 종료")
     a0.accept()

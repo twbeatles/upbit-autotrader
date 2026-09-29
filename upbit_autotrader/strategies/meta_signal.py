@@ -149,12 +149,9 @@ class StrategyPerformanceTracker:
             return StrategyPerformanceTracker()
 
     def save(self, path: str) -> bool:
-        try:
-            with open(path, "w", encoding="utf-8") as fp:
-                json.dump(self.to_dict(), fp, ensure_ascii=False, indent=2)
-            return True
-        except Exception:
-            return False
+        from upbit_autotrader.services.atomic_file import write_json_atomic
+
+        return bool(write_json_atomic(path, self.to_dict()))
 
 
 def evaluate_meta_signal(

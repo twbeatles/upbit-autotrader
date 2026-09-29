@@ -49,17 +49,10 @@ TAB_DEFS = (
 
 
 def _fluent_window_base():
-    """Reference window class (None when the Fluent dependency is missing)."""
-    try:
-        from qfluentwidgets import FluentWindow
-        return FluentWindow
-    except ImportError:
-        pass
-    try:
-        from qfluentwidgets import MSFluentWindow
-        return MSFluentWindow
-    except ImportError:
-        return None
+    """Reference window class (None when unusable: missing or wrong binding)."""
+    from upbit_autotrader.ui.qt_compat import fluent_window_base
+
+    return fluent_window_base()
 
 
 def _is_fluent_window(host) -> bool:
@@ -142,6 +135,9 @@ def init_ui(self):
 
         rail = navigation.FluentNavRail(central_widget)
         stack = QStackedWidget(central_widget)
+        # Same surface as the Fluent shell: pages live on stackedWidget.
+        self.stackedWidget = stack
+        self.switchTo = _fallback_switch_to.__get__(self)
         stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.nav_shell = navigation.NavigationShell(rail, stack)
         _register_pages(self, fluent=False)
@@ -249,6 +245,17 @@ def _register_pages(self, shell=None, fluent: bool = False) -> None:
                 continue
             icon = _tab_icon(target.stack, icon_name)
             target.addSubInterface(page, icon, label, position, key=factory_name)
+
+
+def _fallback_switch_to(self, widget) -> None:
+    """Native-shell counterpart of ``FluentWindow.switchTo(widget)``."""
+    stack = getattr(self, "stackedWidget", None)
+    if stack is None:
+        return
+    try:
+        stack.setCurrentWidget(widget)
+    except Exception:
+        pass
 
 
 def create_navigation(self):

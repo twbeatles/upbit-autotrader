@@ -73,6 +73,7 @@ Upbit Pro Algo-Trader는 전문 트레이더와 퀀트 투자자를 위한 다�
 ## 시스템 요구사항
 
 - **운영체제**: Windows 10 / 11 (권장), macOS, Linux
+  - 비-Windows 참고: API 키 DPAPI 암호화 저장은 Windows 전용이라 macOS/Linux에서는 키 저장이 제한되고(일반 설정은 저장됨), 시작프로그램 등록 대신 수동 실행을 사용하세요. 리포트/폴더 자동 열기는 OS 기본 핸들러로 대체됩니다.
 - **Python**: Python 3.10 이상
 - **주요 라이브러리**:
   - `PyQt6 >= 6.0` + `PyQt6-Fluent-Widgets`/`PyQt6-Frameless-Window` (동일 바인딩 Fluent 셸, 타 바인딩과 혼합 금지)
@@ -106,6 +107,8 @@ python -m venv venv
 ```bash
 pip install -r requirements.txt
 ```
+
+> 가상환경에는 반드시 PyQt6 계열 Fluent 패키지만 설치하세요. `PySide6-Fluent-Widgets`를 함께 설치하면 `qfluentwidgets` 네임스페이스가 충돌해 앱이 네이티브 셸로 떨어지거나 빌드가 깨집니다.
 
 ### 3. 프로그램 실행
 

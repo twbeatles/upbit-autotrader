@@ -14,19 +14,16 @@ except ImportError:
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QMainWindow
 
-try:
-    # NOTE: FluentWindow (labeled expandable rail) rather than the
-    # reference MSFluentWindow (compact icon bar): seven text pages need
-    # readable labels. The navigation API is identical.
-    from qfluentwidgets import FluentWindow as _FluentBase
-    FLUENT_AVAILABLE = True
-except ImportError:  # pragma: no cover - graceful degradation path
-    try:
-        from qfluentwidgets import MSFluentWindow as _FluentBase  # type: ignore[no-redef]
-        FLUENT_AVAILABLE = True
-    except ImportError:
-        _FluentBase = QMainWindow
-        FLUENT_AVAILABLE = False
+# NOTE: FluentWindow (labeled expandable rail) rather than the
+# reference MSFluentWindow (compact icon bar): seven text pages need
+# readable labels. The navigation API is identical.
+# Binding guard (see ui/qt_compat.py): a qfluentwidgets build for another
+# Qt binding (e.g. PySide6) must never become a PyQt6 parent -- fall back
+# to the native shell instead of constructing a mixed-binding window.
+from upbit_autotrader.ui.qt_compat import fluent_window_base as _resolve_fluent_base
+
+_FluentBase = _resolve_fluent_base() or QMainWindow
+FLUENT_AVAILABLE = _FluentBase is not QMainWindow
 
 from upbit_autotrader.app import bootstrap_ops as _bootstrap_ops, runtime_ops as _runtime_ops
 from upbit_autotrader.controllers.batch_controller import TraderBatchController

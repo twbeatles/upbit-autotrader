@@ -15,6 +15,20 @@ def bind_runtime(**kwargs):
     globals().update(kwargs)
 
 
+def _open_log_dir():
+    """Open the log folder cross-platform (no-op when unavailable)."""
+    try:
+        from upbit_autotrader.ui.file_opener import open_local_path
+    except ImportError:
+        return
+    try:
+        log_dir = Config.LOG_DIR if Config is not None else ""
+    except Exception:
+        return
+    if log_dir and os.path.exists(log_dir):
+        open_local_path(log_dir)
+
+
 def create_menu_bar(self):
     menubar = self.menuBar() if hasattr(self, 'menuBar') else None
     if menubar is None:
@@ -35,7 +49,7 @@ def create_menu_bar(self):
     if view_menu is None:
         return
     action_logs = QAction("📜 로그 폴더 열기", self)
-    action_logs.triggered.connect(lambda: os.startfile(Config.LOG_DIR) if os.path.exists(Config.LOG_DIR) else None)
+    action_logs.triggered.connect(lambda: _open_log_dir())
     view_menu.addAction(action_logs)
 
     tools_menu = menubar.addMenu("도구")

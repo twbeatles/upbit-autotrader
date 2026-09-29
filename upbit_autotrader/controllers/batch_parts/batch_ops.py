@@ -226,6 +226,18 @@ def execute_batch_buy(self):
                     self.log(f"  ⚠️ [{coin}] 기존 {pending['side']} 주문 대기 중으로 건너뜀")
                     continue
 
+                validator: Any = getattr(self, "_validate_live_order_request", None)
+                if callable(validator):
+                    try:
+                        outcome: Any = validator(coin, "BUY", notional_krw=buy_amount)
+                        can_order, order_err, _chance = outcome
+                    except Exception as e:
+                        self.log(f"  ⚠️ [{coin}] 주문 가능 검증 실패로 건너뜀: {e}")
+                        continue
+                    if not can_order:
+                        self.log(f"  ⚠️ [{coin}] 주문 불가로 건너뜀: {order_err}")
+                        continue
+
                 if hasattr(self, "_reserve_krw_for_buy"):
                     if not self._reserve_krw_for_buy(coin, buy_amount, session_id=session_id):
                         self.log(f"  ⚠️ [{coin}] 가용 잔고 부족으로 건너뜀")

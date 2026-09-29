@@ -4,6 +4,8 @@ Single-symbol ticket docked in the strategy tab: symbol + order type +
 price/qty inputs, amount presets, paper/live badge, dry-run validation
 via POST /v1/order/test, and a confirm gate (live always confirms).
 """
+from typing import Any
+
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -177,27 +179,34 @@ def ticket_dry_run(self) -> bool:
         if status is not None:
             status.setText("연결된 클라이언트가 order/test를 지원하지 않습니다.")
         return False
-    side = "bid"
-    ord_type, volume, order_price = _to_test_payload(kind, price, amount)
-    try:
-        res = test_fn(
-            market=symbol, side=side, volume=volume, price=order_price, ord_type=ord_type
+    outcomes: list = []
+    for side in ("bid", "ask"):
+        ord_type, volume, order_price = _to_test_payload(kind, price, amount, side=side)
+        try:
+            res = test_fn(
+                market=symbol, side=side, volume=volume, price=order_price, ord_type=ord_type
+            )
+            ok = isinstance(res, dict) and bool(res.get("uuid") or res.get("market"))
+        except Exception as exc:
+            ok, res = False, str(exc)
+        outcomes.append((side, ok, res))
+    all_ok = all(ok for _, ok, _ in outcomes)
+    if status is not None:
+        summary = ", ".join(
+            f"{'매수' if side == 'bid' else '매도'}:{'성공' if ok else '실패'}"
+            for side, ok, _ in outcomes
         )
-        ok = isinstance(res, dict) and bool(res.get("uuid") or res.get("market"))
-        if status is not None:
-            status.setText(f"검증 {'성공' if ok else '응답 확인'}: {res}")
-        return ok
-    except Exception as exc:
-        if status is not None:
-            status.setText(f"검증 실패: {exc}")
-        return False
+        status.setText(f"검증 {summary}")
+    return all_ok
 
 
-def _to_test_payload(kind: str, price: float, amount: float):
+def _to_test_payload(kind: str, price: float, amount: float, side: str = "bid"):
     if kind == "지정가":
         return "limit", (amount if amount > 0 else None), (price if price > 0 else None)
     if kind == "최유리":
         return "best", (amount if amount > 0 else None), (price if price > 0 else None)
+    if side == "ask":
+        return "market", (amount if amount > 0 else None), None
     return "price", None, (amount if amount > 0 else None)
 
 
@@ -217,14 +226,33 @@ def submit_ticket_order(self, side: str) -> bool:
             if status is not None:
                 status.setText("사용자 취소")
             return False
+    if amount <= 0:
+        if status is not None:
+            status.setText("수량/금액을 입력하세요.")
+        return False
+    if kind == "지정가":
+        if price <= 0:
+            if status is not None:
+                status.setText("지정가 주문에는 가격을 입력하세요.")
+            return False
+        if status is not None:
+            status.setText("지정가 티켓 주문은 미지원입니다. 시장가/최유리를 이용하세요.")
+        return False
     try:
         if side == "BUY":
-            if kind == "시장가":
-                ok, res, msg = self._place_buy_order(symbol, amount, source="order_ticket")
+            best_buy: Any = getattr(self, "_place_best_buy_order", None)
+            if kind == "최유리" and callable(best_buy):
+                placed: Any = best_buy(symbol, amount, source="order_ticket")
+                ok, res, msg = placed
             else:
                 ok, res, msg = self._place_buy_order(symbol, amount, source="order_ticket")
         else:
-            ok, res, msg = self._place_sell_order(symbol, amount, source="order_ticket")
+            best_sell: Any = getattr(self, "_place_best_sell_order", None)
+            if kind == "최유리" and callable(best_sell):
+                placed: Any = best_sell(symbol, amount, source="order_ticket")
+                ok, res, msg = placed
+            else:
+                ok, res, msg = self._place_sell_order(symbol, amount, source="order_ticket")
     except AttributeError:
         if status is not None:
             status.setText("주문 컨트롤러가 연결되지 않았습니다.")

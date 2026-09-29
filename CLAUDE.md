@@ -47,8 +47,8 @@ upbit_autotrader/
 ## 주문 및 실행
 
 - live 주문은 `UpbitOrderService`, paper 주문은 `UpbitPaperOrderService`를 사용합니다.
-- 컨트롤러 공개 주문 경로는 `_place_buy_order`, `_place_sell_order`입니다.
-- 실행 모델은 `single_market`과 `twap_market`을 지원합니다.
+- 컨트롤러 공개 주문 경로는 `_place_buy_order`, `_place_sell_order`이며, 최유리 주문은 `_place_best_buy_order`, `_place_best_sell_order`를 사용합니다. 모든 주문 진입(자동/수동/일괄/티켓)은 `_validate_live_order_request` 검증을 공유합니다.
+- 실행 모델은 `single_market`, `twap_market`, `best`(최유리)를 지원합니다. 주문티켓은 시장가→`_place_buy/sell_order`, 최유리→`_place_best_buy/sell_order`로 분기하며, 지정가 티켓 주문은 미지원으로 차단합니다.
 - pending 상태, reconciliation store, manual review 큐를 함께 갱신해야 합니다.
 - 주문 가능 여부는 `orders/chance` 기반으로 시장 상태, 주문 타입, 최소 주문 금액, 수수료를 검증합니다.
 - trade history에는 예상 수수료, 실제 수수료, 예상/실현 슬리피지, execution mode, strategy/meta/market regime 필드를 남깁니다.

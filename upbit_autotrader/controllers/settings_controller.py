@@ -1,7 +1,19 @@
 import os
 import sys
-import winreg
 from typing import Any, cast
+
+
+def _get_winreg():
+    """Windows registry module or None on platforms without it."""
+    if sys.platform != "win32":
+        return None
+    try:
+        import winreg as _winreg
+
+        return _winreg
+    except ImportError:
+        return None
+
 
 from PyQt6.QtWidgets import QMessageBox
 
@@ -36,9 +48,12 @@ class TraderSettingsController(ControllerTypeBase):
             settings["breakout_confirm_ticks"] = self.spin_breakout_ticks.value()
 
         try:
-            save_settings_v2(Config.SETTINGS_FILE, settings)
+            credential_error = save_settings_v2(Config.SETTINGS_FILE, settings)
             self.configure_runtime_integrations()
-            self.log("✅ 설정이 저장되었습니다")
+            if credential_error:
+                self.log(f"[WARN] 설정은 저장됐으나 API 키 암호화 저장 실패: {credential_error}")
+            else:
+                self.log("✅ 설정이 저장되었습니다")
         except Exception as e:
             self.log(f"[ERROR] 설정 저장 실패: {e}")
 
@@ -149,7 +164,11 @@ class TraderSettingsController(ControllerTypeBase):
     # ------------------------------------------------------------------
 
     def set_startup_registry(self, enable):
-        """Windows 시작 프로그램 레지스트리 설정"""
+        """Windows 시작 프로그램 레지스트리 설정 (Windows 전용)."""
+        winreg = _get_winreg()
+        if winreg is None:
+            self.log("[WARN] 시작 프로그램 등록은 Windows에서만 지원됩니다.")
+            return
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
         app_name = "UpbitProTrader"
         
