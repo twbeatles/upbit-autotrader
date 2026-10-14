@@ -75,13 +75,13 @@ Upbit Pro Algo-Trader는 전문 트레이더와 퀀트 투자자를 위한 다�
 - **운영체제**: Windows 10 / 11 (권장), macOS, Linux
   - 비-Windows 참고: API 키 DPAPI 암호화 저장은 Windows 전용이라 macOS/Linux에서는 키 저장이 제한되고(일반 설정은 저장됨), 시작프로그램 등록 대신 수동 실행을 사용하세요. 리포트/폴더 자동 열기는 OS 기본 핸들러로 대체됩니다.
 - **Python**: Python 3.10 이상
-- **주요 라이브러리**:
-  - `PyQt6 >= 6.0` + `PyQt6-Fluent-Widgets`/`PyQt6-Frameless-Window` (동일 바인딩 Fluent 셸, 타 바인딩과 혼합 금지)
+- **주요 라이브러리** (2026-10-14 검증, `requirements.txt` 기준):
+  - `PyQt6 >= 6.11.0` + `PyQt6-Fluent-Widgets >= 1.11.3`/`PyQt6-Frameless-Window >= 0.8.2` (동일 바인딩 Fluent 셸, 타 바인딩과 혼합 금지)
   - `darkdetect >= 0.8.0` (OS 다크/라이트 테마 감지)
-  - `pyupbit >= 0.2.30`
-  - `pandas`, `numpy` (데이터 분석 및 지표 계산)
-  - `requests`, `websocket-client >= 1.6.0` (네트워크 및 웹소켓 통신)
-  - `PyJWT >= 2.8.0`, `cryptography` (업비트 인증 및 보안)
+  - `pyupbit >= 0.2.34`
+  - `pandas >= 3.0.6`, `numpy >= 2.5.4` (데이터 분석 및 지표 계산)
+  - `requests >= 2.34.2`, `websocket-client >= 1.9.2` (네트워크 및 웹소켓 통신)
+  - `PyJWT >= 2.15.1`, `cryptography` (업비트 인증 및 보안)
 
 ---
 
