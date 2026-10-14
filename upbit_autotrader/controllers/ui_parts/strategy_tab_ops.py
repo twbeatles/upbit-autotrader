@@ -20,7 +20,7 @@ def create_strategy_tab(self):
 
     layout.addWidget(QLabel("캔들 간격:"), 1, 0)
     self.combo_candle = QComboBox()
-    self.combo_candle.addItems(Config.CANDLE_INTERVALS.keys())
+    self.combo_candle.addItems(list(Config.CANDLE_INTERVALS.keys()))
     self.combo_candle.setCurrentText(Config.DEFAULT_CANDLE)
     self.combo_candle.setToolTip(Config.TOOLTIPS["candle"])
     layout.addWidget(self.combo_candle, 1, 1)
