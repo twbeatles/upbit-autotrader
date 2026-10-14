@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from PyQt6.QtWidgets import QTableWidgetItem
+from PySide6.QtWidgets import QTableWidgetItem
 
 from upbit_autotrader.core.config import Config
 

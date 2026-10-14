@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.ui import design_tokens as tokens

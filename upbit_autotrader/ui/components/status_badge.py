@@ -6,7 +6,7 @@ with a single helper fed by design tokens.
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QLabel
+from PySide6.QtWidgets import QLabel
 
 from upbit_autotrader.ui import design_tokens as tokens
 from upbit_autotrader.ui.theme import is_dark_mode

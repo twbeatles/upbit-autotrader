@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import datetime
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QTableWidgetItem
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QTableWidgetItem
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.execution.execution_model import estimate_realized_slippage_bps, plan_execution

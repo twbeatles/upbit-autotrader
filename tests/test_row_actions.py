@@ -2,7 +2,7 @@
 import os
 from typing import Any
 
-from PyQt6.QtWidgets import QApplication, QTableWidget
+from PySide6.QtWidgets import QApplication, QTableWidget
 
 from upbit_autotrader.controllers.ui_parts import order_ticket_ops, row_action_ops
 

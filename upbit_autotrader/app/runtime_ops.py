@@ -4,8 +4,8 @@ import datetime
 import time
 from typing import Optional
 
-from PyQt6.QtGui import QCloseEvent
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtWidgets import QMessageBox
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.runtime.market_regime_thread import MarketRegimeThread

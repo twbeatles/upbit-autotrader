@@ -8,7 +8,7 @@ emoji icons are gone, the holdings table owns an empty state).
 import pytest
 import os
 
-from PyQt6.QtWidgets import QApplication, QMainWindow
+from PySide6.QtWidgets import QApplication, QMainWindow
 
 from upbit_autotrader.controllers import ui_parts as _ui_parts
 from upbit_autotrader.controllers.ui_parts import layout_ops
@@ -108,7 +108,7 @@ def test_infobar_shows_and_caps_banners():
     host = QMainWindow()
     central = host.centralWidget()
     assert central is None
-    from PyQt6.QtWidgets import QVBoxLayout, QWidget
+    from PySide6.QtWidgets import QVBoxLayout, QWidget
 
     central = QWidget()
     central.setLayout(QVBoxLayout())
@@ -287,7 +287,7 @@ def test_login_busy_helper_toggles_button():
     _app()
     from types import SimpleNamespace
 
-    from PyQt6.QtWidgets import QPushButton
+    from PySide6.QtWidgets import QPushButton
 
     from upbit_autotrader.controllers.trading_parts.order_api import auth as _auth
 

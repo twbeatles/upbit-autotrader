@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QCheckBox, QGridLayout, QGroupBox, QLabel, QLineEdit
+from PySide6.QtWidgets import QCheckBox, QGridLayout, QGroupBox, QLabel, QLineEdit
 
 from upbit_autotrader.core.config import Config
 

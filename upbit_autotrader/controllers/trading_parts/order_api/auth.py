@@ -4,7 +4,7 @@ import random
 import time
 from typing import Any, cast
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 import uuid
 from upbit_autotrader.core.config import Config

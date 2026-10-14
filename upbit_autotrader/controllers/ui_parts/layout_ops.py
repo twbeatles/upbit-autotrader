@@ -8,8 +8,8 @@ Fluent-style shell rules applied (DESKTOP_UI_DESIGN_RULES.md):
   states are part of every page contract)
 """
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,

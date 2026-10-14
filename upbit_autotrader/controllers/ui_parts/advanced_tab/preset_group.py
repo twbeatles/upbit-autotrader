@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QGroupBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.ui.components.status_badge import set_status_badge

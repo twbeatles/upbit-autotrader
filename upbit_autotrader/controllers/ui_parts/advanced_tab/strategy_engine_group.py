@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QCheckBox, QComboBox, QGridLayout, QGroupBox, QLabel, QLineEdit, QDoubleSpinBox, QSpinBox
+from PySide6.QtWidgets import QCheckBox, QComboBox, QGridLayout, QGroupBox, QLabel, QLineEdit, QDoubleSpinBox, QSpinBox
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.strategies.catalog import STRATEGY_CATALOG, get_default_active_strategies, get_default_weights

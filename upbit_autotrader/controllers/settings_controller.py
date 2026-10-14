@@ -15,7 +15,7 @@ def _get_winreg():
         return None
 
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.controllers._type_support import ControllerTypeBase

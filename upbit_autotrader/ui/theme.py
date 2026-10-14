@@ -1,6 +1,6 @@
 """Central theme handling for the Upbit desktop UI.
 
-Mirrors the srtgo ``ktrain.gui.theme`` pattern within the PyQt6 binding:
+Mirrors the srtgo ``ktrain.gui.theme`` pattern within the PySide6 binding:
 
 - ``setup_app_theme(app)`` is called once from ``main()``; it applies the
   OS-driven theme (``Theme.AUTO`` equivalent) and installs a watcher.
@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QGuiApplication
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QGuiApplication
 
 from upbit_autotrader.ui import design_tokens as tokens
 
@@ -213,7 +213,7 @@ def apply_theme(window: Any, dark: bool | None = None) -> bool:
 
 def sync_system_theme() -> None:
     """Re-apply the OS theme to all top-level widgets (theme watcher slot)."""
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance()
     if not isinstance(app, QApplication):

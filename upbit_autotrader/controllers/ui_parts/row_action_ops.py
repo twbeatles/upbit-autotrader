@@ -3,7 +3,7 @@
 Buttons delegate to the order ticket flow (confirm gate included):
 BUY sizes from balance x betting ratio, SELL uses the row holding qty.
 """
-from PyQt6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QPushButton
 
 from upbit_autotrader.core.config import Config
 

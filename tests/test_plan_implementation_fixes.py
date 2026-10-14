@@ -1,7 +1,7 @@
 import datetime
 from unittest.mock import patch
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.controllers.batch_controller import TraderBatchController
@@ -317,7 +317,7 @@ def test_sync_account_holdings_initializes_external_row_columns():
             self._risk_snapshot_cache = {"ts": 0.0, "value": None}
 
         def set_table_item(self, row, col, text, bg_color):
-            from PyQt6.QtWidgets import QTableWidgetItem
+            from PySide6.QtWidgets import QTableWidgetItem
 
             item = self.table.item(row, col)
             if item is None:

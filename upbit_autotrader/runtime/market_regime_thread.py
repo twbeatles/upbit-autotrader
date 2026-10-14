@@ -5,13 +5,13 @@ from __future__ import annotations
 import logging
 import threading
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from upbit_autotrader.market_regime import build_market_regime_output, build_market_regime_snapshot
 
 
 class MarketRegimeThread(QThread):
-    regime_updated = pyqtSignal(object, object)
+    regime_updated = Signal(object, object)
 
     def __init__(
         self,

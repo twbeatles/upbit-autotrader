@@ -6,7 +6,7 @@ via POST /v1/order/test, and a confirm gate (live always confirms).
 """
 from typing import Any
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDoubleSpinBox,

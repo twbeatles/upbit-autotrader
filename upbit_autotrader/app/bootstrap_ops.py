@@ -4,7 +4,7 @@ import datetime
 import logging
 from pathlib import Path
 
-from PyQt6.QtCore import QTimer
+from PySide6.QtCore import QTimer
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.execution.reconciliation_store import ReconciliationStore

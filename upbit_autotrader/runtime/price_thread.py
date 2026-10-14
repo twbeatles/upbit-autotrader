@@ -4,7 +4,7 @@ import logging
 import threading
 from typing import Any, Dict, List, Optional, cast
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from PySide6.QtCore import QThread, Signal
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.services.pyupbit_compat import pyupbit_fallback
@@ -21,10 +21,10 @@ from upbit_autotrader.services.upbit_websocket import UpbitWebSocketClient
 
 class PriceUpdateThread(QThread):
     """Background thread for real-time price updates via WebSocket with REST polling fallback."""
-    price_updated = pyqtSignal(dict)
-    order_event_received = pyqtSignal(dict)
-    asset_event_received = pyqtSignal(dict)
-    announcement_event_received = pyqtSignal(dict)
+    price_updated = Signal(dict)
+    order_event_received = Signal(dict)
+    asset_event_received = Signal(dict)
+    announcement_event_received = Signal(dict)
 
     def __init__(self, parent=None):
         super().__init__(parent)

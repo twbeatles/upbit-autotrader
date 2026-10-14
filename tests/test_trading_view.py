@@ -3,7 +3,7 @@ import os
 from types import SimpleNamespace
 from typing import Any
 
-from PyQt6.QtWidgets import QApplication, QSplitter
+from PySide6.QtWidgets import QApplication, QSplitter
 
 from upbit_autotrader.controllers.ui_parts import trading_view_ops
 from upbit_autotrader.controllers.ui_parts.trading_view_ops import PriceChartWidget

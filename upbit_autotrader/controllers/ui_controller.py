@@ -1,5 +1,5 @@
-from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QDialog, QMenu, QMessageBox, QSystemTrayIcon
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QDialog, QMenu, QMessageBox, QSystemTrayIcon
 
 from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.controllers.ui_parts import (

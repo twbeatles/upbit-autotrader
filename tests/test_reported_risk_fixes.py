@@ -4,7 +4,7 @@ import tempfile
 from unittest.mock import patch
 
 import pandas as pd
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 
 from upbit_autotrader.analytics.trading_analytics import UpbitTradingAnalytics
 from upbit_autotrader.core.config import Config

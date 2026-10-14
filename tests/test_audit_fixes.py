@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 from upbit_autotrader.controllers.ui_parts import order_ticket_ops
 from upbit_autotrader.core.config import Config
@@ -274,23 +274,22 @@ def test_file_opener_never_raises(tmp_path):
 def test_qt_binding_guard_rejects_foreign_binding():
     from upbit_autotrader.ui import qt_compat
 
-    try:
-        from PySide6.QtWidgets import QWidget as ForeignWidget
-    except ImportError:
-        ForeignWidget = None
-    if ForeignWidget is not None:
-        assert qt_compat.is_pyqt6_widget_class(ForeignWidget) is False
+    class ForeignWidget:
+        """Non-Qt class: never a valid Qt parent (single-binding guard)."""
 
-    from PyQt6.QtWidgets import QMainWindow
+    assert qt_compat.is_pyside6_widget_class(ForeignWidget) is False
+    assert qt_compat.is_pyside6_widget_class(None) is False
 
-    assert qt_compat.is_pyqt6_widget_class(QMainWindow) is True
+    from PySide6.QtWidgets import QMainWindow
+
+    assert qt_compat.is_pyside6_widget_class(QMainWindow) is True
     base = qt_compat.fluent_window_base()
-    assert base is None or qt_compat.is_pyqt6_widget_class(base)
+    assert base is None or qt_compat.is_pyside6_widget_class(base)
 
 
-def test_trader_window_is_pyqt6_object():
+def test_trader_window_is_pyside6_object():
     _app()
-    from PyQt6.QtCore import QObject
+    from PySide6.QtCore import QObject
 
     from upbit_autotrader.app.trader import UpbitProTrader
 

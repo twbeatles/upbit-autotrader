@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import time
 
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QTableWidgetItem
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QTableWidgetItem
 
 from upbit_autotrader.core.config import Config
 from upbit_autotrader.core.entry_filter import should_enter_by_score

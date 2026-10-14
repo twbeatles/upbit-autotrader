@@ -1,7 +1,7 @@
 import os
 from typing import Any, cast
 
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 from upbit_autotrader.controllers.ui_sections import build_advanced_tab
 

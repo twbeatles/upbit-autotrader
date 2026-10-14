@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QVBoxLayout, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from upbit_autotrader.controllers.ui_parts.advanced_tab import (
     alert_group,

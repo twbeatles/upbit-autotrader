@@ -1,12 +1,12 @@
-"""Fluent-style navigation shell (PyQt6 port of the ktrain MSFluentWindow pattern).
+"""Fluent-style navigation shell (PySide6 port of the ktrain MSFluentWindow pattern).
 
 Reference: ``ktrain.gui.main_window`` (srtgo) — ``MSFluentWindow`` with
 ``addSubInterface(page, icon, text, position)`` navigation, top-level pages
 up top and auxiliary pages (settings/update) pinned to the bottom.
 
-This project stays on PyQt6 with zero new dependencies
-(``DESKTOP_UI_DESIGN_RULES.md`` section 1.1 forbids a binding switch and
-mixed Fluent distributions), so the reference structure — sidebar rail,
+This project stays on PySide6 with zero new dependencies
+(single-binding PySide6 shell; mixing bindings raises TypeError),
+so the reference structure — sidebar rail,
 top/bottom sections, stacked pages, ``addSubInterface``/``switchTo`` —
 is re-implemented with native Qt widgets. All visuals come from the
 central token stylesheet (``upbit_autotrader.ui.theme``); this module
@@ -17,8 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
     QPushButton,
@@ -194,7 +194,7 @@ def create_shell() -> tuple[QWidget, NavigationShell]:
 
 def wrap_scrollable(page: QWidget) -> QWidget:
     """Wrap a page in a borderless scroll area (reference pages scroll)."""
-    from PyQt6.QtWidgets import QScrollArea
+    from PySide6.QtWidgets import QScrollArea
 
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)

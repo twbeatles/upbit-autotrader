@@ -2,9 +2,9 @@ import datetime
 import time
 from typing import Any, cast
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QMessageBox, QTableWidgetItem
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QMessageBox, QTableWidgetItem
 
 from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.controllers.trading_parts import (

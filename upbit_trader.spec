@@ -37,12 +37,12 @@ hiddenimports = [
     "numpy",
     "darkdetect",
 
-    # PyQt6 (explicit so modulegraph doesn't miss subpackages used indirectly)
-    "PyQt6",
-    "PyQt6.QtCore",
-    "PyQt6.QtWidgets",
-    "PyQt6.QtGui",
-    "PyQt6.sip",
+    # PySide6 (explicit so modulegraph doesn't miss subpackages used indirectly)
+    "PySide6",
+    "PySide6.QtCore",
+    "PySide6.QtWidgets",
+    "PySide6.QtGui",
+    "shiboken6",
 
     # setuptools/pkg_resources sometimes pulls these in indirectly
     "jaraco.text",
@@ -60,7 +60,7 @@ hiddenimports = [
 hiddenimports += collect_submodules("upbit_autotrader")
 hiddenimports += collect_submodules("legacy_wrappers")
 
-# Fluent widgets (same-Qt-binding PyQt6 edition, mirroring the reference
+# Fluent widgets (same-Qt-binding PySide6 edition, mirroring the reference
 # frozen recipe): resource files plus every submodule except the unused
 # multimedia/webengine paths.
 hiddenimports += [
@@ -75,7 +75,7 @@ hiddenimports += [
 ]
 
 _fluent_metadata = []
-for _pkg in ("PyQt6-Fluent-Widgets", "PyQt6-Frameless-Window", "qfluentwidgets"):
+for _pkg in ("PySide6-Fluent-Widgets", "PySideSix-Frameless-Window", "qfluentwidgets"):
     try:
         _fluent_metadata += copy_metadata(_pkg)
     except Exception:
@@ -105,19 +105,19 @@ a = Analysis(
         "cv2",
         "notebook",
         "jupyter",
-        "PyQt6.QtWebEngine",
-        "PyQt6.QtWebEngineCore",
-        "PyQt6.QtWebEngineWidgets",
-        "PyQt6.QtQml",
-        "PyQt6.QtQuick",
-        "PyQt6.Qt3DCore",
-        "PyQt6.Qt3DRender",
+        "PySide6.QtWebEngine",
+        "PySide6.QtWebEngineCore",
+        "PySide6.QtWebEngineWidgets",
+        "PySide6.QtQml",
+        "PySide6.QtQuick",
+        "PySide6.Qt3DCore",
+        "PySide6.Qt3DRender",
         "PyQt5",
         "PyQt5.QtCore",
         "PyQt5.QtGui",
         "PyQt5.QtWidgets",
         "PySide2",
-        "PySide6",
+        "PyQt6",
         "qtpy",
         "ipython",
         "unittest",

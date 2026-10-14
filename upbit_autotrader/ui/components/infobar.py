@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from upbit_autotrader.ui import design_tokens as tokens
 from upbit_autotrader.ui.theme import is_dark_mode

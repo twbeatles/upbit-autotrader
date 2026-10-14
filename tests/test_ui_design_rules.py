@@ -31,7 +31,7 @@ _APP = None
 def _app():
     global _APP
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PyQt6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication
 
     app = QApplication.instance()
     if app is None:
@@ -122,7 +122,7 @@ def test_preset_empty_name_uses_feedback_fallback_headless():
     _app()
     from unittest.mock import patch
 
-    from PyQt6.QtWidgets import QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
     from upbit_autotrader.ui.dialogs.preset import PresetManagerDialog
 

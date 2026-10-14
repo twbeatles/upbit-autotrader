@@ -1,7 +1,7 @@
 """Top dashboard: credentials, equity summary, connection status + statistics tab."""
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -134,7 +134,7 @@ def create_statusbar(self):
         # so the strip docks under the content instead of squeezing it.
         placed = False
         try:
-            from PyQt6.QtWidgets import QVBoxLayout
+            from PySide6.QtWidgets import QVBoxLayout
 
             def _host_of(layout, widget):
                 try:

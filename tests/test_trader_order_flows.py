@@ -1,6 +1,6 @@
 ﻿from unittest.mock import patch
 
-from PyQt6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 from typing import cast
 
 from upbit_autotrader.services.order_service import UpbitOrderService

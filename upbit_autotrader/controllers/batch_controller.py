@@ -1,8 +1,8 @@
 import datetime
 from typing import Any, cast
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtWidgets import QDialog, QMessageBox, QInputDialog
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QDialog, QMessageBox, QInputDialog
 
 from upbit_autotrader.controllers._type_support import ControllerTypeBase
 from upbit_autotrader.services.holdings_service import get_account_holdings as get_account_holdings_v2

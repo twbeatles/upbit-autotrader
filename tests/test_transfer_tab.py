@@ -2,7 +2,7 @@
 import os
 from typing import Any
 
-from PyQt6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 from upbit_autotrader.controllers.history_controller import (
     TraderHistoryController,

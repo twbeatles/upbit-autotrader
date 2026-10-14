@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from upbit_autotrader.ui import design_tokens as tokens
 

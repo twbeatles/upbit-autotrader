@@ -4,9 +4,9 @@ import logging
 import os
 from typing import Any, cast
 
-from PyQt6.QtCore import QTimer
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QTimer
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
     QInputDialog,
